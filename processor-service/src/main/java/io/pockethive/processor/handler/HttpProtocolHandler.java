@@ -6,6 +6,7 @@ import io.pockethive.work.api.HttpRequest;
 import io.pockethive.work.api.HttpRequestInfo;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ProcessorPacer;
 import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.metrics.*;
 import io.pockethive.processor.exception.ProcessorCallException;
@@ -29,7 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import org.apache.hc.client5.http.classic.HttpClient;
+import io.pockethive.processor.http.ProcessorHttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
@@ -39,42 +40,29 @@ import org.slf4j.Logger;
 
 /**
  * Responsibility: execute HTTP requests and construct HTTP result observations.
- * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
- * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
+ * Must not: select/create HTTP clients, own pacing state, provision topology or reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute;
+ * client operations delegate to RESP-PROCESSOR-HTTP-CLIENT — docs/architecture/runtime-responsibilities.md#resp-processor-http-client;
+ * pacing delegates to RESP-PROCESSOR-PACING — docs/architecture/runtime-responsibilities.md#resp-processor-pacing.
  */
 public class HttpProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
   private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
-  private final HttpClient httpClient;
-  private final HttpClient noKeepAliveClient;
-  private final ThreadLocal<HttpClient> perThreadClient;
-  private final HttpClient insecureHttpClient;
-  private final HttpClient insecureNoKeepAliveClient;
-  private final ThreadLocal<HttpClient> insecurePerThreadClient;
-  private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos;
+  private final ProcessorHttpClient httpClient;
+  private final ProcessorPacer pacer;
 
   public HttpProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder,
-                             HttpClient httpClient,
-                             HttpClient noKeepAliveClient,
-                             ThreadLocal<HttpClient> perThreadClient,
-                             HttpClient insecureHttpClient,
-                             HttpClient insecureNoKeepAliveClient,
-                             ThreadLocal<HttpClient> insecurePerThreadClient,
-                             java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos) {
+                             ProcessorHttpClient httpClient,
+                             ProcessorPacer pacer) {
     this.mapper = mapper;
     this.strictEnvelopeReader = mapper.readerFor(HttpRequestEnvelope.class)
         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
     this.httpClient = httpClient;
-    this.noKeepAliveClient = noKeepAliveClient;
-    this.perThreadClient = perThreadClient;
-    this.insecureHttpClient = insecureHttpClient;
-    this.insecureNoKeepAliveClient = insecureNoKeepAliveClient;
-    this.insecurePerThreadClient = insecurePerThreadClient;
-    this.nextAllowedTimeNanos = nextAllowedTimeNanos;
+    this.pacer = java.util.Objects.requireNonNull(pacer, "pacer");
   }
 
   @Override
@@ -112,9 +100,8 @@ public class HttpProtocolHandler implements ProtocolHandler {
     long start = clock.millis();
     long pacingMillis = 0L;
     try {
-      pacingMillis = applyExecutionMode(config);
+      pacingMillis = pacer.await(config);
       final long pacingMillisForHandler = pacingMillis;
-      HttpClient client = selectClient(config);
       HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
       requestInfo.headers().forEach(apacheRequest::addHeader);
       body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
@@ -141,7 +128,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
         return new CallOutcome(statusCode, convertHeaders(response), responseBody, metrics);
       };
 
-      CallOutcome outcome = client.execute(apacheRequest, handler);
+      CallOutcome outcome = httpClient.execute(apacheRequest, handler, config);
       HttpResultEnvelope resultEnvelope = HttpResultEnvelope.of(
           mapper.convertValue(requestMeta, HttpRequestInfo.class),
           new HttpOutcome(
@@ -212,31 +199,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
     }
   }
 
-  private long applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
-    ProcessorWorkerConfig.Mode mode = config.mode();
-    if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
-      double rate = config.ratePerSec();
-      if (rate <= 0.0) return 0L;
-      long intervalNanos = (long) (1_000_000_000L / rate);
-      long now = System.nanoTime();
-      long prev = nextAllowedTimeNanos.getAndUpdate(current -> {
-        long base = Math.max(current, now);
-        return base + intervalNanos;
-      });
-      long base = Math.max(prev, now);
-      long scheduled = base + intervalNanos;
-      long sleepNanos = scheduled - now;
-      if (sleepNanos > 0L) {
-        long millis = sleepNanos / 1_000_000L;
-        int nanos = (int) (sleepNanos % 1_000_000L);
-        Thread.sleep(millis, nanos);
-        return sleepNanos / 1_000_000L;
-      }
-      return 0L;
-    }
-    return 0L;
-  }
-
   private URI resolveTarget(String baseUrl, String path) {
     if (isAbsoluteHttpUri(path)) {
       try {
@@ -266,19 +228,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
     } catch (IllegalArgumentException ex) {
       return false;
     }
-  }
-
-  private HttpClient selectClient(ProcessorWorkerConfig config) {
-    boolean sslVerify = Boolean.TRUE.equals(config.sslVerify());
-    ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
-    boolean keepAliveEnabled = Boolean.TRUE.equals(config.keepAlive());
-    if (!keepAliveEnabled || reuse == ProcessorWorkerConfig.ConnectionReuse.NONE) {
-      return sslVerify ? noKeepAliveClient : insecureNoKeepAliveClient;
-    }
-    if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
-      return sslVerify ? perThreadClient.get() : insecurePerThreadClient.get();
-    }
-    return sslVerify ? httpClient : insecureHttpClient;
   }
 
   private Map<String, List<String>> convertHeaders(ClassicHttpResponse response) {

@@ -1,58 +1,35 @@
 package io.pockethive.tcpmock.controller;
 
-import io.pockethive.tcpmock.model.MessageTypeMapping;
-import io.pockethive.tcpmock.model.TcpRequest;
-import io.pockethive.tcpmock.service.RequestStore;
-import io.pockethive.tcpmock.service.ScenarioManager;
-import io.pockethive.tcpmock.service.MessageTypeRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
+import io.pockethive.tcpmock.service.CompatibilityQueries;
+import io.pockethive.tcpmock.service.CompatibilityCommands;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
+/**
+ * Responsibility: bind compatibility HTTP routes to commands and queries.
+ * Must not: project state or implement reset sequencing.
+ * Contract: RESP-TCP-MOCK-ADMIN — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-admin.
+ */
 @RestController
 @RequestMapping("/__admin")
 public class WireMockCompatController {
 
-    @Autowired
-    private RequestStore requestStore;
+    private final CompatibilityQueries queries;
+    private final CompatibilityCommands commands;
 
-    @Autowired
-    private MessageTypeRegistry messageTypeRegistry;
-
-    @Autowired
-    private ScenarioManager scenarioManager;
+    public WireMockCompatController(CompatibilityQueries queries, CompatibilityCommands commands) {
+        this.queries = queries;
+        this.commands = commands;
+    }
 
     @GetMapping("/requests")
     public Map<String, Object> getRequests() {
-        List<TcpRequest> requests = requestStore.getAllRequests();
-
-        List<Map<String, Object>> wireMockRequests = requests.stream()
-            .map(this::convertToWireMockFormat)
-            .collect(Collectors.toList());
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("requests", wireMockRequests);
-        response.put("meta", Map.of("total", requests.size()));
-        return response;
+        return queries.getRequests();
     }
 
     @GetMapping("/mappings")
     public Map<String, Object> getMappings() {
-        Collection<MessageTypeMapping> mappings = messageTypeRegistry.getAllMappings();
-
-        List<Map<String, Object>> wireMockMappings = mappings.stream()
-            .map(this::convertMappingToWireMockFormat)
-            .collect(Collectors.toList());
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("mappings", wireMockMappings);
-        response.put("meta", Map.of("total", mappings.size()));
-        return response;
+        return queries.getMappings();
     }
 
     @GetMapping("/health")
@@ -62,84 +39,35 @@ public class WireMockCompatController {
 
     @GetMapping("/scenarios")
     public Map<String, Object> getScenarios() {
-        Map<String, String> scenarios = scenarioManager.getAllScenarios();
-        List<Map<String, String>> scenarioList = scenarios.entrySet().stream()
-            .map(entry -> Map.of(
-                "name", entry.getKey(),
-                "state", entry.getValue()
-            ))
-            .collect(Collectors.toList());
-        return Map.of("scenarios", scenarioList);
+        return queries.getScenarios();
     }
 
     @GetMapping("/requests/unmatched")
     public Map<String, Object> getUnmatchedRequests() {
-        List<TcpRequest> unmatchedRequests = requestStore.getUnmatchedRequests();
-
-        List<Map<String, Object>> wireMockRequests = unmatchedRequests.stream()
-            .map(this::convertToWireMockFormat)
-            .collect(Collectors.toList());
-
-        return Map.of(
-            "requests", wireMockRequests,
-            "meta", Map.of("total", unmatchedRequests.size())
-        );
+        return queries.getUnmatchedRequests();
     }
 
     @PostMapping("/reset")
     public Map<String, String> reset() {
-        requestStore.clearRequests();
-        scenarioManager.resetAllScenarios();
-        return Map.of("status", "Reset completed");
+        return commands.reset();
     }
 
     @PostMapping("/scenarios/{name}/reset")
     public Map<String, String> resetScenario(@PathVariable("name") String name) {
-        scenarioManager.setScenarioState(name, null);
-        return Map.of("status", "Scenario reset", "scenario", name);
+        return commands.resetScenario(name);
     }
 
     @PutMapping("/scenarios/{name}/state")
     public Map<String, String> setScenarioState(@PathVariable("name") String name, @RequestBody Map<String, String> body) {
-        String state = body.get("state");
-        scenarioManager.setScenarioState(name, state);
-        return Map.of("status", "updated", "scenario", name, "state", state);
+        return commands.setScenarioState(name, body);
     }
 
     @DeleteMapping("/scenarios/{name}")
     public Map<String, String> deleteScenario(@PathVariable("name") String name) {
-        scenarioManager.removeScenario(name);
-        return Map.of("status", "deleted", "scenario", name);
+        return commands.deleteScenario(name);
     }
 
-    private Map<String, Object> convertToWireMockFormat(TcpRequest request) {
-        Map<String, Object> wireMockRequest = new HashMap<>();
-        wireMockRequest.put("id", request.getId());
-        wireMockRequest.put("request", Map.of(
-            "method", "TCP",
-            "url", "/tcp-stream",
-            "body", request.getMessage()
-        ));
-        wireMockRequest.put("response", Map.of(
-            "status", 200,
-            "body", request.getResponse()
-        ));
-        wireMockRequest.put("loggedDate", request.getTimestamp());
-        return wireMockRequest;
-    }
 
-    private Map<String, Object> convertMappingToWireMockFormat(MessageTypeMapping mapping) {
-        Map<String, Object> wireMockMapping = new HashMap<>();
-        wireMockMapping.put("id", mapping.getId());
-        wireMockMapping.put("request", Map.of(
-            "method", "TCP",
-            "urlPattern", mapping.getRequestPattern()
-        ));
-        wireMockMapping.put("response", Map.of(
-            "status", 200,
-            "body", mapping.getResponseTemplate()
-        ));
-        wireMockMapping.put("priority", mapping.getPriority());
-        return wireMockMapping;
-    }
+
+
 }

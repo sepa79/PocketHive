@@ -1,9 +1,10 @@
 package io.pockethive.tcpmock.controller;
 
 import io.pockethive.tcpmock.service.RequestStore;
-import io.pockethive.tcpmock.service.MessageTypeRegistry;
+import io.pockethive.tcpmock.service.ManualTestService;
 import io.pockethive.tcpmock.service.RecordingMode;
-import io.pockethive.tcpmock.model.TcpRequest;
+import io.pockethive.tcpmock.service.RequestLogProjection;
+import io.pockethive.tcpmock.service.DocumentationReader;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
@@ -11,19 +12,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Responsibility: bind HTTP for UI diagnostics, manual tests and recording controls.
+ * Must not: execute tests, project logs or read files.
+ * Contract: RESP-TCP-MOCK-WEB-TOOLS — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-web-tools.
+ */
 @Controller
 public class WebController {
 
   private final RequestStore requestStore;
-  private final MessageTypeRegistry messageTypeRegistry;
+  private final ManualTestService manualTests;
+  private final RequestLogProjection requestProjection;
+  private final DocumentationReader documentation;
   private final RecordingMode recordingMode;
-  private final io.pockethive.tcpmock.service.TcpClientService tcpClientService;
 
-  public WebController(RequestStore requestStore, MessageTypeRegistry messageTypeRegistry, RecordingMode recordingMode, io.pockethive.tcpmock.service.TcpClientService tcpClientService) {
+  public WebController(RequestStore requestStore, ManualTestService manualTests, RecordingMode recordingMode, RequestLogProjection requestProjection, DocumentationReader documentation) {
     this.requestStore = requestStore;
-    this.messageTypeRegistry = messageTypeRegistry;
+    this.manualTests = manualTests;
+    this.requestProjection = requestProjection;
+    this.documentation = documentation;
     this.recordingMode = recordingMode;
-    this.tcpClientService = tcpClientService;
   }
 
   @GetMapping("/")
@@ -39,25 +47,10 @@ public class WebController {
         return ResponseEntity.badRequest().body("Invalid filename");
       }
 
-      java.nio.file.Path path = java.nio.file.Paths.get("/app/docs", filename);
-      if (java.nio.file.Files.exists(path)) {
-        String content = java.nio.file.Files.readString(path);
-        return ResponseEntity.ok()
-            .header("Content-Type", "text/markdown; charset=UTF-8")
-            .body(content);
+      String content = documentation.read(filename);
+      if (content != null) {
+        return ResponseEntity.ok().header("Content-Type", "text/markdown; charset=UTF-8").body(content);
       }
-
-      java.io.InputStream is = getClass().getClassLoader().getResourceAsStream("docs/" + filename);
-      if (is == null) {
-        is = getClass().getClassLoader().getResourceAsStream(filename);
-      }
-      if (is != null) {
-        String content = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-        return ResponseEntity.ok()
-            .header("Content-Type", "text/markdown; charset=UTF-8")
-            .body(content);
-      }
-
       return ResponseEntity.notFound().build();
     } catch (Exception e) {
       return ResponseEntity.status(500).body("Error reading documentation: " + e.getMessage());
@@ -68,7 +61,7 @@ public class WebController {
   @ResponseBody
   public List<Map<String, Object>> getRequests() {
     return requestStore.getAllRequests().stream()
-        .map(this::requestToMap)
+        .map(requestProjection::toMap)
         .collect(Collectors.toList());
   }
 
@@ -97,55 +90,8 @@ public class WebController {
     }
 
     try {
-      Map<String, Object> result = new java.util.HashMap<>();
-      result.put("success", true);
-      result.put("transport", transport);
+      return ResponseEntity.ok(manualTests.execute(message, transport, host, port, delimiter, timeout, ssl, sslVerify, encoding));
 
-      if ("socket".equals(transport)) {
-        Map<String, Object> metrics = tcpClientService.sendViaSocket(host, port, message, delimiter, timeout, ssl, sslVerify, encoding);
-        result.putAll(metrics);
-      } else if ("nio".equals(transport)) {
-        Map<String, Object> metrics = tcpClientService.sendViaNio(host, port, message, delimiter, timeout, ssl, encoding);
-        result.putAll(metrics);
-      } else if ("netty".equals(transport)) {
-        Map<String, Object> metrics = tcpClientService.sendViaNetty(host, port, message, delimiter, timeout, ssl, sslVerify, encoding);
-        result.putAll(metrics);
-      } else {
-        // Mock mode
-        long startTime = System.currentTimeMillis();
-        io.pockethive.tcpmock.model.ProcessedResponse processedResponse = messageTypeRegistry.processMessage(message);
-        long duration = System.currentTimeMillis() - startTime;
-
-        String responseText;
-        if (processedResponse.hasFault()) {
-          responseText = "FAULT: " + processedResponse.getFault().name();
-        } else if (processedResponse.hasProxy()) {
-          responseText = "PROXY: " + processedResponse.getProxyTarget();
-        } else {
-          responseText = processedResponse.getResponse();
-        }
-
-        result.put("response", responseText);
-        result.put("totalTime", duration);
-        result.put("bytesReceived", responseText.getBytes().length);
-
-        TcpRequest testRequest = new TcpRequest(
-          "test-" + System.currentTimeMillis(),
-          "127.0.0.1:test",
-          message,
-          Map.of("test", "true", "transport", "mock"),
-          "TEST",
-          java.time.Instant.now(),
-          responseText
-        );
-        requestStore.addRequest(testRequest);
-
-        if (recordingMode.isRecording()) {
-          recordingMode.incrementRecordedCount();
-        }
-      }
-
-      return ResponseEntity.ok(result);
     } catch (java.net.ConnectException e) {
       return ResponseEntity.status(500).body(Map.of(
         "success", false,
@@ -193,22 +139,4 @@ public class WebController {
     return Map.of("recording", false, "status", "stopped");
   }
 
-  private Map<String, Object> requestToMap(TcpRequest request) {
-    boolean matched = request.getResponse() != null &&
-                     !request.getResponse().isEmpty() &&
-                     !request.getResponse().startsWith("ERROR") &&
-                     !request.getResponse().equals("INVALID_MESSAGE") &&
-                     !request.getResponse().equals("OK") &&
-                     !request.getResponse().equals("UNKNOWN_MESSAGE_TYPE");
-
-    return Map.of(
-        "id", request.getId(),
-        "message", request.getMessage() != null ? request.getMessage() : "",
-        "response", request.getResponse() != null ? request.getResponse() : "",
-        "timestamp", request.getTimestamp().toString(),
-        "matched", matched,
-        "clientAddress", request.getClientAddress() != null ? request.getClientAddress() : "",
-        "behavior", request.getBehavior() != null ? request.getBehavior() : ""
-    );
-  }
 }

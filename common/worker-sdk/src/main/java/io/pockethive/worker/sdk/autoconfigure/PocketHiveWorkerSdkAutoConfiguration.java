@@ -114,7 +114,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean(ScheduledInvocationPolicy.class)
     @ConditionalOnProperty(prefix = "pockethive.inputs", name = "type", havingValue = "SCHEDULER")
     ScheduledInvocationPolicy<Object> rateSchedulePolicy() {
-        return new io.pockethive.worker.sdk.input.RateSchedulePolicy();
+        return new io.pockethive.work.local.scheduler.RateSchedulePolicy();
     }
 
     @Bean

@@ -1,9 +1,15 @@
 # Functional module boundaries — next refactors
 
-Status: F01 implemented in `9a12dd50`; F03 implemented in `3116364c`,
-reviewed on 2026-09-23 on `codex/redis-adapter`. Prepared for review and integration
-alongside PR #520. This work follows PR #519. Historical
-baseline analysis remains in Git history.
+Status (2026-09-25): PR #520 integrates F01/F03 from #521, F04/F05 from #522,
+and the reviewed #523 delivery from `codex/worker-inputs`. The latter includes
+F02 local inputs, F07 producer-owned Scenario Manager contracts, and selected F09
+processor and TCP mock boundaries. TCP mapping persistence and the equal-priority
+restart fix are implemented, tested and accepted in separate review.
+
+This closes the selected delivery, not every F07/F09 audit lead. F06 auth/rendering,
+F08 state/correctness decisions, remaining F07/F09 service work and promotion of TCP
+runtime mappings into PocketHive scenarios remain separate follow-ups. Historical
+baseline analysis and intermediate verification remain below and in Git history.
 
 ## Objective and rules
 
@@ -59,7 +65,7 @@ separated from historical findings that still require revalidation.
 | Area | Current evidence | Next boundary |
 | --- | --- | --- |
 | Redis | All five paths use `common/redis-adapter`; settings remain in `redis-config` | F01 implemented; see Redis extraction evidence |
-| Work integration | SDK `input/WorkInput.update` still takes `WorkerControlPlaneRuntime.WorkerStateSnapshot`; SDK factories take WorkerDefinition; neutral output transport already exists | Move only contracts necessary for the selected consumer; retain SDK composition and accepted-state ownership |
+| Work integration | F02 removed the unused snapshot-typed `WorkInput.update`; SDK factories retain WorkerDefinition within composition; local mechanics consume settings/neutral policy contracts | Retain SDK composition and accepted-state ownership; do not move unused abstractions into work-api |
 | Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
 | Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
 | Journal/files | Shared file paths; query, metadata, capture and retention ports implemented; 111 focused tests green | F04 implemented and reviewed; Hive and swarm producer contracts remain distinct |
@@ -339,6 +345,39 @@ Vendor-import restrictions alone cannot detect duplicated JDK HTTP implementatio
 
 ### F02 / F06 / F07 / F09 — selected follow-up slices
 
+Current work: `codex/worker-inputs`, based on F04/F05 commit `2d763660` (PR #522).
+User selected smaller follow-ups before F06: F02, then bounded F07/F09 changes;
+F08 state semantics require separate decisions. No F06 auth code was changed.
+
+**F02 selected extraction implemented and reviewed.**
+`common/work-local` now owns CSV loading/formatting/cursor (`CsvDatasetCursor`),
+scheduler rate quota (`RateSchedulePolicy`) and runtime rate/max/reset projection,
+finite-run count and derived diagnostics (`SchedulerRunState`). Canonical settings
+and field parsers retain their existing owners. The old SDK implementations are
+removed; SDK keeps worker lifecycle, scheduling clock, snapshot projection, seed
+metadata and dispatch. CSV intake pacing remains in the SDK coordinator; its
+interval-scaled arithmetic is distinct from the scheduler's existing per-tick quota.
+No timing reinterpretation, ACK or wire change is included.
+
+Repository tracing found no implementations or callers of WorkInput.update(snapshot).
+That unused method was removed; WorkInput retains only lifecycle methods. Factory
+WorkerDefinition arguments stay inside SDK composition and are not needed by the
+extracted owners. No unused neutral interface or compatibility copy was added.
+
+The CSV review P3 is corrected: documentation states the caller's serialization
+requirement, without claiming stop waits for an in-flight tick. Runtime behavior
+was not changed for that finding.
+
+Verification: clean affected reactor through worker-sdk and trigger-service,
+83 selected tests, zero failures/errors/skips (`/tmp/ph-f02-local-inputs-clean.log`).
+Coverage includes CSV format/charset/EOF/rotation/reload, rejected settings,
+fractional quota, finite/unlimited/long limits, reset, disabled/re-enabled state,
+seed/dispatch/result failures, trigger behavior, other existing inputs and the
+repository import gate. Separate previous CSV review ran 30 tests successfully
+(`/tmp/ph-f02-csv-review.log`). Separate complete F02 review found no actionable
+issues; its fresh 83 tests passed (`/tmp/ph-f02-scheduler-review.log`). No full
+reactor or deployed E2E repeated.
+
 - **F02 local input/SDK:** CSV and scheduler execution behind minimal input
   contracts; preserve cursor/EOF/rotation/rate/reset semantics. SDK keeps execution,
   admission and accepted-state ownership, with composition separated from mechanics.
@@ -354,6 +393,122 @@ Vendor-import restrictions alone cannot detect duplicated JDK HTTP implementatio
   MCP and TCP mock entrypoints. Preserve useful existing local ports, including
   DbStatementExecutor and ClearingExportSink. HTTP-library reuse alone is not
   evidence that unrelated functional clients should share an owner.
+
+### F07 — first producer-contract slice
+
+**Implemented and reviewed; committed in `02b97665`.** Base: F02 commit `b0f92340`.
+Re-tracing confirmed exact copies of RuntimeRequest,
+ScenarioRuntimeResponse and VariablesResolveResponse in Scenario Manager and its
+Orchestrator client. Producer-owned records now live in `common/scenario-api`,
+consumed by both boundaries; all local wire copies are removed. Endpoint paths,
+JSON fields, null handling, required runtimeDir checks and auth/error behavior
+are preserved.
+
+Template metadata and ScenarioPlan are deliberate partial views, not evidence for
+merging the full authoring model into Orchestrator. The redundant intermediate
+template response record is removed; the existing application projection is decoded directly;
+unknown-field tolerance remains local to that projection. ResolvedVariables remains
+a named local normalized view of the shared wire response. UI grant/network-mode
+policies and broader scenario model sharing remain outside this first slice.
+
+Verification: affected reactor through Scenario Manager and Orchestrator compiled
+cleanly after the moves. Final 112 selected tests passed, zero failures/errors/skips
+(`/tmp/ph-f07-scenario-contract-final.log`; clean build:
+`/tmp/ph-f07-scenario-contract-clean.log`). Tests consume serialized producer-contract
+values through the actual HTTP client and cover request fields, nested variables,
+warnings, request context, existing empty-collection projection, rejected null
+metadata/missing runtime directory, HTTP errors and auth retry. Existing producer
+controller/variables/materializer suites and the repository import gate also pass.
+Separate F07 review found no actionable findings and reran 112 tests successfully
+(`/tmp/ph-f07-review.log`). No deployed acceptance or full repository reactor was repeated.
+
+### F09 — processor pacing slice
+
+**Implemented and reviewed; committed in `476f8dc5`.** Base: F07 commit `02b97665`.
+Re-tracing confirmed duplicate ownership:
+HttpProtocolHandler, TcpProtocolHandler and Iso8583ProtocolHandler each implement
+applyExecutionMode against the same per-worker AtomicLong. All three callers now
+use one ProcessorPacer owning both state and waiting; the old methods and externally
+writable counter are removed. First-call delay, shared slots, rate/mode updates,
+interruption and reported pacing duration are preserved. Configuration stays
+with ProcessorWorkerConfig. See RESP-PROCESSOR-PACING for exact semantics.
+
+This is a local processor responsibility, not a universal rate limiter. Moderator
+shaping and scheduler quotas differ and remain separate. HTTP client construction,
+TCP transport lifetime, Scenario Manager/MCP/TCP-mock boundaries remain to audit;
+this slice does not close F09 as a whole. No TLS/security or ACK behavior change.
+
+All constructor call sites were traced: the worker supplies the same non-null
+pacer to all handlers, and the existing HTTP test supplies its own pacer. Old
+AtomicLong constructors are removed rather than retained as compatibility paths;
+handlers cannot create private schedules when a dependency is absent. Production
+uses System.nanoTime/Thread.sleep; a package-private clock/wait seam permits
+behavior tests without real delays. No new dependency or import exemption is needed.
+
+Verification: **67 tests passed, zero failures/errors/skips**, including all 64
+processor tests and 3 repository import tests (`/tmp/ph-f09-processor-pacing.log`).
+The 11 pacing cases cover initial/queued/idle reservations, mode/rate updates,
+fractional waits and reported durations, interruption, concurrent reservations and
+per-worker isolation. Existing HTTP/TCP/ISO8583 result/error and logging/security
+tests passed. Separate pacing review reran 67 tests successfully
+(`/tmp/ph-f09-pacing-review.log`) with no actionable findings. No full repository
+reactor or deployed E2E was repeated.
+
+### F09 — processor HTTP client slice
+
+**Implemented and reviewed; committed in `f6e55c31`.** Base: pacing commit `476f8dc5`.
+ApacheProcessorHttpClient now owns HTTP pool/TLS client construction, selection and
+status capacity behind ProcessorHttpClient. ProcessorConfiguration injects that API;
+WorkerImpl no longer imports Apache clients or constructs them, and the handler no
+longer selects a client. Old raw-client constructors and helpers are removed.
+Request/response callbacks remain on the same Apache execution path. Architecture
+owner: RESP-PROCESSOR-HTTP-CLIENT.
+
+No generic cross-service HTTP framework, configuration/default changes, new shutdown
+hooks or TLS/ACK changes. HTTP Sequence ownership and TCP transport lifetime remain
+separate. TLS acceptance/rejection is tested through the real owner, reflective
+proxy checks are replaced by actual proxy requests, and processor response/error
+coverage is retained through the port. The API is intentionally local and Apache
+HTTP-specific; it accepts a response decoder but does not expose raw clients.
+
+Verification: **88 tests passed, zero failures/errors/skips**
+(`/tmp/ph-f09-processor-http-final.log`). This includes 23 owner cases for request/
+response effects, decoder errors, GLOBAL/PER_THREAD/NONE and keepAlive precedence,
+thread isolation, configured capacity, verified/unverified TLS and actual system
+proxy routing. Existing processor/pacing/transport/security suites plus the 3 import
+checks pass. Worker status consumes the owner's capacity projection. No new module,
+artifact dependency or import exemption was introduced; this local package boundary
+is documented and reviewed in source, not enforced by a new scanner.
+Separate HTTP review reran 88 tests successfully (`/tmp/ph-f09-http-review.log`)
+with no actionable findings. No full repository reactor or deployed E2E was repeated.
+This does not close F09.
+
+### F09 — TCP/ISO8583 runtime slice
+
+**Implemented and reviewed; committed in `a29bae54`.** Base: HTTP commit `f6e55c31`.
+TcpTransportRuntime owns configuration/reload and selection, TcpPerThreadTransports
+owns each generation's lazy per-thread resources, and TcpTransportLease owns scoped
+release. Both handlers delegate through this API with separate runtime instances.
+Retry/result scopes and existing update/close order are preserved. The unused
+TcpTransportPool and string/global-pool factory helpers are removed after repository
+caller search; the remaining factory is package-private. See RESP-PROCESSOR-TCP-RUNTIME.
+
+Existing non-atomic replacement, failed-construction state and lack of shutdown
+cleanup are deliberately outside this extraction; no lifecycle repair is implied.
+Socket/NIO/Netty IO implementations, protocol framing and auth remain unchanged.
+The active factory's existing config-based selection/fallback behavior is preserved,
+not expanded or reinterpreted in this extraction.
+
+Verification: **96 tests passed, zero failures/errors/skips**
+(`/tmp/ph-f09-tcp-runtime.log`): 93 processor tests plus 3 repository import checks.
+Eight owner tests exercise request/config propagation, GLOBAL/NONE/PER_THREAD reuse,
+per-thread and protocol isolation, replacement release, close failures, missing
+configuration and caller-controlled retry through one lease. Existing handler and
+real HTTP/TCP/ISO8583 transport tests remain green. The existing ProcessorTest fake
+transport injection fixture was adapted to the new owner; owner tests themselves
+exercise the API without inspecting private state. No new module/dependency/import
+exception or scanner was added. No full repository reactor or deployed E2E repeated.
+This completes the selected pool-mechanics transfer, not all F09 or lifetime repair.
 
 ### F08 and separate correctness work
 
@@ -388,3 +543,221 @@ Original plan review (PR #519): that update removed stale prerequisites, preserv
 added the omitted Redis capture consumer and split implementation from behavioral
 redesign. That plan-only update changed no production code, public contract, dependencies or deployment.
 F01, F03, F04 and F05 were subsequently authorized explicitly by the user; other entries remain plans.
+
+### F09 — TCP mock notification slice
+
+**Implemented and reviewed; committed in `a5daf11c`.** Base: `a29bae54`.
+Transfer the active global notification feed from NotificationController into
+NotificationService; replace its uncalled per-user implementation and model.
+Repository-wide Java search found no consumers of that old service/model.
+Preserve the existing HTTP contract, retention, ignored persistent flag and
+ID/read behavior; expose detached response projections. See
+RESP-TCP-MOCK-NOTIFICATIONS. No workspace, mapping, mock protocol or security change.
+Verification: all 10 TCP mock tests passed, including 6 feed behavior tests and
+2 controller/JSON tests using the real service (`/tmp/ph-f09-notifications.log`).
+Coverage: creation/order/time, retention, missing/repeated reads, clear without ID
+reset, ignored persistent input, null fields, detached projections and unchanged
+response fields/statuses. Controller tests call Java methods and serialize values;
+they do not claim deployed HTTP/security acceptance. No security config changed.
+The existing repository import gate also passed (3 tests,
+`/tmp/ph-f09-notifications-imports.log`). No deployment or full reactor repeated.
+This does not close the broader TCP mock/F09 audit.
+
+### F09 — TCP mock workspace slice
+
+**Implemented and reviewed; committed in `08efc686`.** Base: `a5daf11c`.
+Extract the active global catalogue from WorkspaceController into WorkspaceService;
+replace the unused user/member-aware implementation and model. Preserve existing
+upsert/body-ID mismatch, default handling, generated IDs and wire shape. Repository
+Java reference search finds no consumers of the unused implementation. See
+RESP-TCP-MOCK-WORKSPACES. No permissions, persistence or concurrency repair.
+Verification: 21 tests passed with zero failures/errors/skips
+(`/tmp/ph-f09-workspaces.log`): 8 new workspace tests, 10 existing TCP mock tests
+and 3 existing import checks. Tests exercise default creation/protection, generated
+IDs/owner, missing deletion, upsert/path-versus-body-ID behaviour, null fields and
+input/output snapshot isolation. Controller tests use direct calls/serialization,
+not deployed HTTP. No full reactor/deployment was repeated.
+Remaining F07: static/workspace.js repeats default data on load failure and blocks
+default deletion; explicitly defer that existing UI policy duplication instead of
+claiming end-to-end SSOT. Broader F09 remains open.
+
+Workspace review follow-up: the user approved fixing the inherited PUT JSON decode
+failure. Workspace now supports Jackson field binding via a no-argument constructor.
+Two new tests begin with JSON (complete and omitted fields), update through the real
+controller/service and verify stored values, response serialization and isolation.
+Both failed with InvalidDefinitionException before the fix
+(`/tmp/ph-workspace-json-red.log`); all 23 selected tests pass after it
+(`/tmp/ph-workspace-json-green.log`). No new field validation, HTTP fields or
+catalogue policy. These remain mapper/controller tests, not deployed HTTP checks.
+
+### F09 — TCP mock authored mapping files
+
+**Implemented and reviewed; committed in `7e75105e`.** Base: `08efc686`.
+Extract save/delete mechanics from FileBasedMappingLoader into MappingFileStore.
+Registry delegates to the store; loader only imports at startup. Remove their
+lazy cycle, preserve existing distinct roots and error/ordering semantics.
+See RESP-TCP-MOCK-MAPPING-FILES. Controller orchestration, registry matching,
+filename validation and durability/restart behaviour remain separate work.
+Verification: 30 tests passed, zero failures/errors/skips
+(`/tmp/ph-f09-mapping-files.log`): 7 new file-store behavior tests, 20 prior TCP mock
+tests and 3 existing import checks. Real temporary files cover non-default root,
+JSON/YAML values, overwrite, all deletion variants, missing files, suppressed IO
+failures and propagated runtime failures. Existing format-selection semantics
+remain unchanged, including non-yaml values selecting JSON. No deployment,
+new architecture scanner or test of bean identity; startup composition was traced
+in source. This slice does not close controller orchestration or all F09.
+
+### F09 — TCP mock mapping authoring
+
+**Implemented and reviewed; committed in `d45bcc13`.** Base: `7e75105e`.
+Extract controller parsing and import/delete orchestration into MappingAuthoringParser
+and MappingAuthoringService. Remove registry storage forwarding/dependency; keep
+startup and WireMock boundaries distinct. Preserve dual-format decode, sequential
+partial effects, response fields and error suppression. See
+RESP-TCP-MOCK-MAPPING-AUTHORING. Verification: 41 tests passed, zero failures/errors/
+skips (`/tmp/ph-f09-authoring-final.log`): 11 parser/authoring/controller behavior
+cases plus 27 existing TCP mock cases and 3 import checks. Tests use actual registry
+CRUD and temporary files; protocol execution dependencies are outside the authoring
+fixture. They cover JSON/YAML, batches, replacements, empty batches, late invalid
+entry retaining earlier effects, initial rejection, suppressed file IO failure,
+delete effects and unchanged HTTP response mapping. No deployed HTTP/full reactor
+repeated. Startup import and WireMock admin remain distinct; registry execution
+and wider TCP mock separation are not closed by this slice.
+
+### F09 — TCP mock stub conversion
+
+**Implemented and accepted in the subsequent TCP closure review.** Base: `d45bcc13`.
+Share duplicated admin/file StubMapping conversion and reverse file export.
+Public DTOs remain unchanged; nested-type extraction was blocked by automatic
+approval review as a protected contract change and is outside this narrower slice.
+Preserve source-specific descriptions and defaults. See RESP-TCP-MOCK-STUB-CONVERSION.
+Verification: 47 tests passed, zero failures/errors/skips
+(`/tmp/ph-f09-stub-conversion.log`): 6 conversion/boundary tests plus 38 existing
+TCP mock tests and 3 import checks. Covers unchanged JSON, defaults and nulls,
+missing nested object rejection, distinct source descriptions, registry effects
+and real temp-file import/export. Direct controller calls do not claim deployed
+HTTP acceptance; no full reactor/deployment repeated. Admin orchestration and
+importer filesystem lifecycle remain separate F09 work.
+
+### F09 TCP mock closure — implemented and reviewed
+
+Implemented catalogue/execution separation for text, binary and manual requests;
+extracted text processing, admin orchestration/diagnostic projections and web
+test/documentation operations. Preserve public DTOs and behavior. Reset semantics, durability, startup
+versus authored mapping roots and nested DTO cleanup remain separate debt.
+Acceptance: behavior tests at extracted owners, repository import check, then separate
+review of complete call paths.
+
+Verification at `d45bcc13` plus this uncommitted slice:
+`./mvnw -ntp -pl tcp-mock-server,common/control-plane-core -am test -Dtest='*Test' -Dsurefire.failIfNoSpecifiedTests=false`
+passed 405 tests (58 TCP mock, including 14 new behavioral tests; 3 repository
+import checks included in the dependency reactor), no failures/errors/skips.
+Local log: `/tmp/ph-tcp-closure-tests.log`. No deployed/E2E acceptance claimed.
+The mapping execution body and ten compatibility methods were compared to HEAD:
+only delegation/signature annotations and the unused registry counter changed.
+Repository search confirms a single runtime mapping map and a single caller of
+EnhancedTemplateEngine. AdvancedTemplateEngine, AdvancedMatcher and PaymentLogicEngine
+have no Java consumers in the inspected tree; their existing inactive code is not a
+second active execution path. Separate review still required.
+
+This closes the agreed admin/execution slice, not all historical TCP debt. Existing
+reset persistence/null semantics, importer file lifecycle, documentation resource
+handling and public nested types remain unchanged. Direct controller tests do not
+verify deployed Spring/Netty lifecycle or scenario persistence behavior.
+
+Review follow-up: CompatibilityCommandsTest adds nine behavioral cases covering
+both journal clears before scenario reset, retained partial effects on reset failure,
+no scenario reset after journal failure, exact update/delete commands and payloads,
+null/missing-state rejection propagation and update/delete failures. Real RequestStore;
+ScenarioManager is mocked to avoid constructor IO against `/app` (test-scoped Mockito,
+version from the existing Spring Boot BOM).
+These tests verify command-boundary behavior, not scenario persistence internals.
+No production code or reset semantics changed. Full TCP suite: 67 passed, zero
+failures/errors/skips (`/tmp/ph-tcp-commands-fix.log`); diff check clean.
+
+Mockito review fix: module test resources select `mock-maker-subclass` and
+`member-accessor-reflection`; redundant per-mock selection removed. Selecting only
+the mock maker still triggered instrumentation through the default member accessor.
+Both settings are now explicit in `src/test/resources/mockito-extensions`.
+Full TCP suite with `-DargLine=-XX:-EnableDynamicAgentLoading`: 67 passed,
+zero failures/errors/skips, no self-attach warning (`/tmp/ph-tcp-subclass-fix.log`).
+Production code unchanged; diff check clean.
+
+Separate follow-up review accepted the bounded TCP slice after both test fixes.
+Fresh agent-disabled run: 67 tests passed (`/tmp/ph-tcp-subclass-review.log`), no
+self-attach warnings; no remaining findings in the reviewed scope. Deployment
+and explicitly deferred TCP debt remain outside this acceptance.
+
+### TCP mock housekeeping
+
+After the bounded extraction review, remove unused AdvancedTemplateEngine,
+AdvancedMatcher and PaymentLogicEngine (including its unused nested payment models).
+Repository-wide name/bean/reflection searches found no consumers; runtime still uses
+EnhancedTemplateEngine and AdvancedRequestMatcher. Close classpath documentation
+streams and WireMockImporter directory walks with try-with-resources. Preserve lookup
+order, parsing, import results and public HTTP contracts. Reset semantics, scenario
+persistence and live public DTOs remain outside this cleanup.
+
+Verification: clean TCP module build and all 67 tests passed with dynamic agent
+loading disabled (`/tmp/ph-tcp-housekeeping.log`); no stale compiled classes used.
+Existing documentation HTTP and real-file stub import/export tests passed.
+No new runtime dependencies or ownership boundaries; no deployment/commit.
+
+### TCP mock runtime mapping persistence — implemented and reviewed
+
+Human decision: runtime mapping changes must survive restarts of the same mock
+instance with its retained data volume. Exporting/promoting those changes into a
+PocketHive scenario is a separate task and is not part of this change.
+
+Required behavior:
+- Fresh runtime initializes its mapping catalogue from built-in defaults and the
+  existing startup mapping source. Once initialized, the persisted runtime catalogue
+  is authoritative; startup files must not overwrite edits or resurrect deletions.
+- Additions, replacements, deletions and an explicitly empty catalogue survive
+  restart. This applies to authored mappings, admin stub operations and imports.
+- One persistence owner serves all mutation entrypoints. A successful mutation
+  must have been persisted; an IO failure cannot become a successful API response.
+- Existing data mounts already retain `/app/data` in local Compose and HiveForge.
+  A fresh deployment with no retained data remains a fresh runtime.
+- No automatic promotion to scenario files and no implicit migration of historical
+  per-file writes. Any migration requires a separate explicit decision.
+
+Implemented: a complete persisted catalogue snapshot, atomically
+replaced on accepted mutation. An empty snapshot is valid initialized state, not
+an instruction to reload startup defaults. Fail explicitly on an unreadable or
+corrupt saved catalogue. The storage contract is recorded in
+RESP-TCP-MOCK-MAPPING-FILES/AUTHORING.
+Acceptance must exercise restart with the same data root after add/edit/delete/reset,
+including a modified startup source, plus write failure retaining the accepted state.
+The former startup/write directory divergence is removed.
+
+Implementation contract: RESP-TCP-MOCK-MAPPING-FILES/AUTHORING now specify a full
+atomic snapshot at `/app/data/mapping-catalogue.json`. One registry mutation owner
+serves authoring/admin/import paths; no legacy per-file migration or PH scenario export.
+Existing local and HiveForge data mounts already cover this path. Request acceptance
+requires persistence; saved state, including an empty catalogue, overrides seed loading.
+
+Verification: 73 TCP tests passed with dynamic agent loading disabled; 3 repository
+import-boundary tests passed separately. Tests cover restart after authoring, admin
+creation/delete/clear and file imports, seed bypass for saved/empty state, parallel
+mutations, failed serialization/replacement, failed admin writes and corrupt snapshots.
+Logs: `/tmp/ph-tcp-durability.log`, `/tmp/ph-tcp-import-boundary.log`.
+A broader invocation failed in Rabbit Mockito initialization because the TCP-specific
+no-attach JVM option was applied there too; that run is not a passing reactor result.
+No deployment performed. Separate review found the ordering issue below; the follow-up
+review accepted its fix.
+
+Review fix: preserve catalogue encounter order through immutable LinkedHashMap
+snapshots instead of Map.copyOf. Equal-priority matching uses persisted catalogue
+order; replacements keep their position, new ids append. Regression exercises both
+id orders, saved array order, response selection before/after restart, replacement,
+unrelated insertion and deletion. It failed before the fix (expected updated,
+received b); all 74 TCP tests pass after the fix. Evidence:
+`/tmp/ph-tcp-order-red.log`, `/tmp/ph-tcp-order-green.log`. No commit/deployment.
+
+Final review (2026-09-24): no findings after the ordering fix. All 74 TCP tests
+passed again (`/tmp/ph-tcp-order-review.log`); eight independent JVM reloads selected
+the same response. `git diff --check` passed. The prior 3 import-boundary tests remain
+applicable; this fix changed no module dependencies. Ready for publication as the
+next PR based on `codex/journal-filesystem` (#522). No full-reactor or deployed
+acceptance rerun is claimed for this delivery.

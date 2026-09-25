@@ -7,6 +7,7 @@ import io.pockethive.processor.handler.HttpProtocolHandler;
 import io.pockethive.processor.handler.Iso8583ProtocolHandler;
 import io.pockethive.processor.handler.TcpProtocolHandler;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
+import io.pockethive.processor.http.ProcessorHttpClient;
 import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.work.api.PocketHiveWorkerFunction;
 import io.pockethive.work.api.WorkItem;
@@ -22,16 +23,6 @@ import java.time.Clock;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import org.apache.hc.client5.http.classic.HttpClient;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
-import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
-import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
-import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
-import org.apache.hc.client5.http.ssl.TrustAllStrategy;
-import org.apache.hc.core5.http.ConnectionReuseStrategy;
-import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -63,7 +54,7 @@ import org.springframework.stereotype.Component;
  * Configuration is supplied by the control plane on the {@code processor.control.*} routing keys.
  * <p>
  * Responsibility: dispatch a request to its selected protocol handler and return the resulting Work item.
- * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
+ * Must not: construct HTTP clients, implement pacing policy, provision topology or reinterpret a protocol result.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
  */
 @Component("processorWorker")
@@ -73,12 +64,7 @@ import org.springframework.stereotype.Component;
 )
 class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
-  private static final int GLOBAL_MAX_CONNECTIONS = 200;
-  private static final int GLOBAL_MAX_PER_ROUTE = 200;
-
-  private record HttpClientBundle(HttpClient pooled, HttpClient noKeepAlive, ThreadLocal<HttpClient> perThread) {
-  }
-
+  private final ProcessorHttpClient httpClient;
   private final ObjectMapper mapper;
   private final CallMetricsRecorder metricsRecorder = new CallMetricsRecorder();
   private final Map<String, ProtocolHandler> protocolHandlers;
@@ -86,69 +72,34 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   @Autowired
   ProcessorWorkerImpl(ObjectMapper mapper,
-                      ProcessorWorkerProperties properties,
+                      ProcessorHttpClient httpClient,
                       TemplateRenderer templateRenderer,
                       RedisSequenceProperties redisProperties) {
-    this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(), templateRenderer, redisProperties);
-  }
-
-  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, TemplateRenderer renderer) {
-    this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(),
-        renderer, new RedisSequenceProperties());
-  }
-
-  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock, TemplateRenderer renderer) {
-    this(mapper, properties,
-        new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
-        new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
-        clock,
-        renderer,
-        new RedisSequenceProperties());
+    this(mapper, httpClient, Clock.systemUTC(), templateRenderer, redisProperties);
   }
 
   ProcessorWorkerImpl(ObjectMapper mapper,
-                      ProcessorWorkerProperties properties,
-                      HttpClient verifiedClient,
-                      HttpClient verifiedNoKeepAliveClient,
-                      HttpClient insecureClient,
-                      HttpClient insecureNoKeepAliveClient,
-                      Clock clock, TemplateRenderer renderer) {
-    this(mapper, properties,
-        new HttpClientBundle(verifiedClient, verifiedNoKeepAliveClient, ThreadLocal.withInitial(() -> verifiedClient)),
-        new HttpClientBundle(insecureClient, insecureNoKeepAliveClient, ThreadLocal.withInitial(() -> insecureClient)),
-        clock,
-        renderer,
-        new RedisSequenceProperties());
-  }
-
-  private ProcessorWorkerImpl(ObjectMapper mapper,
-                              ProcessorWorkerProperties properties,
-                              HttpClientBundle verifiedClients,
-                              HttpClientBundle insecureClients,
-                              Clock clock,
-                              TemplateRenderer templateRenderer,
-                              RedisSequenceProperties redisProperties) {
+                      ProcessorHttpClient httpClient,
+                      Clock clock,
+                      TemplateRenderer templateRenderer,
+                      RedisSequenceProperties redisProperties) {
+    this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
-    java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
+    ProcessorPacer pacer = new ProcessorPacer();
     this.protocolHandlers = Map.of(
         "HTTP", new HttpProtocolHandler(
             mapper,
             clock,
             metricsRecorder,
-            verifiedClients.pooled(),
-            verifiedClients.noKeepAlive(),
-            verifiedClients.perThread(),
-            insecureClients.pooled(),
-            insecureClients.noKeepAlive(),
-            insecureClients.perThread(),
-            nextAllowedTimeNanos),
-        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, nextAllowedTimeNanos,
+            httpClient,
+            pacer),
+        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, pacer,
             templateRenderer, redisProperties),
         "ISO8583", new Iso8583ProtocolHandler(
             mapper,
             clock,
             metricsRecorder,
-            nextAllowedTimeNanos,
+            pacer,
             templateRenderer,
             redisProperties)
     );
@@ -222,7 +173,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   }
 
   private void publishStatus(WorkerContext context, ProcessorWorkerConfig config) {
-    int httpMaxConnections = httpMaxConnections(config);
+    int httpMaxConnections = httpClient.maxConnections(config);
     context.statusPublisher()
         .update(status -> status
             .data("baseUrl", config.baseUrl())
@@ -235,55 +186,4 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             .data("avgLatencyMs", metricsRecorder.averageLatencyMs()));
   }
 
-  private int httpMaxConnections(ProcessorWorkerConfig config) {
-    if (!Boolean.TRUE.equals(config.keepAlive())) return 0;
-    ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
-    return reuse == ProcessorWorkerConfig.ConnectionReuse.GLOBAL ? GLOBAL_MAX_CONNECTIONS
-        : reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD ? config.threadCount() : 0;
-  }
-
-  private static HttpClientBundle newHttpClientBundle(boolean sslVerify) {
-    return new HttpClientBundle(
-        newHttpClient(sslVerify, true),
-        newHttpClient(sslVerify, false),
-        ThreadLocal.withInitial(() -> newHttpClient(sslVerify, true)));
-  }
-
-  private static HttpClient newHttpClient(boolean sslVerify, boolean keepAlive) {
-    PoolingHttpClientConnectionManager manager = newConnectionManager(sslVerify);
-    var builder = HttpClients.custom()
-        .useSystemProperties()
-        .setConnectionManager(manager);
-    if (keepAlive) {
-      return builder.build();
-    }
-    ConnectionReuseStrategy noReuse = (request, response, context) -> false;
-    return builder
-        .setConnectionReuseStrategy(noReuse)
-        .build();
-  }
-
-  private static PoolingHttpClientConnectionManager newConnectionManager(boolean sslVerify) {
-    PoolingHttpClientConnectionManagerBuilder builder = PoolingHttpClientConnectionManagerBuilder.create();
-    if (sslVerify) {
-      builder.useSystemProperties();
-    } else {
-      builder.setSSLSocketFactory(insecureSocketFactory());
-    }
-    PoolingHttpClientConnectionManager manager = builder.build();
-    manager.setMaxTotal(GLOBAL_MAX_CONNECTIONS);
-    manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
-    return manager;
-  }
-
-  private static SSLConnectionSocketFactory insecureSocketFactory() {
-    try {
-      return SSLConnectionSocketFactoryBuilder.create()
-          .setSslContext(SSLContextBuilder.create().loadTrustMaterial(null, TrustAllStrategy.INSTANCE).build())
-          .setHostnameVerifier(NoopHostnameVerifier.INSTANCE)
-          .build();
-    } catch (Exception ex) {
-      throw new IllegalStateException("Failed to create insecure HTTP client SSL context", ex);
-    }
-  }
 }

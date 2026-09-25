@@ -10,6 +10,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.scenarios.api.RuntimeRequest;
+import io.pockethive.scenarios.api.ScenarioRuntimeResponse;
+import io.pockethive.scenarios.api.VariablesResolveResponse;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
@@ -60,8 +63,10 @@ class ScenarioManagerClientTest {
             }
             """;
 
-        ScenarioManagerClient.ScenarioTemplateResponse response =
-            objectMapper.readValue(payload, ScenarioManagerClient.ScenarioTemplateResponse.class);
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/templates/local-rest", exchange -> respondJson(exchange, payload));
+        server.start();
+        var response = client().fetchScenarioTemplate(" local-rest ");
 
         assertThat(response.id()).isEqualTo("local-rest");
         assertThat(response.bundleKey()).isEqualTo("e2e/local-rest");
@@ -71,19 +76,29 @@ class ScenarioManagerClientTest {
     }
 
     @Test
+    void rejectsNullTemplateMetadataRatherThanReturningAnAbsentDescriptor() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/templates/local-rest", exchange -> respondJson(exchange, "null"));
+        server.start();
+
+        assertThatThrownBy(() -> client().fetchScenarioTemplate("local-rest"))
+            .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
     void prepareScenarioRuntimeCallsRuntimeEndpointDirectly() throws Exception {
         List<String> calls = new CopyOnWriteArrayList<>();
+        List<RuntimeRequest> requests = new CopyOnWriteArrayList<>();
+        List<com.fasterxml.jackson.databind.JsonNode> wireRequests = new CopyOnWriteArrayList<>();
 
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/scenarios/local-rest/runtime", exchange -> {
             calls.add("runtime");
-            respondJson(exchange, """
-                {
-                  "scenarioId": "local-rest",
-                  "swarmId": "sw1",
-                  "runtimeDir": "/tmp/runtime/sw1"
-                }
-                """);
+            var request = objectMapper.readTree(exchange.getRequestBody());
+            wireRequests.add(request);
+            requests.add(objectMapper.treeToValue(request, RuntimeRequest.class));
+            respondJson(exchange, objectMapper.writeValueAsString(
+                new ScenarioRuntimeResponse("local-rest", "sw1", "/tmp/runtime/sw1")));
         });
         server.start();
 
@@ -91,6 +106,8 @@ class ScenarioManagerClientTest {
 
         assertThat(runtimeDir).isEqualTo("/tmp/runtime/sw1");
         assertThat(calls).containsExactly("runtime");
+        assertThat(requests).containsExactly(new RuntimeRequest("sw1"));
+        assertThat(wireRequests).containsExactly(objectMapper.readTree("{\"swarmId\":\"sw1\"}"));
     }
 
     @Test
@@ -113,6 +130,63 @@ class ScenarioManagerClientTest {
                 assertThat(failure.responseBody()).contains("\"ok\": false");
                 assertThat(failure.contentType()).contains("application/json");
             });
+    }
+
+    @Test
+    void resolvesProducerVariablesWithoutLosingValuesWarningsOrRequestContext() throws Exception {
+        var values = Map.<String, Object>of("attempts", 3, "enabled", true,
+            "nested", Map.of("ids", List.of("a", "b")));
+        var warnings = List.of("Profile selected without a SUT override");
+        var queries = new CopyOnWriteArrayList<String>();
+        var correlations = new CopyOnWriteArrayList<String>();
+        var idempotency = new CopyOnWriteArrayList<String>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/scenarios/local-rest/variables/resolve", exchange -> {
+            queries.add(exchange.getRequestURI().getRawQuery());
+            correlations.add(exchange.getRequestHeaders().getFirst("X-Correlation-Id"));
+            idempotency.add(exchange.getRequestHeaders().getFirst("X-Idempotency-Key"));
+            respondJson(exchange, objectMapper.writeValueAsString(
+                new VariablesResolveResponse("profile A", "sut/A", values, warnings)));
+        });
+        server.start();
+
+        var resolved = client().resolveScenarioVariables(" local-rest ", " profile A ", " sut/A ", "corr-1", "idem-1");
+
+        assertThat(resolved.profileId()).isEqualTo("profile A");
+        assertThat(resolved.sutId()).isEqualTo("sut/A");
+        assertThat(resolved.vars()).isEqualTo(values);
+        assertThat(resolved.warnings()).isEqualTo(warnings);
+        assertThat(queries).containsExactly("profileId=profile+A&sutId=sut%2FA");
+        assertThat(correlations).containsExactly("corr-1");
+        assertThat(idempotency).containsExactly("idem-1");
+    }
+
+    @Test
+    void keepsExistingEmptyProjectionForNullVariableCollections() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/scenarios/local-rest/variables/resolve", exchange ->
+            respondJson(exchange, objectMapper.writeValueAsString(
+                new VariablesResolveResponse(null, null, null, null))));
+        server.start();
+
+        var resolved = client().resolveScenarioVariables("local-rest", null, null, null, null);
+
+        assertThat(resolved.profileId()).isNull();
+        assertThat(resolved.sutId()).isNull();
+        assertThat(resolved.vars()).isEmpty();
+        assertThat(resolved.warnings()).isEmpty();
+    }
+
+    @Test
+    void rejectsProducerResponseWithoutRuntimeDirectory() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/scenarios/local-rest/runtime", exchange ->
+            respondJson(exchange, objectMapper.writeValueAsString(
+                new ScenarioRuntimeResponse("local-rest", "sw1", "  "))));
+        server.start();
+
+        assertThatThrownBy(() -> client().prepareScenarioRuntime("local-rest", "sw1"))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("returned empty runtimeDir");
     }
 
     private ScenarioManagerClient client() {
