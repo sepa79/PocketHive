@@ -3806,13 +3806,13 @@ a newer in-flight marker or publish permissions for another caller.
 
 ## RESP-SCENARIO-CATALOGUE-ACCESS
 
-ScenarioCatalogueAccess owns the existing scenario-ID/bundle-key selection used to
+ScenarioAccessService owns the existing scenario-ID/bundle-key selection used to
 filter the workspace catalogue, delegating scope resolution to ScenarioService and
 permission policy to ScenarioManagerAuthorization. ScenarioController and
-BundleAccessProjection share this visibility owner. The projection uses
+ScenarioAccessController share this visibility owner. The projection uses
 findBundleAccess(bundleKey) and canManage for edit permission, exactly as bundle
 mutations do. Commands retain their existing authorization and error semantics.
-BundleAccessController only maps GET /api/access/bundles with no-store.
+ScenarioAccessController maps both /api/access/bundles and /api/access/scenarios with no-store.
 
 UI useScenarioCatalogue consumes backend-filtered read/run lists and bundle edit
 projections, invalidating observations on caller change/close. CreateSwarmModal
@@ -3820,7 +3820,7 @@ uses the existing /api/templates run-filtered catalogue; ScenariosPage uses the
 existing read-filtered workspace catalogue. Neither interprets grant scopes.
 Both use scenariosApi's existing BundleTemplateEntry parser; its duplicate template
 parser in CreateSwarmModal is removed. Defunct/missing-ID eligibility is unchanged.
-Global navigation/admin/toolbar permissions remain separate unfinished F07 scope.
+Global navigation/admin/toolbar projections are implemented as described below.
 
 Forbidden: copying grant matching rules, treating projection as command authority,
 or supplying edit permission after a missing/failed observation.
@@ -3835,9 +3835,9 @@ No new grant combinations or scope rules are introduced; null-caller behavior of
 existing service boundary remains unchanged. Auth projection authenticates via the
 existing AuthAccessService and grants no authority to execute resource commands.
 
-ScenarioOperationsAccessController and mutation boundaries share ScenarioOperationAccess,
+ScenarioAccessController and mutation boundaries share ScenarioAccessService,
 which delegates to ScenarioManagerAuthorization. Upload scope is derived from
-ScenarioBundleOrganizationService's existing target folder owner. Reload remains
+ScenarioBundleService.uploadFolder(), backed by the existing organization target folder owner. Reload remains
 restricted to deployment management, upload to its target folder. HTTP controllers
 only authenticate/map/delegate. The combined UI reload/validation workflow consumes
 these decisions, retaining per-bundle edit checks for selected validation.
@@ -3850,8 +3850,8 @@ AUTH_SERVICE_API_SPEC.md and SCENARIO_MANAGER_BUNDLE_REST.md, not this record.
 
 Concrete consumers: AuthAccessController authenticates via AuthAccessService and calls
 AuthAccessProjection; AuthGrantChecks remains the admin decision owner used by actual
-admin commands. ScenarioController and ScenarioOperationsAccessController delegate
-reload/upload decisions to ScenarioOperationAccess. UI authAccessApi and
+admin commands. ScenarioController and ScenarioAccessController delegate
+reload/upload decisions to ScenarioAccessService. UI authAccessApi and
 scenarioOperationsAccessApi decode the two documented ingress responses;
 useAccessObservation is the sole writer of their caller/token-bound async observations.
 AuthContext exposes global decisions; ScenariosPage consumes toolbar decisions.
@@ -3867,7 +3867,7 @@ editing draft and selection; the loader neither interprets grants nor authorizes
 
 ## RESP-SCENARIO-BUNDLE-DOWNLOAD
 
-ScenarioBundleDownloadService owns selection of an export target by scenario ID or
+ScenarioBundleService owns selection of an export target by scenario ID or
 bundle key and the existing response filename conventions. ScenarioService remains
 catalogue/location owner. ScenarioBundleZipExporter owns the single filesystem-to-ZIP
 implementation: walk the resolved root, omit directory entries, use slash-separated
@@ -3884,3 +3884,20 @@ application/octet-stream, Content-Length and form-data attachment headers remain
 The by-key path retains synchronized(scenarios); the ID path gains no new lock.
 No atomic snapshot guarantee, ZIP sorting, empty-directory preservation, symlink
 policy change, import cleanup or publication/validation correctness fix is included.
+
+## RESP-SCENARIO-BUNDLE-API
+
+ScenarioBundleService is the application API for bundle authoring: publication,
+validation, downloads, workspace files, organization, content and SUT editing.
+Publication and download orchestration live here; their former services are removed.
+The existing package-private workspace, organization, content and SUT helpers retain
+their distinct filesystem/editing mechanics. ScenarioBundleZipExporter encodes ZIPs;
+ScenarioBundleValidator owns validation. ScenarioService remains catalogue/identity
+owner. REST consumers use the bundle API rather than assembling these helpers.
+
+This is a behavior-preserving consolidation authorized by the user. The API has more
+than twenty operations because it covers existing bundle authoring endpoints, not
+independent service domains. It must not own HTTP mapping, grant policy, runtime
+materialization or catalogue state. Existing locks, validation order, filenames,
+error mapping and publication effects remain unchanged. No generic dispatch layer
+or additional interface is introduced.

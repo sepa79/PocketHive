@@ -16,10 +16,10 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Own safe tree, file, and folder operations inside a discovered scenario bundle.
  * Must not: Discover bundles, own catalogue state, authorize callers, or interpret scenario domain content.
- * Contract: RESP-SCENARIO-BUNDLE-DOWNLOAD — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-download (export exclusion); docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
-public class ScenarioBundleWorkspaceService {
+class ScenarioBundleWorkspaceService {
     private static final String NODE_TYPE_DIRECTORY = "directory";
     private static final String NODE_TYPE_FILE = "file";
     private static final String EDITOR_KIND_TEXT = "text";

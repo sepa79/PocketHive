@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Scenario Manager: consolidate bundle operations behind ScenarioBundleService and
+  catalogue/operation access behind ScenarioAccessService; share one controller for
+  the approved access projections, preserving HTTP contracts and permission policy.
+
 - Scenario Manager: share one bundle ZIP exporter across scenario-ID and bundle-key
   downloads; remove filesystem export work from REST while preserving filenames,
   response headers, error mapping and existing synchronization.

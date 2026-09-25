@@ -12,10 +12,10 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Own canonical bundle-local SUT descriptor CRUD and listing.
  * Must not: Discover bundles, own catalogue state, or define SUT validation rules.
- * Contract: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md and docs/scenarios/SCENARIO_CONTRACT.md.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
-public class ScenarioBundleSutService {
+class ScenarioBundleSutService {
     private final ScenarioService scenarios;
     private final ScenarioBundleValidator validator;
 

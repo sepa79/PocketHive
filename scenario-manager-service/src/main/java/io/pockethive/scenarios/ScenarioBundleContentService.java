@@ -13,10 +13,10 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Own raw scenario, plan, schema, and template authoring within an existing scenario bundle.
  * Must not: Discover bundles, own catalogue state, or implement generic workspace and ZIP publication operations.
- * Contract: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md and docs/scenarios/SCENARIO_PLAN_GUIDE.md.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
-public class ScenarioBundleContentService {
+class ScenarioBundleContentService {
     private final ScenarioService scenarios;
     private final ScenarioBundleValidator validator;
 

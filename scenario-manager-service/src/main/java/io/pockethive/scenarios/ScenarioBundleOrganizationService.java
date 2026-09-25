@@ -12,10 +12,10 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Own top-level scenario bundle folder creation, deletion, and bundle relocation.
  * Must not: Discover bundles, own catalogue state, or edit content inside a bundle.
- * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (upload target); docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
-public class ScenarioBundleOrganizationService {
+class ScenarioBundleOrganizationService {
     private static final String DEFAULT_UPLOAD_FOLDER = "bundles";
 
     private final ScenarioService scenarios;

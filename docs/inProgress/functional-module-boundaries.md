@@ -22,7 +22,7 @@ below retain implementation evidence; their older test counts are not current ga
 | F06 | Open: trace worker OAuth/signed OAuth, profile loading/preparation, credential application and token coordination; extract only confirmed ownership leaks. Preserve existing behavior. |
 | F07 — completed contracts | Scenario Manager producer contracts closed; do not repeat this extraction. Remaining work is split into F07-TCP and F07-UI below. |
 | F07-TCP — Tim | TCP mock UI workspace catalogue/default-policy duplication and mutation-result handling. The attempted browser fix was discarded by user decision; no implementation is retained. Decide whether to remove the workspace feature rather than repair it: it currently does not isolate mappings or TCP traffic. |
-| F07-UI — Zbigniew | Main PocketHive UI grants/scope projections and network-mode handling. Broader model sharing requires evidence, not automatic consolidation. Unknown network mode rejection approved; implementation recorded below. Excludes TCP mock UI. |
+| F07-UI — Zbigniew | Implemented: main PH UI uses backend access projections and explicit network modes; approved endpoints and UI consumers are complete. Browser/deployed acceptance remains unperformed. Broader model sharing requires evidence. Excludes TCP mock UI. |
 | F08 | Open: establish observation/freshness ownership and distinguish readiness, health and stale semantics before changing writers or thresholds. |
 | F09 | Processor pacing/HTTP/TCP mechanics and the agreed TCP mock extraction/persistence are closed. Open: trace remaining Scenario Manager and MCP application/projection boundaries. |
 | Separate correctness | Orchestrator reset/registry/recovery and orphan-removal outcomes follow `orchestrator-correctness.md`. Processor transport replacement/failure/shutdown lifecycle is also deferred; extraction did not repair it. |
@@ -856,3 +856,41 @@ metadata ownership; correctness fixes and F06 remain distinct work.
 Separate S6 review: no actionable findings; reran 109 tests successfully
 (/tmp/ph-f09-sm-review.log). Existing concurrent-edit/snapshot limitations remain
 unchanged; no deployed E2E qualification is claimed.
+
+### F09-SM / F07-UI — simplify functional APIs (reviewed)
+
+User approved correcting excessive fragmentation before further extraction. Replace
+separate publication/download entrypoints with ScenarioBundleService; keep substantive
+editing and ZIP helpers internal. Consolidate catalogue/operation access and bundle
+projection into ScenarioAccessService, with one HTTP controller for both approved
+Scenario Manager access endpoints. All approved access endpoints already have UI
+consumers; finish by exercising the consolidated composition and existing UI tests.
+No new routes, payloads or permission policy. Do not expand into S5/S7/S9 correctness
+or TCP. Acceptance: existing upload/download/edit/validation and access behavior,
+no old service consumers, unchanged HTTP contracts and passing boundary tests.
+
+Implemented: ScenarioBundleService replaces publication/download services and is the
+only application consumer of the four package-private authoring helpers. Its existing
+publication workflow and download selection remain in the service; ZIP encoding stays
+in one exporter. ScenarioController now has seven collaborators instead of thirteen.
+ScenarioAccessService replaces ScenarioCatalogueAccess, ScenarioOperationAccess and
+BundleAccessProjection; ScenarioAccessController replaces two single-route controllers.
+Earlier entries above describe the implementation history; these are the current owners.
+
+Verification: 156 Scenario Manager tests pass, including seven full Spring HTTP/auth
+access cases; 99 UI tests and production build pass. The access tests request JSON
+explicitly, like UI clients (Scenario Manager also supports YAML negotiation). Existing
+ZIP contents/names/errors, editing, upload, validation and authorization regressions
+remain green. No deployment/browser E2E, commit or push in this slice. Logs:
+/tmp/ph-consolidated-java.log, /tmp/ph-consolidated-ui-tests.log,
+/tmp/ph-consolidated-ui-build.log. Separate review completed below.
+
+RepositoryImportBoundaryTest also passes (3 tests), run explicitly in control-plane-core;
+log /tmp/ph-consolidated-boundaries.log. Whole-repository Java search finds no former
+publication/download/access service consumers; only ScenarioBundleService consumes
+the internal authoring helpers. git diff --check passes.
+
+Separate review of the consolidation: no actionable findings. Re-ran 156 Scenario
+Manager tests plus 3 import-boundary tests; log /tmp/ph-bundle-access-review.log.
+Checked endpoint-to-owner call paths, former-owner removal, preserved locks/error
+mapping and canonical permission decisions. No deployed/browser E2E claimed.

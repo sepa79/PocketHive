@@ -18,21 +18,21 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 
 /**
- * Responsibility: Map bundle validation HTTP requests to the canonical ZIP publication and validation workflow.
+ * Responsibility: Map bundle validation HTTP requests to the canonical ZIP bundles and validation workflow.
  * Must not: Parse ZIPs, define validation rules, or mutate scenario catalogue state.
- * Contract: docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
  */
 @RestController
 @RequestMapping("/validation/scenario-bundles")
 public class ScenarioValidationController {
     private static final Logger log = LoggerFactory.getLogger(ScenarioValidationController.class);
 
-    private final ScenarioBundlePublicationService publication;
+    private final ScenarioBundleService bundles;
     private final ScenarioManagerAuthorization authorization;
 
-    public ScenarioValidationController(ScenarioBundlePublicationService publication,
+    public ScenarioValidationController(ScenarioBundleService bundles,
                                         ScenarioManagerAuthorization authorization) {
-        this.publication = publication;
+        this.bundles = bundles;
         this.authorization = authorization;
     }
 
@@ -41,7 +41,7 @@ public class ScenarioValidationController {
         int size = body != null ? body.length : 0;
         log.info("[REST] POST /validation/scenario-bundles contentType=application/zip size={}", size);
         requireManagePocketHive();
-        BundleValidationResult result = publication.validateZip(body);
+        BundleValidationResult result = bundles.validateZip(body);
         log.info("[REST] POST /validation/scenario-bundles -> status=200 ok={} findings={}",
                 result.ok(), result.findings().size());
         return result;
@@ -53,7 +53,7 @@ public class ScenarioValidationController {
         log.info("[REST] POST /validation/scenario-bundles/existing bundleKey={}", bundleKey);
         requireManagePocketHive();
         try {
-            BundleValidationResult result = publication.validateExisting(bundleKey);
+            BundleValidationResult result = bundles.validateExisting(bundleKey);
             log.info("[REST] POST /validation/scenario-bundles/existing -> status=200 ok={} findings={}",
                     result.ok(), result.findings().size());
             return result;

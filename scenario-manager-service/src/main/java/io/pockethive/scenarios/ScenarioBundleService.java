@@ -7,35 +7,54 @@ import io.pockethive.scenarios.validation.BundleValidationSource;
 import io.pockethive.scenarios.validation.ScenarioBundleValidator;
 import io.pockethive.scenarios.validation.ValidationFinding;
 import io.pockethive.scenarios.validation.ValidationRun;
+import io.pockethive.swarm.model.SutEnvironment;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Responsibility: Own scenario bundle ZIP validation, safe extraction, and catalogue publication workflows.
- * Must not: Own catalogue identity, duplicate/quarantine state, or define bundle validation rules.
- * Contract: docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md and docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ * Responsibility: provide the application API for bundle publication, export and authoring operations.
+ * Must not: own HTTP mapping, grant policy, catalogue identity or bundle validation rules.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api;
+ * RESP-SCENARIO-BUNDLE-DOWNLOAD — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-download.
  */
 @Service
-public class ScenarioBundlePublicationService {
+public class ScenarioBundleService {
+    private static final Logger log = LoggerFactory.getLogger(ScenarioBundleService.class);
     private static final String UPLOAD_TEMP_PREFIX = "pockethive-scenario-upload-";
 
     private final ScenarioService scenarios;
     private final ScenarioBundleOrganizationService organization;
     private final ScenarioBundleValidator validator;
 
-    public ScenarioBundlePublicationService(ScenarioService scenarios,
-                                            ScenarioBundleOrganizationService organization,
-                                            ScenarioBundleValidator validator) {
+    private final ScenarioBundleZipExporter exporter;
+    private final ScenarioBundleWorkspaceService workspace;
+    private final ScenarioBundleContentService content;
+    private final ScenarioBundleSutService suts;
+
+    public ScenarioBundleService(ScenarioService scenarios,
+                                 ScenarioBundleOrganizationService organization,
+                                 ScenarioBundleValidator validator,
+                                 ScenarioBundleZipExporter exporter,
+                                 ScenarioBundleWorkspaceService workspace,
+                                 ScenarioBundleContentService content,
+                                 ScenarioBundleSutService suts) {
         this.scenarios = scenarios;
         this.organization = organization;
         this.validator = validator;
+        this.exporter = exporter;
+        this.workspace = workspace;
+        this.content = content;
+        this.suts = suts;
     }
 
     public Scenario create(byte[] zipBytes) throws IOException {
@@ -116,6 +135,148 @@ public class ScenarioBundlePublicationService {
             candidate.scenario(),
             candidate.seedFindings(),
             null));
+    }
+
+    public BundleDownload downloadByScenarioId(String id) throws IOException {
+        Scenario scenario = scenarios.find(id).orElseThrow(ScenarioDownloadNotFoundException::new);
+        Path root;
+        try {
+            root = scenarios.bundleDirFor(scenario.getId());
+        } catch (IllegalArgumentException e) {
+            throw new ScenarioDownloadNotFoundException("Scenario bundle not found", e);
+        }
+        if (!Files.isDirectory(root)) {
+            log.warn("Bundle directory {} for scenario '{}' not found", root, id);
+            throw new ScenarioDownloadNotFoundException("Scenario bundle not found");
+        }
+        return new BundleDownload(exporter.export(root), scenario.getId() + "-bundle.zip");
+    }
+
+    public BundleDownload downloadByBundleKey(String bundleKey) throws IOException {
+        synchronized (scenarios) {
+            ScenarioBundleWorkspaceLocation location = scenarios.bundleWorkspaceLocation(bundleKey);
+            if (location.root() == null || !Files.isDirectory(location.root())) {
+                throw new IllegalArgumentException("Bundle '%s' not found".formatted(location.bundleKey()));
+            }
+            return new BundleDownload(exporter.export(location.root()),
+                scenarios.fallbackBundleName(location.bundlePath()) + "-bundle.zip");
+        }
+    }
+
+    public BundleTree readTree(String bundleKey) throws IOException {
+        return workspace.readTree(bundleKey);
+    }
+
+    public BundleFilePayload readBundleFile(String bundleKey, String relativePath) throws IOException {
+        return workspace.readFile(bundleKey, relativePath);
+    }
+
+    public BundleFileWriteResult writeBundleFile(String bundleKey, String relativePath, String content, String expectedRevision) throws IOException {
+        return workspace.writeFile(bundleKey, relativePath, content, expectedRevision);
+    }
+
+    public BundleFilePayload createBundleFile(String bundleKey, String relativePath, String content) throws IOException {
+        return workspace.createFile(bundleKey, relativePath, content);
+    }
+
+    public void createBundleFolder(String bundleKey, String relativePath) throws IOException {
+        workspace.createFolder(bundleKey, relativePath);
+    }
+
+    public void renameBundleEntry(String bundleKey, String relativePath, String name) throws IOException {
+        workspace.renameEntry(bundleKey, relativePath, name);
+    }
+
+    public void deleteBundleEntry(String bundleKey, String relativePath) throws IOException {
+        workspace.deleteEntry(bundleKey, relativePath);
+    }
+
+    public List<String> listFolders() throws IOException {
+        return organization.listFolders();
+    }
+
+    public void createFolder(String folderPath) throws IOException {
+        organization.createFolder(folderPath);
+    }
+
+    public void deleteFolder(String folderPath) throws IOException {
+        organization.deleteFolder(folderPath);
+    }
+
+    public void moveScenario(String scenarioId, String folderPath) throws IOException {
+        organization.moveScenario(scenarioId, folderPath);
+    }
+
+    public void moveBundle(String bundleKey, String folderPath) throws IOException {
+        organization.moveBundle(bundleKey, folderPath);
+    }
+
+    public void deleteBundle(String bundleKey) throws IOException {
+        organization.deleteBundle(bundleKey);
+    }
+
+    public String uploadFolder() {
+        return organization.uploadFolder();
+    }
+
+    public String readScenarioRaw(String scenarioId) throws IOException {
+        return content.readScenarioRaw(scenarioId);
+    }
+
+    public void writeScenarioRaw(String scenarioId, String body) throws IOException {
+        content.writeScenarioRaw(scenarioId, body);
+    }
+
+    public Scenario writePlan(String scenarioId, Map<String, Object> plan) throws IOException {
+        return content.writePlan(scenarioId, plan);
+    }
+
+    public List<String> listSchemaFiles(String scenarioId) throws IOException {
+        return content.listSchemaFiles(scenarioId);
+    }
+
+    public void writeSchemaFile(String scenarioId, String relativePath, String content) throws IOException {
+        this.content.writeSchemaFile(scenarioId, relativePath, content);
+    }
+
+    public String readScenarioFile(String scenarioId, String relativePath) throws IOException {
+        return content.readFile(scenarioId, relativePath);
+    }
+
+    public List<String> listTemplateFiles(String scenarioId) throws IOException {
+        return content.listTemplateFiles(scenarioId);
+    }
+
+    public void writeTemplate(String scenarioId, String relativePath, String content) throws IOException {
+        this.content.writeTemplate(scenarioId, relativePath, content);
+    }
+
+    public void renameTemplate(String scenarioId, String fromPath, String toPath) throws IOException {
+        content.renameTemplate(scenarioId, fromPath, toPath);
+    }
+
+    public void deleteTemplate(String scenarioId, String relativePath) throws IOException {
+        content.deleteTemplate(scenarioId, relativePath);
+    }
+
+    public List<String> listSuts(String scenarioId) throws IOException {
+        return suts.list(scenarioId);
+    }
+
+    public SutEnvironment readSut(String scenarioId, String sutId) throws IOException {
+        return suts.read(scenarioId, sutId);
+    }
+
+    public String readSutRaw(String scenarioId, String sutId) throws IOException {
+        return suts.readRaw(scenarioId, sutId);
+    }
+
+    public void writeSutRaw(String scenarioId, String sutId, String raw) throws IOException {
+        suts.writeRaw(scenarioId, sutId, raw);
+    }
+
+    public void deleteSut(String scenarioId, String sutId) throws IOException {
+        suts.delete(scenarioId, sutId);
     }
 
     private Path unpackForPublication(byte[] zipBytes) throws IOException {
