@@ -344,3 +344,26 @@ Existing `/api/templates` already filters by run permission and existing
 `/scenarios/bundles/workspaces` filters by read permission. UI consumes those
 filtered lists without repeating grant/scope calculations. Defunct template
 validation remains separate and unchanged. Global UI/admin permissions are deferred.
+
+## Scenario toolbar access projection
+
+`GET /api/access/scenarios` (ingress `/scenario-manager/api/access/scenarios`)
+returns the authenticated caller's existing global scenario-operation decisions:
+
+```json
+{"canReload":false,"canUpload":true}
+```
+
+Both fields are required booleans. `canReload` delegates to the existing deployment
+management check used by POST /scenarios/reload. `canUpload` delegates to the
+existing upload-folder management check used by POST /scenarios/bundles. The upload
+target is supplied by its existing filesystem owner, not another literal in the
+projection. Commands and projection must call the same operation permission owner.
+No permissions, scopes, upload target or null-caller semantics are changed.
+
+Existing authentication and GET authorization apply. Return Cache-Control: no-store;
+errors remain explicit errors. UI loads this only for callers with PocketHive access,
+and disables operations during loading, missing or failed observations. The combined
+Reload & validate UI workflow requires canReload; for the selected bundle it also
+requires that bundle's existing canManage projection. Upload uses canUpload alone.
+Backend commands continue authorizing actual execution.

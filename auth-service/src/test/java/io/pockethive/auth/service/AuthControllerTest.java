@@ -47,6 +47,20 @@ class AuthControllerTest {
     ObjectMapper mapper;
 
     @Test
+    void accessProjectionAuthenticatesAndDoesNotCache() throws Exception {
+        mvc.perform(get("/api/auth/access")).andExpect(status().isUnauthorized());
+        MvcResult login = mvc.perform(post("/api/auth/dev/login")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"local-admin\"}"))
+            .andExpect(status().isOk()).andReturn();
+        mvc.perform(get("/api/auth/access").header(HttpHeaders.AUTHORIZATION, bearer(login)))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(jsonPath("$.canAccessPocketHive").value(true))
+            .andExpect(jsonPath("$.canRunPocketHive").value(true))
+            .andExpect(jsonPath("$.canManageUsers").value(true));
+    }
+
+    @Test
     void devLoginAndResolveFlowWorks() throws Exception {
         MvcResult loginResult = mvc.perform(post("/api/auth/dev/login")
                 .contentType(MediaType.APPLICATION_JSON)

@@ -1,3 +1,4 @@
+import { AuthAccessNotice } from './AuthAccessNotice'
 import { Outlet } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { SideNav } from './SideNav'
@@ -23,6 +24,11 @@ function getInitialNavState(): NavState {
   }
 }
 
+/**
+ * Responsibility: compose navigation, global access status and routed page content.
+ * Must not: derive permissions from grants or replace backend command authorization.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (access presentation).
+ */
 export function AppShell() {
   const [nav, setNav] = useState<NavState>(() => getInitialNavState())
   const navExpanded = nav === 'expanded'
@@ -48,6 +54,7 @@ export function AppShell() {
         <main className="appContent">
           <PageToolsBar />
           <div className="pageContent">
+            <AuthAccessNotice />
             <Outlet />
           </div>
         </main>

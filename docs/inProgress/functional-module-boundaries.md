@@ -771,3 +771,59 @@ Separate review: no new blocking findings in the approved slice. Reran 115 Java
 tests (including three import-boundary tests) and 14 focused UI tests successfully.
 Logs: /tmp/ph-scenario-review-java.log and /tmp/ph-scenario-review-ui.log.
 Known S9 duplicate-scenario-ID catalogue behavior remains deferred.
+
+### F07-UI — remaining navigation and toolbar decisions (implemented, awaiting review)
+
+Base 60467c4a. User authorized continuing this slice. Source audit confirmed:
+Auth /me exposes identity/grants but no decisions; UI repeats PH-any VIEW/RUN/ALL,
+PH-any RUN/ALL and Auth admin interpretation. Scenario toolbar uses PH-any ALL even
+though reload requires deployment ALL and upload requires management of the actual
+upload folder. Proposed concrete endpoints are documented in AUTH_SERVICE_API_SPEC.md
+and SCENARIO_MANAGER_BUNDLE_REST.md; the user explicitly approved both endpoints.
+
+Implementation sequence: centralize unchanged Java permission sets already repeated
+by Orchestrator, Scenario Manager and Network Proxy Manager, then reuse them for the
+Auth projection; reuse AuthGrantChecks for admin. Extract scenario operation permission
+checks shared by command boundaries and projection, deriving upload target from its
+existing owner. Add focused controllers/DTOs. UI uses caller-bound observations with
+explicit loading/errors, preserving login success if a projection fails and allowing
+retry. Remove obsolete browser grant predicates and AuthContext helpers. No TCP changes.
+Verification: exact old/new decision equivalence for scoped/global grants, auth-only
+admin, denied/error paths, caller changes, controls for reload/upload and admin; relevant
+Java/UI tests, production UI build and existing repository import check.
+
+Implemented on 60467c4a: AuthAccessController/AuthAccessProjection provide global
+navigation/admin observations; ScenarioOperationAccess is shared by reload/upload
+commands and ScenarioOperationsAccessController. PocketHivePermissionSets replaces
+three identical service-local definitions. Upload authorization gets its folder from
+ScenarioBundleOrganizationService.uploadFolder(), which also supplies publication.
+Existing policies, null-caller handling and auth/session contracts are unchanged.
+
+UI AuthContext consumes useAccessObservation instead of calculating grants. The same
+observation hook serves scenario toolbar permissions. Caller/token changes immediately
+hide old decisions; request generations reject late completion. Loading and failure
+have explicit notices/retry; projection failure does not invalidate authentication.
+Removed remaining browser grant predicates and unused hasGrant/hasPermission wrappers.
+UsersPage still displays and edits grant data; it does not decide authorization from it.
+This closes the previously open navigation/Create/toolbar/auth-admin implementation
+slice, pending separate review. TCP and the known S9 catalogue identity defect remain
+outside this work.
+
+Verification: 161 focused Java tests across the two runs (including three repository
+import checks), all 93 UI tests and production UI build pass. Logs:
+/tmp/ph-global-java.log, /tmp/ph-global-filters.log, /tmp/ph-global-ui-tests.log,
+/tmp/ph-global-ui-build.log. UI observation tests use controlled React hook primitives,
+not browser rendering; no deployed/browser acceptance was performed. No new dependencies,
+no commit or push in this implementation turn.
+
+F07 global-access review fix: extracted useAdminUsersLoader from UsersPage. Permission
+loading/error for the same caller ID and token no longer reloads the user list or
+resets the selected account/editing draft after saving one's own profile/grants.
+Explicit Reload keeps its selected-account argument; session changes and confirmed
+denial invalidate the loaded list. Cancelled requests cannot publish form updates.
+Initial load errors expose Retry, and a changed caller does not see the previous
+caller's editor while the new list is loading. Permission gates remain unchanged.
+Verification: 99 UI tests and production build pass; six loader regressions use
+controlled hook primitives (not browser rendering). Logs:
+/tmp/ph-user-refresh-tests.log and /tmp/ph-user-refresh-build.log. Backend unchanged
+since the previous passing tests. Awaiting separate review of the fix.

@@ -1,24 +1,15 @@
+import { useAccessObservation } from './useAccessObservation'
+import { authAccessApi } from './authAccessApi'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
   clearAuthSession,
   fetchCurrentUser,
-  type AuthGrantMatch,
   loginDevUser,
   readStoredAuthSession,
   replaceSessionUser,
   type AuthSession,
   type AuthenticatedUser,
-  userCanManagePocketHive,
-  userCanRunAnywhere,
-  userCanViewPocketHive,
-  userHasGrant,
 } from './auth'
-import {
-  AuthProducts,
-  AuthServicePermissionIds,
-  AuthServiceResourceSelectors,
-  AuthServiceResourceTypes,
-} from './authContracts'
 import { bootstrapControlPlane, resetControlPlaneBootstrap } from './controlPlane/bootstrap'
 import { resetControlPlaneSchema } from './controlPlane/schemaRegistry'
 
@@ -32,26 +23,27 @@ type AuthContextValue = {
   loginDev: (username: string) => Promise<void>
   logout: () => void
   refresh: () => Promise<void>
-  hasPermission: (permission: string) => boolean
-  hasGrant: (match: AuthGrantMatch) => boolean
   canAccessPocketHive: boolean
   canRunPocketHive: boolean
-  canManagePocketHive: boolean
+  accessStatus: 'idle' | 'loading' | 'ready' | 'error'
+  accessError: string | null
+  reloadAccess: () => Promise<void>
   isAuthAdmin: boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-function hasPermission(user: AuthenticatedUser | null, permission: string): boolean {
-  if (!user) return false
-  return user.grants.some((grant) => grant.product === AuthProducts.POCKETHIVE && grant.permission === permission)
-}
-
+/**
+ * Responsibility: provide authentication state and compose backend access observations.
+ * Must not: derive permission decisions from grants.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [session, setSession] = useState<AuthSession | null>(() => readStoredAuthSession())
   const [user, setUser] = useState<AuthenticatedUser | null>(() => readStoredAuthSession()?.user ?? null)
   const [error, setError] = useState<string | null>(null)
+  const access = useAccessObservation(user, session?.accessToken ?? null, authAccessApi, status === 'authenticated')
 
   useEffect(() => {
     let cancelled = false
@@ -148,17 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginDev,
         logout,
         refresh,
-        hasPermission: (permission) => hasPermission(user, permission),
-        hasGrant: (match) => userHasGrant(user, match),
-        canAccessPocketHive: userCanViewPocketHive(user),
-        canRunPocketHive: userCanRunAnywhere(user),
-        canManagePocketHive: userCanManagePocketHive(user),
-        isAuthAdmin: userHasGrant(user, {
-          product: AuthProducts.AUTH_SERVICE,
-          permission: AuthServicePermissionIds.ADMIN,
-          resourceType: AuthServiceResourceTypes.GLOBAL,
-          resourceSelector: AuthServiceResourceSelectors.GLOBAL,
-        }),
+        canAccessPocketHive: access.value?.canAccessPocketHive === true,
+        canRunPocketHive: access.value?.canRunPocketHive === true,
+        isAuthAdmin: access.value?.canManageUsers === true,
+        accessStatus: access.status,
+        accessError: access.error,
+        reloadAccess: access.reload,
       }}
     >
       {children}

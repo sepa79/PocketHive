@@ -37,7 +37,8 @@ class ScenarioControllerLoggingTest {
             variables,
             registry,
             new ScenarioManagerAuthorization(),
-            new ScenarioCatalogueAccess(service, new ScenarioManagerAuthorization()));
+            new ScenarioCatalogueAccess(service, new ScenarioManagerAuthorization()),
+            new ScenarioOperationAccess(new ScenarioManagerAuthorization(), organization));
 
         controller.list(false);
 

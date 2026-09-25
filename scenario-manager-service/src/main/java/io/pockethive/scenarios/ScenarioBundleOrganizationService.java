@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Own top-level scenario bundle folder creation, deletion, and bundle relocation.
  * Must not: Discover bundles, own catalogue state, or edit content inside a bundle.
- * Contract: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (upload target); docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
 public class ScenarioBundleOrganizationService {
@@ -113,8 +113,10 @@ public class ScenarioBundleOrganizationService {
         }
     }
 
+    public String uploadFolder() { return DEFAULT_UPLOAD_FOLDER; }
+
     Path defaultUploadDirectory(String scenarioId) {
-        Path parent = resolveFolder(DEFAULT_UPLOAD_FOLDER, false);
+        Path parent = resolveFolder(uploadFolder(), false);
         Path target = parent.resolve(scenarios.bundleDir(scenarioId).getFileName()).normalize();
         if (!target.startsWith(scenarios.bundleRootDirectory())) {
             throw new IllegalArgumentException("Invalid scenario id");

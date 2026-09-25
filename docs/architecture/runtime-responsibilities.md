@@ -3824,3 +3824,43 @@ Global navigation/admin/toolbar permissions remain separate unfinished F07 scope
 
 Forbidden: copying grant matching rules, treating projection as command authority,
 or supplying edit permission after a missing/failed observation.
+
+## RESP-UI-GLOBAL-ACCESS
+
+Approved transfer: UI navigation and global toolbar decisions become read-only backend
+projections. Existing AuthGrantChecks remains the owner of Auth admin policy. The
+unchanged PocketHive read/run/manage combinations are owned by PocketHivePermissionSets
+under auth-contracts, consumed by existing service policies and AuthAccessProjection.
+No new grant combinations or scope rules are introduced; null-caller behavior of each
+existing service boundary remains unchanged. Auth projection authenticates via the
+existing AuthAccessService and grants no authority to execute resource commands.
+
+ScenarioOperationsAccessController and mutation boundaries share ScenarioOperationAccess,
+which delegates to ScenarioManagerAuthorization. Upload scope is derived from
+ScenarioBundleOrganizationService's existing target folder owner. Reload remains
+restricted to deployment management, upload to its target folder. HTTP controllers
+only authenticate/map/delegate. The combined UI reload/validation workflow consumes
+these decisions, retaining per-bundle edit checks for selected validation.
+
+UI observations are session/caller-bound, distinct from identity restoration. A
+projection failure does not log the user out; loading/error is explicit and retryable.
+No local grant matching, cached cross-caller decisions or inferred permissions from
+catalogue counts. Global access endpoint payloads and error semantics are owned by
+AUTH_SERVICE_API_SPEC.md and SCENARIO_MANAGER_BUNDLE_REST.md, not this record.
+
+Concrete consumers: AuthAccessController authenticates via AuthAccessService and calls
+AuthAccessProjection; AuthGrantChecks remains the admin decision owner used by actual
+admin commands. ScenarioController and ScenarioOperationsAccessController delegate
+reload/upload decisions to ScenarioOperationAccess. UI authAccessApi and
+scenarioOperationsAccessApi decode the two documented ingress responses;
+useAccessObservation is the sole writer of their caller/token-bound async observations.
+AuthContext exposes global decisions; ScenariosPage consumes toolbar decisions.
+AuthAccessNotice/AccessObservationNotice present loading/error/retry without policy.
+
+Review correction: useAdminUsersLoader owns user-list request lifecycle separately
+from permission observations. A successful initial load is retained for the same
+caller ID and token across temporary access loading/errors; such refreshes must not
+reset UsersPage selection or drafts. A changed session or confirmed denial invalidates
+that load. Explicit Reload still reloads the list and uses the selected account.
+Late/cancelled requests cannot publish list/form updates. UsersPage alone owns the
+editing draft and selection; the loader neither interprets grants nor authorizes writes.

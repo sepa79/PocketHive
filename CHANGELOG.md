@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- PH UI: consume backend navigation/admin and scenario-toolbar access projections;
+  distinguish deployment reload from upload-folder permission. Share unchanged Java
+  permission sets and show retryable access errors without ending the login session.
+  Preserve the selected user and editing draft during same-session permission refresh.
+
 - PH UI: use backend-filtered scenario catalogues and a caller-specific bundle edit
   projection; remove local bundle/folder grant matching and the duplicate template
   parser from swarm creation. Backend mutation authorization is unchanged.

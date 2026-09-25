@@ -435,6 +435,11 @@ function workerHalEyeTitle(worker: SwarmWorkerSummary | null): string {
   }`
 }
 
+/**
+ * Responsibility: present swarm management and consume backend access decisions.
+ * Must not: derive permissions from grants or replace backend command authorization.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (access presentation).
+ */
 export function HivePage() {
   const auth = useAuth()
   const navigate = useNavigate()
@@ -983,6 +988,8 @@ export function HivePage() {
     : swarms.length === 1
       ? '1 swarm'
       : `${swarms.length} swarms`
+
+  if (auth.status === 'authenticated' && auth.accessStatus !== 'ready') return null
 
   if (!auth.canAccessPocketHive) {
     return (

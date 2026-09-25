@@ -1,16 +1,9 @@
-import {
-  AuthProducts,
-  PocketHivePermissionIds,
-} from './authContracts'
-
 export type AuthGrant = {
   product: string
   permission: string
   resourceType: string
   resourceSelector: string
 }
-
-export type AuthGrantMatch = Partial<AuthGrant>
 
 export type AuthenticatedUser = {
   id: string
@@ -176,44 +169,6 @@ export async function fetchCurrentUser(accessToken: string): Promise<Authenticat
   const user = normalizeUser(await response.json())
   if (!user) throw new Error('Auth service returned invalid user payload')
   return user
-}
-
-export function grantMatches(grant: AuthGrant, match: AuthGrantMatch): boolean {
-  if (match.product && grant.product !== match.product) return false
-  if (match.permission && grant.permission !== match.permission) return false
-  if (match.resourceType && grant.resourceType !== match.resourceType) return false
-  if (match.resourceSelector && grant.resourceSelector !== match.resourceSelector) return false
-  return true
-}
-
-export function userHasGrant(user: AuthenticatedUser | null, match: AuthGrantMatch): boolean {
-  if (!user) return false
-  return user.grants.some((grant) => grantMatches(grant, match))
-}
-
-function isPocketHiveGrant(grant: AuthGrant, permissions: readonly string[]): boolean {
-  return grant.product === AuthProducts.POCKETHIVE && permissions.includes(grant.permission)
-}
-
-export function userHasAnyPocketHivePermission(user: AuthenticatedUser | null, permissions: readonly string[]): boolean {
-  if (!user) return false
-  return user.grants.some((grant) => isPocketHiveGrant(grant, permissions))
-}
-
-export function userCanViewPocketHive(user: AuthenticatedUser | null): boolean {
-  return userHasAnyPocketHivePermission(user, [
-    PocketHivePermissionIds.VIEW,
-    PocketHivePermissionIds.RUN,
-    PocketHivePermissionIds.ALL,
-  ])
-}
-
-export function userCanRunAnywhere(user: AuthenticatedUser | null): boolean {
-  return userHasAnyPocketHivePermission(user, [PocketHivePermissionIds.RUN, PocketHivePermissionIds.ALL])
-}
-
-export function userCanManagePocketHive(user: AuthenticatedUser | null): boolean {
-  return userHasAnyPocketHivePermission(user, [PocketHivePermissionIds.ALL])
 }
 
 export async function listAdminUsers(): Promise<AuthenticatedUser[]> {

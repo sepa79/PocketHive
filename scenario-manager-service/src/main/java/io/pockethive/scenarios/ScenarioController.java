@@ -36,6 +36,7 @@ import io.pockethive.swarm.model.SutEnvironment;
  * Responsibility: Map the documented Scenario Manager HTTP surface to focused application services.
  * Must not: Own scenario catalogue state, filesystem mutation rules, or scenario validation behavior.
  * Contract: RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (catalogue visibility);
+ * RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (reload/upload);
  * docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md and docs/scenarios/SCENARIO_CONTRACT.md.
  */
 @RestController
@@ -55,6 +56,7 @@ public class ScenarioController {
     private final AvailableScenarioRegistry availableScenarios;
     private final ScenarioManagerAuthorization authorization;
     private final ScenarioCatalogueAccess catalogueAccess;
+    private final ScenarioOperationAccess operationAccess;
 
     public ScenarioController(ScenarioService service,
                               ScenarioBundleWorkspaceService workspace,
@@ -66,7 +68,8 @@ public class ScenarioController {
                               ScenarioVariablesService variables,
                               AvailableScenarioRegistry availableScenarios,
                               ScenarioManagerAuthorization authorization,
-                              ScenarioCatalogueAccess catalogueAccess) {
+                              ScenarioCatalogueAccess catalogueAccess,
+                              ScenarioOperationAccess operationAccess) {
         this.service = service;
         this.workspace = workspace;
         this.organization = organization;
@@ -78,6 +81,7 @@ public class ScenarioController {
         this.availableScenarios = availableScenarios;
         this.authorization = authorization;
         this.catalogueAccess = catalogueAccess;
+        this.operationAccess = operationAccess;
     }
 
     @PostMapping(
@@ -389,7 +393,9 @@ public class ScenarioController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void reload() throws IOException {
         log.info("[REST] POST /scenarios/reload");
-        requireManageAllFolders();
+        if (!operationAccess.canReload(currentUser())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
+        }
         service.reload();
         log.info("[REST] POST /scenarios/reload -> status=204");
     }
@@ -736,7 +742,9 @@ public class ScenarioController {
     public ResponseEntity<?> uploadBundle(@RequestBody byte[] body) throws IOException {
         int size = body != null ? body.length : 0;
         log.info("[REST] POST /scenarios/bundles contentType=application/zip size={}", size);
-        requireManageFolder("bundles");
+        if (!operationAccess.canUpload(currentUser())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
+        }
         Scenario created = publication.create(body);
         log.info("[REST] POST /scenarios/bundles -> status=201 body={}", safeJson(created));
         return ResponseEntity.status(HttpStatus.CREATED)

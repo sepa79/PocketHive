@@ -2,20 +2,17 @@ package io.pockethive.networkproxy.auth;
 
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHiveGrantChecks;
-import io.pockethive.auth.contract.PocketHivePermissionIds;
-import java.util.Set;
+import io.pockethive.auth.contract.PocketHivePermissionSets;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: apply existing service request and resource authorization through shared grant checks.
+ * Must not: own grant storage or duplicate shared permission combinations.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access.
+ */
 @Component
 public class NetworkProxyManagerAuthorization {
-    private static final Set<String> READ_PERMISSIONS = Set.of(
-        PocketHivePermissionIds.VIEW,
-        PocketHivePermissionIds.RUN,
-        PocketHivePermissionIds.ALL
-    );
-    private static final Set<String> MANAGE_PERMISSIONS = Set.of(PocketHivePermissionIds.ALL);
-
     public boolean isAllowed(AuthenticatedUserDto user, String method) {
         if (user == null) {
             return true;
@@ -24,9 +21,9 @@ public class NetworkProxyManagerAuthorization {
             return true;
         }
         if (HttpMethod.GET.matches(method)) {
-            return PocketHiveGrantChecks.hasAnyPermission(user, READ_PERMISSIONS);
+            return PocketHiveGrantChecks.hasAnyPermission(user, PocketHivePermissionSets.READ);
         }
-        return PocketHiveGrantChecks.hasAnyPermission(user, MANAGE_PERMISSIONS);
+        return PocketHiveGrantChecks.hasAnyPermission(user, PocketHivePermissionSets.MANAGE);
     }
 
     public String denialMessage(String method) {

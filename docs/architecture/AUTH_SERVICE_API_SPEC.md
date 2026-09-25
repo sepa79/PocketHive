@@ -828,3 +828,27 @@ When LDAP is added:
 - local/shared grant model remains the same.
 
 This keeps LDAP from leaking into product contracts.
+
+### F07 UI access projection
+
+`GET /api/auth/access` (ingress `/auth-service/api/auth/access`) authenticates
+through the same `AuthAccessService.requireAuthenticated` path as `/me` and returns:
+
+```json
+{"canAccessPocketHive":true,"canRunPocketHive":false,"canManageUsers":false}
+```
+
+All three fields are required booleans. `canAccessPocketHive` means an existing
+PocketHive VIEW/RUN/ALL grant anywhere; `canRunPocketHive` means RUN/ALL anywhere.
+These are navigation/entrypoint hints, not authorization for a specific resource.
+The existing permission sets have one shared Java definition consumed by the
+backend policies and this projection; no permission or scope semantics change.
+`canManageUsers` delegates to `AuthGrantChecks.isAuthAdmin`, as admin commands do.
+An authenticated caller without PocketHive grants still receives 200 and false
+PocketHive flags, allowing an auth-only administrator to use the Users page.
+
+Return `Cache-Control: no-store`. Missing/invalid/expired bearer tokens remain 401;
+resolution failures remain errors. Existing `/me`, login and `/resolve` payloads
+are unchanged. The UI loads this observation separately from identity, invalidates
+it on session/user change, exposes loading/errors and disables dependent controls
+when unavailable. It never reconstructs these decisions from stored grants.
