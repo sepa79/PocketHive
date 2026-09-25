@@ -38,7 +38,8 @@ class ScenarioControllerLoggingTest {
             registry,
             new ScenarioManagerAuthorization(),
             new ScenarioCatalogueAccess(service, new ScenarioManagerAuthorization()),
-            new ScenarioOperationAccess(new ScenarioManagerAuthorization(), organization));
+            new ScenarioOperationAccess(new ScenarioManagerAuthorization(), organization),
+            new ScenarioBundleDownloadService(service, new ScenarioBundleZipExporter()));
 
         controller.list(false);
 

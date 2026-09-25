@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Scenario Manager: share one bundle ZIP exporter across scenario-ID and bundle-key
+  downloads; remove filesystem export work from REST while preserving filenames,
+  response headers, error mapping and existing synchronization.
+
 - PH UI: consume backend navigation/admin and scenario-toolbar access projections;
   distinguish deployment reload from upload-folder permission. Share unchanged Java
   permission sets and show retryable access errors without ending the login session.

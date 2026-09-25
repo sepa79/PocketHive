@@ -827,3 +827,32 @@ Verification: 99 UI tests and production build pass; six loader regressions use
 controlled hook primitives (not browser rendering). Logs:
 /tmp/ph-user-refresh-tests.log and /tmp/ph-user-refresh-build.log. Backend unchanged
 since the previous passing tests. Awaiting separate review of the fix.
+
+### F09-SM — bundle download owner (reviewed)
+
+User started F09 Scenario Manager after F07 commit 9ea4ab6f. Revalidated historical
+S6: ScenarioController.downloadBundle and ScenarioBundleWorkspaceService.download
+still independently walk files and construct ZIPs. First bounded slice extracts
+one ScenarioBundleZipExporter and ScenarioBundleDownloadService, removes both old
+implementations and keeps HTTP mapping with the controller. Current contract and
+synchronization remain unchanged; record RESP-SCENARIO-BUNDLE-DOWNLOAD owns the scope.
+This is the already-planned behavior-preserving S6 transfer, not a new wire contract.
+S1/S2/S3/S9 correctness, S4 worker auth, S5 metadata and S7 layout are not bundled in.
+Verification: archive bytes/entries, nested/binary/empty-directory handling, both
+filename conventions, missing target errors, existing controller and import tests.
+
+Implemented: both HTTP download paths delegate to ScenarioBundleDownloadService and
+one ScenarioBundleZipExporter; removed filesystem/ZIP work from ScenarioController
+and the workspace export method. One controller mapper builds attachment headers.
+Preserved by-ID unlocked vs by-key synchronized behavior, existing error mapping,
+filename conventions and binary content. No atomic snapshot guarantee is added.
+Verification: 109 tests pass including 97 existing controller tests, six new ZIP/target
+behavior tests, workspace/logging tests and three repository import checks. Log:
+/tmp/ph-f09-sm-download.log. Whole-repository production-Java search finds ZIP output
+construction only in ScenarioBundleZipExporter. No deployed E2E run; no commit/push.
+Next bounded F09-SM candidates: revalidate S7 bundle layout consumers, then S5 authoring
+metadata ownership; correctness fixes and F06 remain distinct work.
+
+Separate S6 review: no actionable findings; reran 109 tests successfully
+(/tmp/ph-f09-sm-review.log). Existing concurrent-edit/snapshot limitations remain
+unchanged; no deployed E2E qualification is claimed.

@@ -3864,3 +3864,23 @@ reset UsersPage selection or drafts. A changed session or confirmed denial inval
 that load. Explicit Reload still reloads the list and uses the selected account.
 Late/cancelled requests cannot publish list/form updates. UsersPage alone owns the
 editing draft and selection; the loader neither interprets grants nor authorizes writes.
+
+## RESP-SCENARIO-BUNDLE-DOWNLOAD
+
+ScenarioBundleDownloadService owns selection of an export target by scenario ID or
+bundle key and the existing response filename conventions. ScenarioService remains
+catalogue/location owner. ScenarioBundleZipExporter owns the single filesystem-to-ZIP
+implementation: walk the resolved root, omit directory entries, use slash-separated
+relative names and copy file bytes. It does not resolve scenario identity, authorize,
+validate bundles, import/publish ZIPs or choose HTTP status.
+ScenarioController authorizes and delegates both existing download endpoints, then
+uses one HTTP response mapper; it performs no filesystem reads or ZIP construction.
+ScenarioBundleWorkspaceService no longer exports ZIPs.
+
+Preserve current behavior: by-ID missing scenario has 404 with no custom reason;
+missing bundle has 404 with the existing reason. By-key invalid/missing bundles keep
+400 and existing messages. Filenames stay ID-based vs catalogue fallback name-based;
+application/octet-stream, Content-Length and form-data attachment headers remain.
+The by-key path retains synchronized(scenarios); the ID path gains no new lock.
+No atomic snapshot guarantee, ZIP sorting, empty-directory preservation, symlink
+policy change, import cleanup or publication/validation correctness fix is included.

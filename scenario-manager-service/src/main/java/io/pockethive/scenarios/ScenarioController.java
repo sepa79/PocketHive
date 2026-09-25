@@ -21,21 +21,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 import io.pockethive.swarm.model.SutEnvironment;
 
 /**
  * Responsibility: Map the documented Scenario Manager HTTP surface to focused application services.
  * Must not: Own scenario catalogue state, filesystem mutation rules, or scenario validation behavior.
- * Contract: RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (catalogue visibility);
+ * Contract: RESP-SCENARIO-BUNDLE-DOWNLOAD — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-download (downloads);
+ * RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (catalogue visibility);
  * RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (reload/upload);
  * docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md and docs/scenarios/SCENARIO_CONTRACT.md.
  */
@@ -57,6 +53,7 @@ public class ScenarioController {
     private final ScenarioManagerAuthorization authorization;
     private final ScenarioCatalogueAccess catalogueAccess;
     private final ScenarioOperationAccess operationAccess;
+    private final ScenarioBundleDownloadService downloads;
 
     public ScenarioController(ScenarioService service,
                               ScenarioBundleWorkspaceService workspace,
@@ -69,7 +66,8 @@ public class ScenarioController {
                               AvailableScenarioRegistry availableScenarios,
                               ScenarioManagerAuthorization authorization,
                               ScenarioCatalogueAccess catalogueAccess,
-                              ScenarioOperationAccess operationAccess) {
+                              ScenarioOperationAccess operationAccess,
+                              ScenarioBundleDownloadService downloads) {
         this.service = service;
         this.workspace = workspace;
         this.organization = organization;
@@ -82,6 +80,7 @@ public class ScenarioController {
         this.authorization = authorization;
         this.catalogueAccess = catalogueAccess;
         this.operationAccess = operationAccess;
+        this.downloads = downloads;
     }
 
     @PostMapping(
@@ -678,42 +677,13 @@ public class ScenarioController {
     public ResponseEntity<byte[]> downloadBundle(@PathVariable("id") String id) throws IOException {
         log.info("[REST] GET /scenarios/{}/bundle", id);
         requireReadScenario(id);
-        Scenario scenario = service.find(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        Path bundleDir;
         try {
-            bundleDir = service.bundleDirFor(scenario.getId());
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Scenario bundle not found", e);
+            BundleDownload bundle = downloads.byScenarioId(id);
+            log.info("[REST] GET /scenarios/{}/bundle -> status=200 size={} filename={}", id, bundle.bytes().length, bundle.fileName());
+            return bundleResponse(bundle);
+        } catch (ScenarioDownloadNotFoundException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         }
-        if (!Files.isDirectory(bundleDir)) {
-            log.warn("Bundle directory {} for scenario '{}' not found", bundleDir, id);
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Scenario bundle not found");
-        }
-
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (ZipOutputStream zip = new ZipOutputStream(out);
-             Stream<Path> paths = Files.walk(bundleDir)) {
-            for (Path path : (Iterable<Path>) paths::iterator) {
-                if (Files.isDirectory(path)) {
-                    continue;
-                }
-                Path relative = bundleDir.relativize(path);
-                String entryName = relative.toString().replace('\\', '/');
-                zip.putNextEntry(new ZipEntry(entryName));
-                Files.copy(path, zip);
-                zip.closeEntry();
-            }
-        }
-
-        byte[] bytes = out.toByteArray();
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-        headers.setContentLength(bytes.length);
-        String fileName = scenario.getId() + "-bundle.zip";
-        headers.setContentDispositionFormData("attachment", fileName);
-
-        log.info("[REST] GET /scenarios/{}/bundle -> status=200 size={} filename={}", id, bytes.length, fileName);
-        return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
     }
 
     @GetMapping(value = "/bundles/download", produces = "application/zip")
@@ -721,18 +691,22 @@ public class ScenarioController {
         log.info("[REST] GET /scenarios/bundles/download bundleKey={}", bundleKey);
         requireReadBundle(bundleKey);
         try {
-            BundleDownload bundle = workspace.download(bundleKey);
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentLength(bundle.bytes().length);
-            headers.setContentDispositionFormData("attachment", bundle.fileName());
+            BundleDownload bundle = downloads.byBundleKey(bundleKey);
             log.info("[REST] GET /scenarios/bundles/download -> status=200 size={} filename={}",
                     bundle.bytes().length, bundle.fileName());
-            return new ResponseEntity<>(bundle.bytes(), headers, HttpStatus.OK);
+            return bundleResponse(bundle);
         } catch (IllegalArgumentException e) {
             log.warn("[REST] GET /scenarios/bundles/download -> status=400 bundleKey={} {}", bundleKey, e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }
+    }
+
+    private ResponseEntity<byte[]> bundleResponse(BundleDownload bundle) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentLength(bundle.bytes().length);
+        headers.setContentDispositionFormData("attachment", bundle.fileName());
+        return new ResponseEntity<>(bundle.bytes(), headers, HttpStatus.OK);
     }
 
     @PostMapping(
