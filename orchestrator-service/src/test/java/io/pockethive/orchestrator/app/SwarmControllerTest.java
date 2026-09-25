@@ -76,6 +76,8 @@ class SwarmControllerTest {
         mock(SwarmNetworkBindingService.class),
         HiveJournal.noop(),
         authorization,
+        new SwarmAccessService(authorization, new SwarmTemplateScopeResolver(scenarios)),
+        new SwarmTemplateScopeResolver(scenarios),
         mock(FilesystemSwarmStartupArtifactStore.class),
         controlPlaneProperties());
   }

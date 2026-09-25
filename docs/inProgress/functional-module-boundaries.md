@@ -20,11 +20,13 @@ below retain implementation evidence; their older test counts are not current ga
 | --- | --- |
 | F01–F05 | Closed in the selected scope: Redis, local inputs, Docker, journal/filesystem and ClickHouse. Do not repeat these extractions. |
 | F06 | Open: trace worker OAuth/signed OAuth, profile loading/preparation, credential application and token coordination; extract only confirmed ownership leaks. Preserve existing behavior. |
-| F07 | Scenario Manager producer contracts closed. Open: UI grants/network-mode projections and TCP workspace UI policy copies; broader model sharing needs evidence, not automatic consolidation. Unknown network mode handling requires a behavior decision. |
+| F07 — completed contracts | Scenario Manager producer contracts closed; do not repeat this extraction. Remaining work is split into F07-TCP and F07-UI below. |
+| F07-TCP — Tim | TCP mock UI workspace catalogue/default-policy duplication and mutation-result handling. The attempted browser fix was discarded by user decision; no implementation is retained. Decide whether to remove the workspace feature rather than repair it: it currently does not isolate mappings or TCP traffic. |
+| F07-UI — Zbigniew | Main PocketHive UI grants/scope projections and network-mode handling. Broader model sharing requires evidence, not automatic consolidation. Unknown network mode rejection approved; implementation recorded below. Excludes TCP mock UI. |
 | F08 | Open: establish observation/freshness ownership and distinguish readiness, health and stale semantics before changing writers or thresholds. |
 | F09 | Processor pacing/HTTP/TCP mechanics and the agreed TCP mock extraction/persistence are closed. Open: trace remaining Scenario Manager and MCP application/projection boundaries. |
 | Separate correctness | Orchestrator reset/registry/recovery and orphan-removal outcomes follow `orchestrator-correctness.md`. Processor transport replacement/failure/shutdown lifecycle is also deferred; extraction did not repair it. |
-| Separate TCP debt/features | Mock scenario-state reset/persistence/null semantics, public nested DTOs and promotion of runtime mappings into PH scenarios are outside the closed TCP slice. Workspace UI duplication belongs to F07. |
+| Separate TCP debt/features | Mock scenario-state reset/persistence/null semantics, public nested DTOs and promotion of runtime mappings into PH scenarios are outside the closed TCP slice. Workspace UI work belongs to F07-TCP (Tim). |
 
 This backlog does not authorize behavior or public-contract changes. F06 and bounded
 F09 extractions can start with existing behavior; raise concrete conflicting semantics
@@ -599,9 +601,11 @@ and 3 existing import checks. Tests exercise default creation/protection, genera
 IDs/owner, missing deletion, upsert/path-versus-body-ID behaviour, null fields and
 input/output snapshot isolation. Controller tests use direct calls/serialization,
 not deployed HTTP. No full reactor/deployment was repeated.
-Remaining F07: static/workspace.js repeats default data on load failure and blocks
-default deletion; explicitly defer that existing UI policy duplication instead of
-claiming end-to-end SSOT. Broader F09 remains open.
+Remaining F07-TCP (Tim): static/workspace.js repeats default data on load failure
+and blocks default deletion; mutation-response handling also needs attention if the
+workspace feature is retained. The attempted F07 browser changes were discarded.
+Consider removal of this feature, which currently does not partition mappings or
+traffic. No end-to-end SSOT completion is claimed. Broader F09 remains open.
 
 Workspace review follow-up: the user approved fixing the inherited PUT JSON decode
 failure. Workspace now supports Jackson field binding via a no-argument constructor.
@@ -668,3 +672,73 @@ Final evidence:
 Evidence logs: `/tmp/ph-tcp-order-review.log`, `/tmp/pr520-merge-tcp.log`,
 `/tmp/pr520-merge-tests.log`. Intermediate test counts and superseded implementation
 steps remain in Git history; they are not additional pending work or acceptance gates.
+
+### F07 ownership split — 2026-09-25
+
+User decision: TCP mock changes belong to Tim; the remaining main UI work belongs
+to Zbigniew. F07-TCP and F07-UI are independent delivery scopes. The uncommitted
+workspace browser implementation, tests and CI changes on codex/f07-ui-projections
+were reverted; only the plan update remained there. No workspace feature removal has
+been implemented. Evaluate that removal in Tim's TCP scope instead of assuming
+that the current UI-only workspace needs to be developed further.
+
+F07-UI retains the grant/scope interpretation audit against PocketHiveGrantChecks
+and network response projection audit against NetworkMode/NetworkBinding. It does
+not include TCP mock workspace policies. Existing broader ownership assignments,
+including processor transport lifecycle assigned to Zbigniew, remain unchanged.
+
+### F07-UI — network response projection
+
+Active worktree: `/home/sepa/PocketHive-ph-ui`, branch `codex/f07-ph-ui`, based on
+PR #520 `c39bbdc4`. TCP changes are excluded. User approved rejecting unknown
+network modes rather than displaying DIRECT. Extract the binding response decoder
+from networkProxy.ts; both Hive and Proxy consume it. NetworkBinding/NetworkMode
+in common/swarm-model remain the producers' contract. Decode failures reach the
+existing error UI; a failed or missing binding must not be presented as DIRECT.
+Verify valid modes are preserved and invalid/missing modes fail explicitly.
+Grant projection remains the next scope: first establish whether existing APIs
+expose decisions rather than introduce another client-side permission policy.
+
+Network slice verification: all 50 UI tests pass (11 files), including 19 new
+decoder/badge cases; production TypeScript/Vite build passes. Build retains its
+large-chunk advisory. No deployment/browser smoke test or Java changes.
+Grant trace: AuthController returns raw user grants; SwarmController returns
+SwarmStateView and performs private read/run/manage scope checks. No permission
+projection was found on these consumer paths. Proposed first additive endpoint
+GET /api/access/swarms is documented in ORCHESTRATOR-REST.md; approval and
+implementation are recorded below. Broader grant projections remain open.
+
+### F07-UI — swarm permission projection (implemented and reviewed)
+
+User explicitly approved GET /api/access/swarms. SwarmAccessService delegates to
+existing OrchestratorAuthorization; SwarmTemplateScopeResolver is the single owner
+of extracted template-scope enrichment and descriptor lookup. Lifecycle controller
+and visible-swarm projection use that access owner. Auth-disabled behavior remains
+unchanged; missing metadata does not create permissions from unrelated grants.
+Projection contains sorted visible swarm IDs and canRun/canManage, with no-store.
+
+HivePage now consumes the projection through useSwarmCatalogue/swarmAccessApi.
+Its scenario-catalogue permission lookup and fallback to any ALL grant are removed.
+Missing entries, loading and request/decoding failures disable actions; superseded
+loads cannot restore old permissions and projections are tied to the current caller.
+Creation/global navigation, Scenario Manager bundle/folder controls and auth-admin
+grant interpretations remain open F07-UI work. TCP belongs to Tim and is untouched.
+
+Verification: focused Java access/resolver/controller/import tests and full UI tests
+plus production build; logs /tmp/ph-access-java.log, /tmp/ph-access-ui.log and
+/tmp/ph-access-ui-build.log. No deployed/browser acceptance.
+
+F07 review fixes: projection moved to `/api/access/swarms` (public ingress
+`/orchestrator/api/access/swarms`) so `/api/swarms/access` still reads the swarm
+whose ID is access. The user authorized fixing both review findings. Background
+polls join an in-flight catalogue request; explicit refresh may supersede it.
+Cleanup invalidates outstanding work, and stale completion cannot release a newer
+request slot. Four hook regressions exercise controlled async responses with React
+hook primitives stubbed; MVC regression registers both controller mappings and
+checks that the access-named swarm remains readable. These are not browser/E2E tests.
+Verification: 63 UI tests, production UI build, 22 focused Java tests (including
+three import-boundary tests) pass. Logs: /tmp/ph-f07-fixes-ui.log,
+/tmp/ph-f07-fixes-build.log, /tmp/ph-f07-fixes-java.log.
+Separate review accepted both fixes with no new findings; reran 13 focused UI
+and 19 Java tests successfully (/tmp/ph-f07-fixes-review-ui.log and
+/tmp/ph-f07-fixes-review-java.log). Remaining F07-UI work is unchanged above.

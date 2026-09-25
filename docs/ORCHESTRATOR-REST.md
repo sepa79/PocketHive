@@ -1024,3 +1024,30 @@ Cache-Control: max-age=300
 **Response (304)** — when `If-None-Match` matches the current `ETag`.
 
 Outcome and metric payloads follow the envelope rules in `docs/ARCHITECTURE.md`.
+
+## Swarm permission projection
+
+`GET /api/access/swarms` (public ingress: `/orchestrator/api/access/swarms`)
+returns a caller-specific, read-only projection of existing swarm authorization:
+
+```json
+{"swarms":[{"swarmId":"example","canRun":true,"canManage":false}]}
+```
+
+- The route is outside `/api/swarms/{swarmId}`; `access` remains a valid swarm ID.
+- Return only swarms visible under the existing read authorization; ordering by ID.
+- Resolve swarm template scope through the same owner used by lifecycle commands,
+  then call existing OrchestratorAuthorization checks. Extract the shared access
+  responsibility from SwarmController before exposing it; no copied scope resolver
+  or permission matrix in the new endpoint or UI.
+- Preserve current authorization, including behavior with authentication disabled.
+- Booleans describe permission only, not readiness, lifecycle eligibility, admission
+  or a promise of success. Commands always recheck authorization on execution.
+- `200` with `swarms: []` is an empty visible set. Failures retain their HTTP error
+  status, never a success-shaped fallback. Return `Cache-Control: no-store`.
+- UI matches by swarmId; missing/loading/failed projection keeps actions unavailable.
+  It must not infer permissions from a scenario catalogue or an unrelated grant.
+
+Approved F07 addition. It removes per-swarm UI permission
+inference; global navigation, scenario/bundle/folder and auth-admin projections
+remain subsequent scopes and must not be claimed completed by this endpoint.

@@ -85,7 +85,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST controller that exposes the swarm lifecycle API consumed by UI operators and automation.
+ * Responsibility: expose the existing swarm lifecycle HTTP workflows.
+ * Must not: resolve authorization scope or duplicate per-swarm grant policy.
+ * Contract: RESP-SWARM-ACCESS-PROJECTION — docs/architecture/runtime-responsibilities.md#resp-swarm-access-projection.
  * <p>
  * Each method below corresponds to an endpoint documented in {@code docs/ORCHESTRATOR-REST.md}. The
  * controller wraps AMQP interactions with idempotency tracking so clients can safely retry requests
@@ -110,6 +112,8 @@ public class SwarmController {
     private final SwarmNetworkBindingService networkBindings;
     private final HiveJournal hiveJournal;
     private final OrchestratorAuthorization authorization;
+    private final SwarmAccessService swarmAccess;
+    private final SwarmTemplateScopeResolver templateScopes;
     private final ObjectMapper json;
     private final String originInstanceId;
     @Value("${" + io.pockethive.swarm.model.RuntimeFilesystemContract.HOST_ROOT_ENV + ":}")
@@ -134,6 +138,8 @@ public class SwarmController {
                            SwarmNetworkBindingService networkBindings,
                            HiveJournal hiveJournal,
                            OrchestratorAuthorization authorization,
+                           SwarmAccessService swarmAccess,
+                           SwarmTemplateScopeResolver templateScopes,
                            FilesystemSwarmStartupArtifactStore startupArtifacts,
                            ControlPlaneProperties controlPlaneProperties) {
         this.controlPublisher = controlPublisher;
@@ -149,6 +155,8 @@ public class SwarmController {
         this.networkBindings = Objects.requireNonNull(networkBindings, "networkBindings");
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
         this.authorization = Objects.requireNonNull(authorization, "authorization");
+        this.swarmAccess = Objects.requireNonNull(swarmAccess, "swarmAccess");
+        this.templateScopes = Objects.requireNonNull(templateScopes, "templateScopes");
         this.startupArtifacts = Objects.requireNonNull(startupArtifacts, "startupArtifacts");
         this.originInstanceId = requireOrigin(controlPlaneProperties);
     }
@@ -192,7 +200,7 @@ public class SwarmController {
         String templateId = req.templateId();
         Duration timeout = Duration.ofMillis(120_000L);
         Target operationTarget = new Target(ControlPlaneRoles.ORCHESTRATOR, originInstanceId);
-        ScenarioClient.ScenarioTemplateDescriptor templateDescriptor = fetchScenarioTemplate(templateId);
+        ScenarioClient.ScenarioTemplateDescriptor templateDescriptor = templateScopes.fetchScenarioTemplate(templateId);
         requireRunTemplate(templateDescriptor);
         ResponseEntity<?> response;
         Optional<io.pockethive.swarm.model.lifecycle.SwarmOperation> existingOperation =
@@ -669,19 +677,6 @@ public class SwarmController {
         }
     }
 
-    private ScenarioClient.ScenarioTemplateDescriptor fetchScenarioTemplate(String templateId) {
-        try {
-            ScenarioClient.ScenarioTemplateDescriptor descriptor = scenarios.fetchScenarioTemplate(templateId);
-            if (descriptor == null || descriptor.id() == null || descriptor.id().isBlank()) {
-                throw new IllegalStateException("Template %s metadata was not found".formatted(templateId));
-            }
-            return descriptor;
-        } catch (Exception e) {
-            log.warn("failed to fetch template metadata {}", templateId, e);
-            throw new IllegalStateException("Failed to fetch template metadata %s".formatted(templateId), e);
-        }
-    }
-
     private String prepareScenarioRuntime(String templateId, String swarmId) {
         try {
             String runtimeDir = scenarios.prepareScenarioRuntime(templateId, swarmId);
@@ -1037,7 +1032,7 @@ public class SwarmController {
         if (user == null) {
             return true;
         }
-        return authorization.canRead(user, resolveTemplateMetadata(swarm));
+        return swarmAccess.canRead(user, swarm);
     }
 
     private void requireReadSwarm(Swarm swarm) {
@@ -1045,7 +1040,7 @@ public class SwarmController {
         if (user == null) {
             return;
         }
-        if (!authorization.canRead(user, resolveTemplateMetadata(swarm))) {
+        if (!swarmAccess.canRead(user, swarm)) {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.FORBIDDEN,
                 authorization.readDeniedMessage());
@@ -1059,7 +1054,7 @@ public class SwarmController {
         }
         Swarm swarm = store.find(swarmId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (!authorization.canRun(user, resolveTemplateMetadata(swarm))) {
+        if (!swarmAccess.canRun(user, swarm)) {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.FORBIDDEN,
                 authorization.runDeniedMessage());
@@ -1073,7 +1068,7 @@ public class SwarmController {
         }
         Swarm swarm = store.find(swarmId)
             .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (!authorization.canManage(user, resolveTemplateMetadata(swarm))) {
+        if (!swarmAccess.canManage(user, swarm)) {
             throw new org.springframework.web.server.ResponseStatusException(
                 HttpStatus.FORBIDDEN,
                 authorization.manageDeniedMessage());
@@ -1095,29 +1090,6 @@ public class SwarmController {
                 HttpStatus.FORBIDDEN,
                 authorization.runDeniedMessage());
         }
-    }
-
-    private SwarmTemplateMetadata resolveTemplateMetadata(Swarm swarm) {
-        SwarmTemplateMetadata metadata = swarm.templateMetadata();
-        if (metadata == null) {
-            return null;
-        }
-        if (metadata.bundlePath() != null && !metadata.bundlePath().isBlank()) {
-            return metadata;
-        }
-        String templateId = metadata.templateId();
-        if (templateId == null || templateId.isBlank()) {
-            return metadata;
-        }
-        ScenarioClient.ScenarioTemplateDescriptor descriptor = fetchScenarioTemplate(templateId);
-        SwarmTemplateMetadata resolved = new SwarmTemplateMetadata(
-            metadata.templateId(),
-            metadata.controllerImage(),
-            metadata.bees(),
-            descriptor.bundlePath(),
-            descriptor.folderPath());
-        swarm.attachTemplate(resolved);
-        return resolved;
     }
 
     private AuthenticatedUserDto currentUser() {

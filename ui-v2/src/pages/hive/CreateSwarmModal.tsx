@@ -1,3 +1,4 @@
+import type { NetworkMode } from '../../lib/NetworkMode'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import YAML from 'yaml'
 import { MonacoEditorHost } from '../../components/MonacoEditorHost'
@@ -43,7 +44,6 @@ type VariablesMeta = {
   profiles: VariablesProfile[]
 }
 
-type NetworkMode = 'DIRECT' | 'PROXIED'
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 const TEMPLATES_ENDPOINT = '/scenario-manager/api/templates'

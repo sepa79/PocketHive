@@ -3760,3 +3760,46 @@ streams, preserving locations and lookup order; WebController retains filename v
 
 **Forbidden:** execution/recording, projection policy or filesystem reads in WebController;
 independent request storage or mapping execution in its collaborators.
+
+## RESP-UI-NETWORK-BINDING-PROJECTION
+
+**Current module:** `ui-v2`.
+
+The network binding decoder in `lib/networkBindings.ts` owns browser decoding of
+NetworkBinding responses for Hive and Proxy pages. Canonical wire values remain
+NetworkBinding, NetworkMode and ResolvedSutEndpoint in common/swarm-model. UI types
+are read-only projections of those values, not another network policy owner.
+The decoder preserves DIRECT/PROXIED and rejects unknown or missing mode values;
+it does not resolve one mode from the other. Invalid collections/entries are errors
+rather than successful empty observations. Existing endpoint/optional display-field
+normalization is retained in this bounded slice.
+
+Hive's effective-mode badge consumes only the retrieved binding: loading, failed
+reads and absence of a binding are explicitly displayed, not replaced by a desired
+swarm mode or DIRECT. Proxy clears binding observations on read/decode failure.
+
+**Forbidden:** deciding routing, reconstructing effective mode, or importing backend
+network policy into presentation code. No HTTP contract changes.
+
+**Verification:** networkBindings.test.ts covers response decoding; the badge tests
+cover presentation of missing, loading and failed observations.
+
+## RESP-SWARM-ACCESS-PROJECTION
+
+SwarmAccessService owns evaluation of existing per-swarm read/run/manage permissions
+through OrchestratorAuthorization. SwarmTemplateScopeResolver owns the existing
+metadata lookup/enrichment shared by those checks and template lookup at creation.
+SwarmController delegates access checks; SwarmAccessProjection enumerates visible
+swarms and derives the caller-specific read-only response. SwarmAccessController
+maps GET /api/access/swarms with no-store. The same checks are performed again for
+commands; projections do not authorize execution or imply lifecycle eligibility.
+Null user retains existing auth-disabled behavior without resolving metadata.
+UI consumes the projection by ID, never scenario catalogues or unrelated grants.
+Failures/missing entries disable actions; grants for other UI areas remain deferred.
+No new permission policy, persistence or independent metadata writer is introduced.
+
+F07 review correction: the projection route is `/api/access/swarms` to avoid
+shadowing the valid swarm ID `access`. Background catalogue polling joins an
+in-flight load rather than invalidating it; explicit refresh may supersede that
+load. Caller change/unmount invalidate old work, and old completions cannot clear
+a newer in-flight marker or publish permissions for another caller.

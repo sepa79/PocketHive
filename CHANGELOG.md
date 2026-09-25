@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- PH UI: consume caller-specific swarm permissions from the Orchestrator API
+  instead of inferring access from scenario catalogues and unrelated grants. Share
+  scope resolution with command authorization; keep slow background refreshes from
+  starving updates and preserve access to swarms named `access`.
+- PH UI: reject unknown network binding modes instead of assuming DIRECT; display
+  unavailable, loading and missing binding observations explicitly.
+
 ## [0.15.36]
 Timestamp: 2026-09-22T00:00:00Z
 
