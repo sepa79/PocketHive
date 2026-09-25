@@ -3803,3 +3803,24 @@ shadowing the valid swarm ID `access`. Background catalogue polling joins an
 in-flight load rather than invalidating it; explicit refresh may supersede that
 load. Caller change/unmount invalidate old work, and old completions cannot clear
 a newer in-flight marker or publish permissions for another caller.
+
+## RESP-SCENARIO-CATALOGUE-ACCESS
+
+ScenarioCatalogueAccess owns the existing scenario-ID/bundle-key selection used to
+filter the workspace catalogue, delegating scope resolution to ScenarioService and
+permission policy to ScenarioManagerAuthorization. ScenarioController and
+BundleAccessProjection share this visibility owner. The projection uses
+findBundleAccess(bundleKey) and canManage for edit permission, exactly as bundle
+mutations do. Commands retain their existing authorization and error semantics.
+BundleAccessController only maps GET /api/access/bundles with no-store.
+
+UI useScenarioCatalogue consumes backend-filtered read/run lists and bundle edit
+projections, invalidating observations on caller change/close. CreateSwarmModal
+uses the existing /api/templates run-filtered catalogue; ScenariosPage uses the
+existing read-filtered workspace catalogue. Neither interprets grant scopes.
+Both use scenariosApi's existing BundleTemplateEntry parser; its duplicate template
+parser in CreateSwarmModal is removed. Defunct/missing-ID eligibility is unchanged.
+Global navigation/admin/toolbar permissions remain separate unfinished F07 scope.
+
+Forbidden: copying grant matching rules, treating projection as command authority,
+or supplying edit permission after a missing/failed observation.

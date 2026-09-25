@@ -35,7 +35,8 @@ import io.pockethive.swarm.model.SutEnvironment;
 /**
  * Responsibility: Map the documented Scenario Manager HTTP surface to focused application services.
  * Must not: Own scenario catalogue state, filesystem mutation rules, or scenario validation behavior.
- * Contract: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md and docs/scenarios/SCENARIO_CONTRACT.md.
+ * Contract: RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (catalogue visibility);
+ * docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md and docs/scenarios/SCENARIO_CONTRACT.md.
  */
 @RestController
 @RequestMapping("/scenarios")
@@ -53,6 +54,7 @@ public class ScenarioController {
     private final ScenarioVariablesService variables;
     private final AvailableScenarioRegistry availableScenarios;
     private final ScenarioManagerAuthorization authorization;
+    private final ScenarioCatalogueAccess catalogueAccess;
 
     public ScenarioController(ScenarioService service,
                               ScenarioBundleWorkspaceService workspace,
@@ -63,7 +65,8 @@ public class ScenarioController {
                               ScenarioBundlePublicationService publication,
                               ScenarioVariablesService variables,
                               AvailableScenarioRegistry availableScenarios,
-                              ScenarioManagerAuthorization authorization) {
+                              ScenarioManagerAuthorization authorization,
+                              ScenarioCatalogueAccess catalogueAccess) {
         this.service = service;
         this.workspace = workspace;
         this.organization = organization;
@@ -74,6 +77,7 @@ public class ScenarioController {
         this.variables = variables;
         this.availableScenarios = availableScenarios;
         this.authorization = authorization;
+        this.catalogueAccess = catalogueAccess;
     }
 
     @PostMapping(
@@ -98,7 +102,7 @@ public class ScenarioController {
                 ? service.listAllSummaries()
                 : availableScenarios.list();
         summaries = summaries.stream()
-                .filter(summary -> canRead(user, summary.id()))
+                .filter(summary -> catalogueAccess.canRead(user, summary.id()))
                 .toList();
         log.info("[REST] GET /scenarios -> {} items body={}", summaries.size(), safeJson(summaries));
         return summaries;
@@ -109,7 +113,7 @@ public class ScenarioController {
         log.info("[REST] GET /scenarios/defunct");
         AuthenticatedUserDto user = currentUser();
         List<ScenarioSummary> summaries = service.listDefunctSummaries().stream()
-                .filter(summary -> canRead(user, summary.id()))
+                .filter(summary -> catalogueAccess.canRead(user, summary.id()))
                 .toList();
         log.info("[REST] GET /scenarios/defunct -> {} items body={}", summaries.size(), safeJson(summaries));
         return summaries;
@@ -120,7 +124,7 @@ public class ScenarioController {
         log.info("[REST] GET /scenarios/bundles/workspaces");
         AuthenticatedUserDto user = currentUser();
         List<BundleTemplateSummary> summaries = service.listBundleTemplates().stream()
-                .filter(summary -> canReadBundleSummary(user, summary))
+                .filter(summary -> catalogueAccess.canReadBundleSummary(user, summary))
                 .toList();
         log.info("[REST] GET /scenarios/bundles/workspaces -> {} items body={}", summaries.size(), safeJson(summaries));
         return summaries;
@@ -822,24 +826,6 @@ public class ScenarioController {
 
     private AuthenticatedUserDto currentUser() {
         return ScenarioManagerCurrentUserHolder.get();
-    }
-
-    private boolean canRead(AuthenticatedUserDto user, String scenarioId) {
-        return service.findScenarioAccess(scenarioId)
-                .map(access -> authorization.canRead(user, access))
-                .orElse(false);
-    }
-
-    private boolean canReadBundleSummary(AuthenticatedUserDto user, BundleTemplateSummary summary) {
-        if (summary == null) {
-            return false;
-        }
-        if (summary.id() != null && !summary.id().isBlank()) {
-            return canRead(user, summary.id());
-        }
-        return service.findBundleAccess(summary.bundleKey())
-                .map(access -> authorization.canRead(user, access))
-                .orElse(false);
     }
 
     private void requireReadScenario(String id) {

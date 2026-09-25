@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- PH UI: use backend-filtered scenario catalogues and a caller-specific bundle edit
+  projection; remove local bundle/folder grant matching and the duplicate template
+  parser from swarm creation. Backend mutation authorization is unchanged.
+
 - PH UI: consume caller-specific swarm permissions from the Orchestrator API
   instead of inferring access from scenario catalogues and unrelated grants. Share
   scope resolution with command authorization; keep slow background refreshes from

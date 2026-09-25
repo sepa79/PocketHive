@@ -321,3 +321,26 @@ Returns `204 No Content` on success.
 Deletes the directory `sut/<sutId>/` from the bundle.
 
 Returns `204 No Content` on success.
+
+## Bundle edit-access projection (F07)
+
+`GET /api/access/bundles` (ingress `/scenario-manager/api/access/bundles`)
+returns caller-specific permission to edit visible bundles:
+
+```json
+{"bundles":[{"bundleKey":"team/demo","canManage":true}]}
+```
+
+The visible set is exactly the existing `/scenarios/bundles/workspaces` read policy.
+For each entry, canManage is evaluated through existing ScenarioManagerAuthorization
+and findBundleAccess(bundleKey), as used by bundle mutation endpoints. No new grant
+policy, no lifecycle/run eligibility changes. Missing access descriptors yield no
+management permission. Authentication-disabled behavior remains unchanged.
+Return Cache-Control: no-store; errors are not successful empty projections.
+UI disables edits for absent/loading/failed permission observations. Mutations
+always repeat backend authorization; the projection grants no execution authority.
+
+Existing `/api/templates` already filters by run permission and existing
+`/scenarios/bundles/workspaces` filters by read permission. UI consumes those
+filtered lists without repeating grant/scope calculations. Defunct template
+validation remains separate and unchanged. Global UI/admin permissions are deferred.

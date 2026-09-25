@@ -742,3 +742,32 @@ three import-boundary tests) pass. Logs: /tmp/ph-f07-fixes-ui.log,
 Separate review accepted both fixes with no new findings; reran 13 focused UI
 and 19 Java tests successfully (/tmp/ph-f07-fixes-review-ui.log and
 /tmp/ph-f07-fixes-review-java.log). Remaining F07-UI work is unchanged above.
+
+### F07-UI — scenario catalogue permissions (reviewed)
+
+Base efa01e35. Confirmed `/api/templates` already filters run permissions and
+`/scenarios/bundles/workspaces` already filters read permissions. Remove redundant
+UI filtering rather than add a second run/read projection. Bundle edit permission
+uses GET /api/access/bundles, explicitly approved by the user and documented in
+SCENARIO_MANAGER_BUNDLE_REST.md. Global navigation,
+reload/upload controls and auth admin remain outside this slice.
+
+Implemented: shared ScenarioCatalogueAccess preserves existing catalogue visibility;
+BundleAccessProjection delegates edit decisions to existing authorization. UI consumes
+these decisions and uses one existing template parser. Removed UI bundle/folder scope
+matching and its unused AuthContext wrappers. Refresh retains the selected bundle
+while access is disabled during loading/errors; caller change and modal close invalidate
+observations and pending responses. Backend mutations still recheck permissions.
+
+Evidence: 112 focused Java tests and all 76 UI tests pass; production UI build passes.
+Logs: /tmp/ph-scenario-java.log, /tmp/ph-scenario-ui-tests.log,
+/tmp/ph-scenario-ui-build.log. Hook tests observe async state writes with stubbed React
+primitives; no browser/deployed acceptance. Repository searches found the removed
+scope matchers have no remaining consumers in active UI; the archived legacy UI retains
+its separate template parser and is outside this change. Global navigation, reload/upload
+and auth-admin rules remain open; TCP is untouched.
+
+Separate review: no new blocking findings in the approved slice. Reran 115 Java
+tests (including three import-boundary tests) and 14 focused UI tests successfully.
+Logs: /tmp/ph-scenario-review-java.log and /tmp/ph-scenario-review-ui.log.
+Known S9 duplicate-scenario-ID catalogue behavior remains deferred.
