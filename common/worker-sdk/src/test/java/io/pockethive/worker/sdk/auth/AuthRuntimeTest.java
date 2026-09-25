@@ -33,6 +33,39 @@ import org.slf4j.LoggerFactory;
 
 class AuthRuntimeTest {
 
+    @Test
+    void applicationProfilesUseExplicitScenarioRootAndRejectMissingDocument() throws Exception {
+        Path scenario = Files.createTempDirectory("application-auth-profile");
+        String previous = System.getProperty("pockethive.scenario.root");
+        System.setProperty("pockethive.scenario.root", scenario.toString());
+        AuthRef ref = new AuthRef("api:static", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null);
+        TemplateRenderer renderer = (template, context) -> template;
+        try {
+            assertThatThrownBy(() -> AuthRuntime.forApplications(List.of(ref), Map.of(),
+                new TestContext(), renderer, new RedisSequenceProperties()))
+                .isInstanceOf(AuthFailureException.class)
+                .hasMessageContaining("processor-stage auth")
+                .hasMessageContaining(scenario.resolve("authProfiles.yaml").toString());
+            Files.writeString(scenario.resolve("authProfiles.yaml"), """
+                profiles:
+                  "api:static":
+                    type: STATIC_TOKEN
+                    storage:
+                      mode: NONE
+                    token: test-token
+                """);
+            try (AuthRuntime runtime = AuthRuntime.forApplications(List.of(ref), Map.of(),
+                new TestContext(), renderer, new RedisSequenceProperties())) {
+                MutableHttpRequest request = new MutableHttpRequest("GET", "/", Map.of(), "");
+                runtime.applyHttp(ref, request, null, new TestContext());
+                assertThat(request.headers()).containsEntry("Authorization", "Bearer test-token");
+            }
+        } finally {
+            if (previous == null) System.clearProperty("pockethive.scenario.root");
+            else System.setProperty("pockethive.scenario.root", previous);
+        }
+    }
+
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.CsvSource({
         "STATIC_TOKEN,HTTP_AUTHORIZATION_BEARER,Authorization,Bearer test-token",
@@ -57,7 +90,7 @@ class AuthRuntimeTest {
             headerName.toLowerCase(java.util.Locale.ROOT), "old-lower",
             headerName.toUpperCase(java.util.Locale.ROOT), "old-upper",
             "X-Correlation-Id", "correlation");
-        var request = new AuthRuntime.MutableHttpRequest("GET", "/test", original, "");
+        var request = new MutableHttpRequest("GET", "/test", original, "");
         try (AuthRuntime runtime = AuthRuntime.forTemplates(templates.toString(), List.of(ref),
             Map.of(), new TestContext(), (template, context) -> template, new RedisSequenceProperties())) {
             runtime.applyHttp(ref, request, null, new TestContext());
@@ -89,7 +122,7 @@ class AuthRuntimeTest {
             (template, context) -> template,
             new RedisSequenceProperties());
 
-        AuthRuntime.MutableHttpRequest request = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+        MutableHttpRequest request = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
         runtime.applyHttp(
             new AuthRef("api:static", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null),
             request,
@@ -123,7 +156,7 @@ class AuthRuntimeTest {
             new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE),
             new RedisSequenceProperties());
 
-        AuthRuntime.MutableHttpRequest request = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+        MutableHttpRequest request = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
         runtime.applyHttp(
             new AuthRef("api:sut", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null),
             request,
@@ -260,30 +293,30 @@ class AuthRuntimeTest {
         TestContext context = new TestContext();
         AuthRuntime runtime = runtime(templates, refs, Map.of(), context, (template, ignored) -> template);
 
-        AuthRuntime.MutableHttpRequest bearer = new AuthRuntime.MutableHttpRequest("GET", "/bearer", Map.of(), "");
+        MutableHttpRequest bearer = new MutableHttpRequest("GET", "/bearer", Map.of(), "");
         runtime.applyHttp(refs.get(0), bearer, null, context);
         assertThat(bearer.headers()).containsEntry("Authorization", "Bearer bearer-token");
 
-        AuthRuntime.MutableHttpRequest basic = new AuthRuntime.MutableHttpRequest("GET", "/basic", Map.of(), "");
+        MutableHttpRequest basic = new MutableHttpRequest("GET", "/basic", Map.of(), "");
         runtime.applyHttp(refs.get(1), basic, null, context);
         assertThat(basic.headers()).containsEntry(
             "Authorization",
             "Basic " + Base64.getEncoder().encodeToString("alice:wonder".getBytes(StandardCharsets.UTF_8))
         );
 
-        AuthRuntime.MutableHttpRequest api = new AuthRuntime.MutableHttpRequest("GET", "/api", Map.of(), "");
+        MutableHttpRequest api = new MutableHttpRequest("GET", "/api", Map.of(), "");
         runtime.applyHttp(refs.get(2), api, null, context);
         assertThat(api.headers()).containsEntry("X-Api-Key", "api-key-1");
 
-        AuthRuntime.MutableHttpRequest query = new AuthRuntime.MutableHttpRequest("GET", "/search?q=1", Map.of(), "");
+        MutableHttpRequest query = new MutableHttpRequest("GET", "/search?q=1", Map.of(), "");
         runtime.applyHttp(refs.get(3), query, null, context);
         assertThat(query.path()).isEqualTo("/search?q=1&access_token=query-token");
 
-        AuthRuntime.MutableHttpRequest hmac = new AuthRuntime.MutableHttpRequest("POST", "/signed", Map.of(), "payload");
+        MutableHttpRequest hmac = new MutableHttpRequest("POST", "/signed", Map.of(), "payload");
         runtime.applyHttp(refs.get(4), hmac, null, context);
         assertThat(hmac.headers().get("X-Signature")).matches("[0-9a-f]{64}");
 
-        AuthRuntime.MutableHttpRequest aws = new AuthRuntime.MutableHttpRequest("POST", "/aws", Map.of(), "payload");
+        MutableHttpRequest aws = new MutableHttpRequest("POST", "/aws", Map.of(), "payload");
         runtime.applyHttp(refs.get(5), aws, null, context);
         assertThat(aws.headers().get("Authorization"))
             .startsWith("AWS4-HMAC-SHA256 Credential=AKIATEST, Signature=");
@@ -362,11 +395,11 @@ class AuthRuntimeTest {
         TestContext context = new TestContext();
         AuthRuntime runtime = runtime(templates, refs, Map.of("token", "var-token"), context, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
-        AuthRuntime.MutableHttpRequest templated = new AuthRuntime.MutableHttpRequest("GET", "/templated", Map.of(), "");
+        MutableHttpRequest templated = new MutableHttpRequest("GET", "/templated", Map.of(), "");
         runtime.applyHttp(refs.get(0), templated, null, context);
         assertThat(templated.headers()).containsEntry("Authorization", "Bearer var-token:swarm-1:worker-1");
 
-        AuthRuntime.MutableHttpRequest fromFile = new AuthRuntime.MutableHttpRequest("GET", "/file", Map.of(), "");
+        MutableHttpRequest fromFile = new MutableHttpRequest("GET", "/file", Map.of(), "");
         runtime.applyHttp(refs.get(1), fromFile, null, context);
         assertThat(fromFile.headers()).containsEntry("Authorization", "Bearer file-token");
     }

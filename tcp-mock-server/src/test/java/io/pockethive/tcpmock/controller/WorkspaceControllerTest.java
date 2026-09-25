@@ -1,78 +1,106 @@
 package io.pockethive.tcpmock.controller;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.tcpmock.model.Workspace;
-import io.pockethive.tcpmock.model.WorkspaceRequest;
+import io.pockethive.tcpmock.service.WorkspaceFileStore;
 import io.pockethive.tcpmock.service.WorkspaceService;
-import java.util.HashSet;
-import java.util.Set;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class WorkspaceControllerTest {
-    @Test
-    void updatesStoredWorkspaceFromJsonRequest() throws Exception {
-        var mapper = Jackson2ObjectMapperBuilder.json().build();
-        var controller = new WorkspaceController(new WorkspaceService());
-        var request = mapper.readValue(
-            "{\"id\":\"body\",\"name\":\"Renamed\",\"owner\":\"tester\",\"shared\":true}", Workspace.class);
+  @TempDir Path root;
 
-        var response = controller.update("default", request);
+  @Test
+  void createsRenamesAndDeletesThroughHttpWithServerOwnedPolicy() throws Exception {
+    var mvc =
+        MockMvcBuilders.standaloneSetup(
+                new WorkspaceController(
+                    new WorkspaceService(new WorkspaceFileStore(root)),
+                    new io.pockethive.tcpmock.config.TcpMockIdentityResolver(
+                        new io.pockethive.tcpmock.config.TcpMockAuthSelection(
+                            io.pockethive.tcpmock.model.AdministrationAuthProvider.NATIVE))))
+            .defaultRequest(
+                get("/")
+                    .principal(
+                        org.springframework.security.authentication
+                            .UsernamePasswordAuthenticationToken.authenticated(
+                            org.springframework.security.core.userdetails.User.withUsername("admin")
+                                .password("fixture")
+                                .authorities(java.util.List.of())
+                                .build(),
+                            null,
+                            java.util.List.of())))
+            .build();
+    var response =
+        mvc.perform(
+                post("/api/workspaces")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"name\":\"test\",\"shared\":true}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.deletable").value(true))
+            .andExpect(jsonPath("$.defaultWorkspace").value(false))
+            .andReturn();
+    String id =
+        new ObjectMapper()
+            .readTree(response.getResponse().getContentAsString())
+            .path("id")
+            .asText();
+    mvc.perform(
+            put("/api/workspaces/{id}", id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"renamed\",\"shared\":false}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(id))
+        .andExpect(jsonPath("$.name").value("renamed"))
+        .andExpect(jsonPath("$.owner").value("NATIVE:admin"));
+    mvc.perform(delete("/api/workspaces/{id}", id)).andExpect(status().isNoContent());
+    mvc.perform(delete("/api/workspaces/{id}", id)).andExpect(status().isNotFound());
+    mvc.perform(get("/api/workspaces")).andExpect(jsonPath("$.length()").value(1));
+  }
 
-        assertEquals(200, response.getStatusCode().value());
-        var stored = controller.getAll();
-        assertEquals(1, stored.size());
-        var json = mapper.readTree(mapper.writeValueAsString(stored.getFirst()));
-        assertEquals(mapper.readTree("{\"id\":\"body\",\"name\":\"Renamed\",\"owner\":\"tester\",\"shared\":true}"), json);
-        assertEquals(json, mapper.valueToTree(response.getBody()));
-        request.name = "changed after update";
-        assertEquals("Renamed", controller.getAll().getFirst().name);
-        assertEquals(400, controller.delete("default").getStatusCode().value());
-    }
-
-    @Test
-    void decodesMissingWorkspaceFieldsWithoutAddingValidation() throws Exception {
-        var mapper = Jackson2ObjectMapperBuilder.json().build();
-        var controller = new WorkspaceController(new WorkspaceService());
-        var request = mapper.readValue("{}", Workspace.class);
-        var response = controller.update("default", request);
-        assertEquals(200, response.getStatusCode().value());
-        var stored = controller.getAll().getFirst();
-        assertNull(stored.id);
-        assertNull(stored.name);
-        assertNull(stored.owner);
-        assertFalse(stored.shared);
-    }
-
-    @Test
-    void preservesCreateJsonAndStatus() throws Exception {
-        var mapper = new ObjectMapper().findAndRegisterModules();
-        var controller = new WorkspaceController(new WorkspaceService());
-        var request = mapper.readValue("{\"name\":\"test\",\"shared\":true}", WorkspaceRequest.class);
-        var response = controller.create(request);
-        assertEquals(200, response.getStatusCode().value());
-        var json = mapper.valueToTree(response.getBody());
-        Set<String> fields = new HashSet<>();
-        json.fieldNames().forEachRemaining(fields::add);
-        assertEquals(Set.of("id", "name", "owner", "shared"), fields);
-        assertEquals("test", json.get("name").asText());
-        assertEquals("current-user", json.get("owner").asText());
-        assertTrue(json.get("shared").asBoolean());
-        assertEquals(2, controller.getAll().size());
-    }
-
-    @Test
-    void preservesUpdateAndDeletionResponses() {
-        var controller = new WorkspaceController(new WorkspaceService());
-        var result = controller.update("key", new Workspace("body", "test", "someone", true));
-        assertEquals(200, result.getStatusCode().value());
-        assertEquals("body", result.getBody().id);
-        assertEquals("someone", result.getBody().owner);
-        assertEquals(400, controller.delete("default").getStatusCode().value());
-        assertEquals(200, controller.delete("missing").getStatusCode().value());
-        assertEquals(200, controller.delete("key").getStatusCode().value());
-        assertEquals(1, controller.getAll().size());
-    }
+  @Test
+  void failedMutationsHaveExplicitStatusAndPreserveDefault() throws Exception {
+    var mvc =
+        MockMvcBuilders.standaloneSetup(
+                new WorkspaceController(
+                    new WorkspaceService(new WorkspaceFileStore(root)),
+                    new io.pockethive.tcpmock.config.TcpMockIdentityResolver(
+                        new io.pockethive.tcpmock.config.TcpMockAuthSelection(
+                            io.pockethive.tcpmock.model.AdministrationAuthProvider.NATIVE))))
+            .defaultRequest(
+                get("/")
+                    .principal(
+                        org.springframework.security.authentication
+                            .UsernamePasswordAuthenticationToken.authenticated(
+                            org.springframework.security.core.userdetails.User.withUsername("admin")
+                                .password("fixture")
+                                .authorities(java.util.List.of())
+                                .build(),
+                            null,
+                            java.util.List.of())))
+            .build();
+    mvc.perform(delete("/api/workspaces/default")).andExpect(status().isConflict());
+    mvc.perform(
+            put("/api/workspaces/missing")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"name\",\"shared\":false}"))
+        .andExpect(status().isNotFound());
+    mvc.perform(
+            post("/api/workspaces")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\" \",\"shared\":false}"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            put("/api/workspaces/default").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(get("/api/workspaces"))
+        .andExpect(jsonPath("$[0].defaultWorkspace").value(true))
+        .andExpect(jsonPath("$[0].deletable").value(false))
+        .andExpect(jsonPath("$[0].name").value("Default Workspace"));
+  }
 }

@@ -17,6 +17,34 @@ Open browser: http://localhost:8080
 echo "ECHO Hello World" | nc localhost 8080
 ```
 
+## Workspace catalogue
+
+Workspace entries are durable metadata, stored in `workspace-catalogue.json` in
+the configured `tcp-mock.data-directory` (supplied value `/app/data`). Retain the
+instance data volume. Selection does not isolate mappings, TCP traffic or users,
+and does not attach scenarios, swarms or SUTs. The dropdown supports rename,
+delete and explicit reload after a failed request.
+
+See the [workspace contract](../docs/tcp-mock/legacy-workspaces.md) for persistence
+and failure semantics. Authentication uses the explicit `tcp-mock.auth.provider` setting: `NATIVE` for
+standalone Basic login, or `POCKETHIVE` for the PocketHive login at `/tcp-mock/`.
+The supplied Compose services select POCKETHIVE; native mode requires no auth-service.
+Owner IDs include the provider and retain their attribution if the provider changes.
+No automatic provider fallback is supported.
+
+Select the mode with `TCP_MOCK_AUTH_PROVIDER`:
+
+| Mode | Required configuration | Browser login |
+|---|---|---|
+| `NATIVE` | `POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME`, `POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD` | Local username/password form |
+| `POCKETHIVE` | `POCKETHIVE_AUTH_SERVICE_URL` | Existing PocketHive login, on the same origin and browser tab |
+
+PocketHive mode expects the PocketHive UI to serve its shared `/auth-session.js`
+module. The supplied Compose deployment provides that integration. Native mode
+does not load that module or contact auth-service. PocketHive authentication outages
+block administrative requests; TCP matching and responses continue. Switching mode
+requires configuration and restart, and does not transfer existing workspace ownership.
+
 ## Runtime mapping persistence
 
 Mapping changes are stored as a complete snapshot in `/app/data/mapping-catalogue.json`.

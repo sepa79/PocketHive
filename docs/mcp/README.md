@@ -346,3 +346,16 @@ Node wizard/import/clone/enrich APIs are not supported authoring paths.
 - Scenario Manager bundle contract:
   `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md`
 - VS Code client and package usage: `vscode-pockethive/README.md`
+
+Application handlers consume immutable `McpCaller` identity and the
+`ClientInteraction` form/metadata port. MCP transport context and SDK elicitation
+messages are decoded only by their adapters. Descriptor scope checks share
+`McpCaller` scope membership for invocation and catalogue visibility. This boundary change
+preserves external tool/resource schemas and elicitation actions; it grants no
+additional authority to the MCP or an agent.
+
+Knowledge and capability resource content is projected by `McpKnowledgeProjection`.
+The MCP adapter serializes and wraps it; packaged document reads belong to
+`ClasspathKnowledgeDocuments`. Tool catalogue filtering and invocation use the
+same scope check against each canonical descriptor. Existing JSON content and
+canonical digest encoding remain unchanged.

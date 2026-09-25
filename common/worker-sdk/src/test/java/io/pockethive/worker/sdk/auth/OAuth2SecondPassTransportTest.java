@@ -170,11 +170,11 @@ class OAuth2SecondPassTransportTest {
         AuthRuntime runtime = new AuthRuntime(Map.of(PROFILE_ID, profile), Map.of(PROFILE_ID, FINGERPRINT),
             store, (template, ignored) -> template, client);
         return new Attempt(runtime, store, context,
-            new AuthRuntime.MutableHttpRequest("GET", "/downstream", Map.of(), ""));
+            new MutableHttpRequest("GET", "/downstream", Map.of(), ""));
     }
 
     private record Attempt(AuthRuntime runtime, TokenStore store, WorkerContext context,
-                           AuthRuntime.MutableHttpRequest downstream) {
+                           MutableHttpRequest downstream) {
         void apply() { runtime.applyHttp(REF, downstream, null, context); }
 
         Throwable failClosed() {

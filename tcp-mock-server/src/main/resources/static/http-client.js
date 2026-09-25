@@ -1,7 +1,16 @@
-// HTTP Client - Automatically adds authentication headers
+/**
+ * Responsibility: resolve same-application API paths and send authenticated HTTP requests.
+ * Must not: decide workspace policy, identities or login success.
+ * Contract: docs/tcp-mock/legacy-workspaces.md.
+ */
 class HttpClient {
     constructor(auth) {
         this.auth = auth;
+    }
+
+    static endpoint(path) {
+        if (!path.startsWith('/') || path.startsWith('//')) throw new Error('Expected an application API path');
+        return new URL(path.slice(1), new URL('.', document.baseURI)).href;
     }
 
     async fetch(url, options = {}) {
@@ -11,7 +20,7 @@ class HttpClient {
         };
 
         try {
-            const response = await fetch(url, { ...options, headers });
+            const response = await fetch(HttpClient.endpoint(url), { ...options, headers });
             
             if (response.status === 401) {
                 this.auth.logout();

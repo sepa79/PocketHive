@@ -14,7 +14,7 @@ class AuthHttpHeadersTest {
             name.toLowerCase(java.util.Locale.ROOT), "old-lower",
             name.toUpperCase(java.util.Locale.ROOT), "old-upper",
             "X-Correlation-Id", "correlation");
-        var request = new AuthRuntime.MutableHttpRequest("GET", "/test", original, "body");
+        var request = new MutableHttpRequest("GET", "/test", original, "body");
 
         AuthHttpHeaders.replace(request.headers(), name, "new-credential");
 

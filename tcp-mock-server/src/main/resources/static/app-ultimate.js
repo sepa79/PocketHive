@@ -140,10 +140,10 @@ class TcpMockUIUltimate {
 
     switchTab(tab) {
         document.querySelectorAll('.nav-tab').forEach(t => {
-            t.classList.remove('active', 'border-primary-500', 'text-primary-600', 'dark:text-primary-400');
+            t.classList.remove('active', 'border-primary-500', 'text-primary-700', 'dark:text-primary-400');
             t.classList.add('border-transparent', 'text-gray-500');
         });
-        document.querySelector(`[data-tab="${tab}"]`).classList.add('active', 'border-primary-500', 'text-primary-600', 'dark:text-primary-400');
+        document.querySelector(`[data-tab="${tab}"]`).classList.add('active', 'border-primary-500', 'text-primary-700', 'dark:text-primary-400');
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         const tabElement = document.getElementById(`${tab}Tab`);
         if (tabElement) {
@@ -152,6 +152,7 @@ class TcpMockUIUltimate {
             console.error(`Tab element not found: ${tab}Tab`);
         }
         this.currentTab = tab;
+        if (tab === 'mappings') this.loadMappings();
         if (tab === 'dashboard' && this.core?.dashboard) this.core.dashboard.load(this);
         if (tab === 'scenarios') this.loadScenarios();
         if (tab === 'verification') this.renderVerifications();
@@ -269,10 +270,10 @@ class TcpMockUIUltimate {
         tbody.innerHTML = filtered.map(m => `
             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                 <td class="px-6 py-4">
-                    <input type="checkbox" class="mapping-checkbox rounded" data-id="${m.id}" ${this.bulkOps.selected.has(m.id) ? 'checked' : ''} onchange="tcpMockUI.toggleMappingSelection('${m.id}')">
+                    <input type="checkbox" aria-label="Select mapping" class="mapping-checkbox rounded" data-id="${m.id}" ${this.bulkOps.selected.has(m.id) ? 'checked' : ''} onchange="tcpMockUI.toggleMappingSelection('${m.id}')">
                 </td>
                 <td class="px-6 py-4">
-                    <button onclick="tcpMockUI.toggleFavorite('${m.id}')" class="mr-2">
+                    <button aria-label="Toggle favourite" onclick="tcpMockUI.toggleFavorite('${m.id}')" class="mr-2">
                         <i class="fas fa-star ${this.modules.isFavorite(m.id) ? 'text-yellow-500' : 'text-gray-300'}"></i>
                     </button>
                     <span class="text-sm font-mono text-gray-900 dark:text-gray-100">${m.id}</span>
@@ -287,8 +288,8 @@ class TcpMockUIUltimate {
                 </td>
                 <td class="px-6 py-4 space-x-2">
                     <button class="text-blue-600 dark:text-blue-400" onclick="tcpMockUI.duplicateMapping('${m.id}')" title="Duplicate (Ctrl+D)"><i class="fas fa-copy"></i></button>
-                    <button class="text-green-600 dark:text-green-400" onclick="tcpMockUI.editMapping('${m.id}')"><i class="fas fa-edit"></i></button>
-                    <button class="text-red-600 dark:text-red-400" onclick="tcpMockUI.deleteMapping('${m.id}')"><i class="fas fa-trash"></i></button>
+                    <button aria-label="Edit mapping" class="text-green-600 dark:text-green-400" onclick="tcpMockUI.editMapping('${m.id}')"><i class="fas fa-edit"></i></button>
+                    <button aria-label="Delete mapping" class="text-red-600 dark:text-red-400" onclick="tcpMockUI.deleteMapping('${m.id}')"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
         `).join('');

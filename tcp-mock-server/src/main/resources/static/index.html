@@ -15,7 +15,7 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: { 50: '#fef7ee', 500: '#f59e0b', 600: '#d97706', 700: '#b45309', 900: '#78350f' }
+                        primary: { 50: '#fef7ee', 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706', 700: '#b45309', 900: '#78350f' }
                     }
                 }
             }
@@ -30,10 +30,10 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-        .badge-success { background: #10b981; color: white; }
-        .badge-error { background: #ef4444; color: white; }
-        .badge-warning { background: #f59e0b; color: white; }
-        .badge-info { background: #3b82f6; color: white; }
+        .badge-success { background: #10b981; color: #111827; }
+        .badge-error { background: #dc2626; color: white; }
+        .badge-warning { background: #f59e0b; color: #111827; }
+        .badge-info { background: #2563eb; color: white; }
         .prose { max-width: 65ch; }
         .prose h1 { font-size: 2.25em; font-weight: 800; margin-top: 0; margin-bottom: 0.8888889em; line-height: 1.1111111; }
         .prose h2 { font-size: 1.5em; font-weight: 700; margin-top: 2em; margin-bottom: 1em; line-height: 1.3333333; }
@@ -62,13 +62,22 @@
         .tour-highlight { position: relative; z-index: 61; box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.5); border-radius: 0.5rem; }
         #tourOverlay.active { display: block; }
         #tourTooltip.active { display: block; }
+        #mainNavigation { overflow-x: auto; }
+        #mainNavigation .nav-tab { flex-shrink: 0; white-space: nowrap; }
+        #priorityConflicts { max-height: 18rem; overflow-y: auto; }
+        @media (max-width: 767px) {
+            #appHeaderBar { height: auto; min-height: 4rem; flex-wrap: wrap; gap: .5rem; padding-block: .5rem; }
+            #mappingToolbar { flex-wrap: wrap; gap: .75rem; }
+            #mappingToolbar > div { flex-wrap: wrap; gap: .5rem; }
+            #mappingSearch { min-width: 0; width: 100%; }
+        }
     </style>
 </head>
 <body class="h-full bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
     <!-- Header -->
     <header class="glass-effect border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
+            <div id="appHeaderBar" class="flex justify-between items-center h-16">
                 <div class="flex items-center space-x-4">
                     <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
                         <i class="fas fa-server text-white"></i>
@@ -76,13 +85,13 @@
                     <div>
                         <h1 class="text-xl font-bold text-gray-900 dark:text-white">TCP Mock Server</h1>
                         <button id="workspaceSwitcher" class="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-500 flex items-center">
-                            <span id="currentWorkspaceName">Default Workspace</span>
+                            <span id="currentWorkspaceName">Loading catalogue…</span>
                             <i class="fas fa-chevron-down ml-1 text-xs"></i>
                         </button>
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
-                    <div class="hidden md:flex items-center space-x-3 text-sm">
+                    <div class="hidden xl:flex items-center space-x-3 text-sm">
                         <div class="flex items-center space-x-2">
                             <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             <span class="text-gray-600 dark:text-gray-300">Online</span>
@@ -98,18 +107,18 @@
                             <i class="fas fa-history"></i>
                         </button>
                     </div>
-                    <button id="commandPaletteBtn" class="hidden md:flex items-center space-x-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium">
+                    <button id="commandPaletteBtn" class="hidden xl:flex items-center space-x-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium">
                         <i class="fas fa-search"></i>
                         <span>Search</span>
                         <kbd class="px-2 py-1 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">Ctrl+K</kbd>
                     </button>
                     <div class="relative">
-                        <button id="notificationBtn" class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 relative">
+                        <button aria-label="Notifications" id="notificationBtn" class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 relative">
                             <i class="fas fa-bell"></i>
                             <span id="notificationBadge" class="hidden absolute top-0 right-0 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">0</span>
                         </button>
                     </div>
-                    <button id="themeToggle" class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <button aria-label="Toggle colour theme" id="themeToggle" class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                         <i class="fas fa-sun dark:hidden"></i>
                         <i class="fas fa-moon hidden dark:block"></i>
                     </button>
@@ -125,13 +134,13 @@
     </header>
 
     <!-- Navigation -->
-    <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <nav id="mainNavigation" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex space-x-8">
                 <button class="nav-tab px-4 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400" data-tab="dashboard">
                     <i class="fas fa-th-large mr-2"></i>Dashboard
                 </button>
-                <button class="nav-tab active px-4 py-4 text-sm font-medium border-b-2 border-primary-500 text-primary-600 dark:text-primary-400" data-tab="requests">
+                <button class="nav-tab active px-4 py-4 text-sm font-medium border-b-2 border-primary-500 text-primary-700 dark:text-primary-400" data-tab="requests">
                     <i class="fas fa-list mr-2"></i>Requests
                 </button>
                 <button class="nav-tab px-4 py-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400" data-tab="mappings">
@@ -229,20 +238,20 @@
         <div id="mappingsTab" class="tab-content">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                    <div class="flex justify-between items-center mb-4">
+                    <div id="mappingToolbar" class="flex justify-between items-center mb-4">
                         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Message Mappings</h2>
                         <div class="flex space-x-2">
-                            <button id="exportAllBtn" class="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg" title="Export All (JSON)">
+                            <button id="exportAllBtn" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg" title="Export All (JSON)">
                                 <i class="fas fa-download mr-1"></i>Export
                             </button>
-                            <button id="exportSelectedBtn" class="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg" title="Export Selected">
+                            <button id="exportSelectedBtn" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg" title="Export Selected">
                                 <i class="fas fa-file-export mr-1"></i>Selected
                             </button>
-                            <button id="importBtn" class="px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg" title="Import Mappings">
+                            <button id="importBtn" class="px-3 py-2 bg-green-700 hover:bg-green-800 text-white text-sm rounded-lg" title="Import Mappings">
                                 <i class="fas fa-upload mr-1"></i>Import
                             </button>
                             <input type="file" id="importFile" accept=".json,.yaml,.yml" multiple class="hidden">
-                            <button id="addMappingBtn" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg">
+                            <button id="addMappingBtn" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-gray-900 rounded-lg">
                                 <i class="fas fa-plus mr-2"></i>Add Mapping
                             </button>
                         </div>
@@ -251,7 +260,7 @@
                         <input type="text" id="mappingSearch" placeholder="Search mappings..." class="flex-1 min-w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
                         <input type="number" id="priorityMin" placeholder="Min priority" class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
                         <input type="number" id="priorityMax" placeholder="Max priority" class="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
-                        <select id="featureFilter" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+                        <select aria-label="Mapping feature filter" id="featureFilter" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
                             <option value="">All Features</option>
                             <option value="delay">Has Delay</option>
                             <option value="scenario">Has Scenario</option>
@@ -281,7 +290,7 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick="tcpMockUI.sortMappings('id')">
                                     ID <i class="fas fa-sort text-xs"></i>
                                 </th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick="tcpMockUI.sortMappings('pattern')">
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick="tcpMockUI.sortMappings('requestPattern')">
                                     Pattern <i class="fas fa-sort text-xs"></i>
                                 </th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick="tcpMockUI.sortMappings('priority')">
@@ -297,7 +306,7 @@
                         <tbody id="mappingsTable" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
                     </table>
                 </div>
-                <div id="priorityConflicts" class="mt-4 px-6 py-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 hidden">
+                <div id="priorityConflicts" tabindex="0" role="region" aria-label="Mapping priority warnings" class="mt-4 px-6 py-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 hidden">
                     <h4 class="font-semibold text-yellow-800 dark:text-yellow-200 mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Priority Conflicts Detected</h4>
                     <div id="conflictsList" class="text-sm text-yellow-700 dark:text-yellow-300"></div>
                 </div>
@@ -958,20 +967,18 @@
                     <h2 class="text-2xl font-bold text-gray-900 dark:text-white">TCP Mock Server</h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to continue</p>
                 </div>
-                <form id="loginForm" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Username</label>
-                        <input type="text" id="loginUsername" required class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
-                        <input type="password" id="loginPassword" required class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                    </div>
-                    <button type="submit" class="w-full px-4 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium">
-                        <i class="fas fa-sign-in-alt mr-2"></i>Sign In
-                    </button>
-                </form>
-                <p class="text-xs text-gray-500 dark:text-gray-400 text-center mt-4">Use Docker-configured credentials (default: admin/admin)</p>
+                <p id="loginStatus" role="status" class="text-sm text-gray-500 dark:text-gray-400 mb-4">Sign in using the configured authentication provider.</p>
+                <div id="pocketHiveLogin" class="hidden">
+                <a href="/" class="block text-center w-full px-4 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg font-medium">Sign in to PocketHive</a>
+                <p class="text-xs mt-2">Use PocketHive login, then return to this page.</p></div>
+                <div id="nativeLogin" class="hidden">
+                    <form id="loginForm" class="space-y-4">
+                        <label class="block text-sm">Username<input id="loginUsername" autocomplete="username" required class="w-full p-3 border rounded-lg dark:bg-gray-700"></label>
+                        <label class="block text-sm">Password<input id="loginPassword" type="password" autocomplete="current-password" required class="w-full p-3 border rounded-lg dark:bg-gray-700"></label>
+                        <button type="submit" class="w-full px-4 py-3 bg-primary-500 text-white rounded-lg">Sign in</button>
+                    </form>
+                </div>
+                <button onclick="location.reload()" class="w-full px-4 py-2 text-sm">Retry existing session</button>
             </div>
         </div>
     </div>
@@ -1038,6 +1045,8 @@
     <!-- WORKSPACE DROPDOWN -->
     <div id="workspaceDropdown" class="hidden absolute top-16 left-4 w-64 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 z-50">
         <div class="p-2">
+            <p class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">Workspace catalogue only. Selection does not isolate mappings, TCP traffic or users, and is not linked to scenarios, swarms or SUTs. Entries survive server restarts.</p>
+            <p id="workspaceStatus" role="status" aria-live="polite" class="px-3 text-xs"></p>
             <div id="workspaceList" class="space-y-1"></div>
             <div class="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
                 <button onclick="tcpMockUI.createWorkspace()" class="w-full text-left px-3 py-2 text-sm text-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg">
@@ -1099,18 +1108,19 @@
             <div class="p-6">
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Workspace Name</label>
-                        <input type="text" id="workspaceName" placeholder="e.g., Production Tests" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                        <label for="workspaceName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Workspace Name</label>
+                        <input type="text" id="workspaceName" maxlength="128" placeholder="e.g., Production Tests" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
                     </div>
                     <div class="flex items-center">
                         <input type="checkbox" id="workspaceShared" class="rounded mr-2">
-                        <label class="text-sm text-gray-700 dark:text-gray-300">Shared workspace</label>
+                        <label for="workspaceShared" class="text-sm text-gray-700 dark:text-gray-300">Shared label (no access control)</label>
                     </div>
                 </div>
             </div>
+            <p id="workspaceCreateStatus" role="status" aria-live="polite" class="px-6 pb-4 text-sm text-gray-700 dark:text-gray-300 empty:hidden"></p>
             <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
                 <button onclick="document.getElementById('workspaceCreateModal').classList.remove('active')" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg">Cancel</button>
-                <button onclick="tcpMockUI.saveWorkspace()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg">
+                <button onclick="tcpMockUI.saveWorkspace()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-gray-900 rounded-lg">
                     <i class="fas fa-save mr-2"></i>Create
                 </button>
             </div>
@@ -1141,7 +1151,11 @@
     <script src="error-handler.js"></script>
     <script src="http-client.js"></script>
     <script src="auth.js"></script>
+    <script src="native-auth-session.js"></script>
+    <script src="pockethive-auth-session.js"></script>
+    <script src="browser-audit-log.js"></script>
     <script src="workspace.js"></script>
+    <script src="workspace-view.js"></script>
     <script src="command-palette.js"></script>
     <script src="notification-center.js"></script>
     <script src="dashboard.js"></script>

@@ -155,7 +155,7 @@ class OAuth2SecondPassExpiryTest {
     private record Fixture(AuthProfile profile, AuthRuntime runtime, TokenStore store, HttpClient client,
                            AtomicReference<TokenRecord> cached, WorkerContext context) {
         String apply() {
-            AuthRuntime.MutableHttpRequest downstream = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+            MutableHttpRequest downstream = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
             runtime.applyHttp(REF, downstream, null, context);
             assertThat(downstream.headers()).hasSize(1);
             return downstream.headers().get("Authorization");

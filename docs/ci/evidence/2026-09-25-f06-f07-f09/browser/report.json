@@ -1,0 +1,100 @@
+{
+  "steps": [
+    {
+      "name": "PocketHive login and public-port redirect",
+      "passed": true
+    },
+    {
+      "name": "Mappings load",
+      "passed": true
+    },
+    {
+      "name": "Mapping search and clear",
+      "passed": true
+    },
+    {
+      "name": "Pattern column sorts both directions",
+      "passed": true
+    },
+    {
+      "name": "Failed workspace creation preserves form",
+      "passed": true
+    },
+    {
+      "name": "Workspace CRUD, reload and failed rename/delete preserve state",
+      "passed": true
+    },
+    {
+      "name": "Mapping editor opens and cancels",
+      "passed": true
+    },
+    {
+      "name": "Mapping create, edit and delete",
+      "passed": true
+    },
+    {
+      "name": "Navigate dashboard",
+      "passed": true
+    },
+    {
+      "name": "Navigate scenarios",
+      "passed": true
+    },
+    {
+      "name": "Navigate verification",
+      "passed": true
+    },
+    {
+      "name": "Navigate test",
+      "passed": true
+    },
+    {
+      "name": "Navigate settings",
+      "passed": true
+    },
+    {
+      "name": "Navigate docs",
+      "passed": true
+    },
+    {
+      "name": "Navigate mappings",
+      "passed": true
+    },
+    {
+      "name": "Layout 1366",
+      "passed": true
+    },
+    {
+      "name": "Layout 768",
+      "passed": true
+    },
+    {
+      "name": "Layout 320",
+      "passed": true
+    },
+    {
+      "name": "Dark theme",
+      "passed": true
+    },
+    {
+      "name": "Accessibility scan",
+      "passed": true
+    },
+    {
+      "name": "Native login, mappings and logout",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "accessibility": [],
+  "screenshots": [
+    "02-mappings-desktop",
+    "03-workspace-failure",
+    "04-mapping-editor",
+    "05-mappings-1366",
+    "05-mappings-768",
+    "05-mappings-320",
+    "07-dark-mappings",
+    "06-native-mappings"
+  ]
+}

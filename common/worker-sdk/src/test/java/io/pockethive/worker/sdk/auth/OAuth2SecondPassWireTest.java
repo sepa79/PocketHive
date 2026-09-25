@@ -285,7 +285,7 @@ class OAuth2SecondPassWireTest {
         when(context.meterRegistry()).thenReturn(new SimpleMeterRegistry());
         when(context.logger()).thenReturn(LoggerFactory.getLogger(OAuth2SecondPassWireTest.class));
         when(context.statusPublisher()).thenReturn(mock(StatusPublisher.class));
-        var downstream = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+        var downstream = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
         runtime.applyHttp(REF, downstream, null, context);
         assertThat(downstream.headers().entrySet().stream().filter(e -> e.getKey().equalsIgnoreCase("Authorization")).toList()).hasSize(1);
         return downstream.headers().get("Authorization");

@@ -1,5 +1,33 @@
 # Functional module boundaries — next refactors
 
+## Release priority — 25 September 2026
+
+User-selected release scope: F06 worker authentication, F09 MCP application/projection
+boundaries, and F07 TCP workspace catalogue correctness. Baseline: PR #523 head
+`474912ef8f817b750ec259bad719fbf6f207e57b`, including #522 ancestry.
+Worktree branch: `fix/f06-f07-f09-release`.
+
+F07 retains the single-user KISS foundation: server-owned default/deletion policy,
+confirmed mutation results, visible errors and explicit reload. Workspace selection
+is presentation context only: no mapping/traffic isolation, access
+control or scenario/swarm link. The user subsequently required durable workspace
+metadata; the catalogue now uses atomic file persistence in the existing data volume.
+Administration explicitly selects NATIVE credentials or POCKETHIVE identity by
+configuration. Standalone use requires no auth-service; PocketHive Compose selects
+its shared login. Provider failures never switch authentication or affect TCP traffic.
+New workspace owners retain provider-qualified identity across restarts and provider
+changes; ownership does not implement tenancy. MCP persistence is outside this change.
+See [contract](../tcp-mock/legacy-workspaces.md).
+
+Native TCP upgrade code, tests and qualification progress remain preserved in
+`feat/tcp-mock-upgrade`; they are deferred from this release candidate. This branch
+retains the established TCP runtime and UI style; Compose selects PocketHive login.
+
+Acceptance requires fresh component/consumer regression including real OAuth and
+Redis coordination, workspace UI failure tests, packaging, existing import gate,
+and the separate responsibility review. Test evidence does not imply release approval.
+
+
 Status (2026-09-24): F01/F03 are in PR #521; F04/F05 are in PR #522.
 The next reviewed delivery on `codex/worker-inputs`, based on PR #522, includes
 F02 local inputs, F07 producer-owned Scenario Manager contracts, and selected F09

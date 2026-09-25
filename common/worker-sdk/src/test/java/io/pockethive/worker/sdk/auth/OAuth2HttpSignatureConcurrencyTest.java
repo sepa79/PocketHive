@@ -197,7 +197,7 @@ class OAuth2HttpSignatureConcurrencyTest {
                 super.store(token, claim, cleanupGrace);
             }
         };
-        AuthRuntime.MutableHttpRequest request = downstream();
+        MutableHttpRequest request = downstream();
         assertThatThrownBy(() -> runtime(delayed).applyHttp(REF, request, null, context))
             .isInstanceOf(AuthFailureException.class);
         assertThat(request.headers()).doesNotContainKey("Authorization");
@@ -221,7 +221,7 @@ class OAuth2HttpSignatureConcurrencyTest {
             }
         });
         AuthRuntime auth = runtime(store);
-        AuthRuntime.MutableHttpRequest request = downstream();
+        MutableHttpRequest request = downstream();
         assertThatThrownBy(() -> auth.applyHttp(REF, request, null, context))
             .isInstanceOf(AuthFailureException.class)
             .hasRootCauseMessage("OAuth HTTP Signature token expired before application");
@@ -243,7 +243,7 @@ class OAuth2HttpSignatureConcurrencyTest {
     void tokenLifetimeStartsBeforeTheHttpResponseArrives() throws Exception {
         when(client.sendAsync(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
             .thenAnswer(call -> { waitPast(Instant.now().plusMillis(1100)); return CompletableFuture.completedFuture(response("already-expired", 1)); });
-        AuthRuntime.MutableHttpRequest request = downstream();
+        MutableHttpRequest request = downstream();
         assertThatThrownBy(() -> runtime(store).applyHttp(REF, request, null, context))
             .isInstanceOf(AuthFailureException.class);
         assertThat(request.headers()).doesNotContainKey("Authorization");
@@ -304,13 +304,13 @@ class OAuth2HttpSignatureConcurrencyTest {
     }
 
     private String apply(AuthRuntime runtime) {
-        AuthRuntime.MutableHttpRequest request = downstream();
+        MutableHttpRequest request = downstream();
         runtime.applyHttp(REF, request, null, context);
         return request.headers().get("Authorization");
     }
 
-    private static AuthRuntime.MutableHttpRequest downstream() {
-        return new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+    private static MutableHttpRequest downstream() {
+        return new MutableHttpRequest("GET", "/accounts", Map.of(), "");
     }
 
     private static TokenRecord record(String token, Instant expiration) {

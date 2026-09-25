@@ -4,19 +4,18 @@ server:
 spring:
   application:
     name: tcp-mock-server
-  security:
-    user:
-      name: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
-      password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
 
 tcp-mock:
+  auth:
+    provider: NATIVE
+    native:
+      username: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
+      password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
+  data-directory: /app/data
   port: ${POCKETHIVE_TCP_MOCK_PORT:9999}
   nodeId: ${POCKETHIVE_TCP_MOCK_NODE_ID:tcp-mock-default}
   dashboard:
     enabled: ${POCKETHIVE_TCP_MOCK_DASHBOARD_ENABLED:true}
-    username: ${POCKETHIVE_TCP_MOCK_DASHBOARD_USERNAME:admin}
-    # Please change before deploying in prod.
-    password: ${POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD:admin}
   validation:
     enabled: ${POCKETHIVE_TCP_MOCK_VALIDATION_ENABLED:true}
     max-message-size: 8192
@@ -47,3 +46,9 @@ logging:
   level:
     io.pockethive.tcpmock: DEBUG
     org.springframework: INFO
+
+pockethive:
+  auth:
+    service-url: ${POCKETHIVE_AUTH_SERVICE_URL}
+    connect-timeout: 2s
+    read-timeout: 5s

@@ -1,5 +1,7 @@
 package io.pockethive.httpsequence;
 
+import io.pockethive.worker.sdk.auth.MutableHttpRequest;
+
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.work.api.WorkItem;
@@ -46,7 +48,7 @@ final class HttpSequenceRequestRenderer {
                 headers.put(name, render("header:" + name, value, variables)));
         }
         if (definition.authRef() != null) {
-            AuthRuntime.MutableHttpRequest request = new AuthRuntime.MutableHttpRequest(method, path, headers, body);
+            MutableHttpRequest request = new MutableHttpRequest(method, path, headers, body);
             authRuntime.applyHttp(definition.authRef(), request, workItem, context);
             headers.clear();
             headers.putAll(request.headers());

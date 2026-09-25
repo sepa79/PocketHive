@@ -1610,32 +1610,30 @@ or tool/auth schema change.
 
 **Current module(s):** `common/worker-sdk`.
 
-AuthRuntime activates worker auth profiles, applies auth material and coordinates
-ordinary OAuth refresh through TokenStore and HTTP. It delegates resolved profile
-preparation to RESP-WORK-AUTH-PROFILE-PREPARATION and signed OAuth acquisition to
-RESP-WORK-SIGNED-OAUTH-TOKENS. HTTP header replacement is delegated to
-RESP-WORK-AUTH-HTTP-HEADERS. Factory-created runtimes own their token store and HTTP
-client; injected resources are borrowed. Callers close factory runtimes at the end
-of request/journey scope, including failure and interruption. Initialization
-failures release resources already acquired.
+AuthRuntime composes a prepared activation set with AuthRuntimeResources and observes
+credential-application success/failure. AuthProfileLoader owns document discovery,
+YAML reading and activation-set preparation/collision checks. AuthProfilePreparation
+owns resolved values, validation and fingerprints. AuthCredentialApplication owns
+non-refresh credential construction and HTTP/TCP/ISO/mTLS application.
+OAuth2TokenProvider owns ordinary OAuth refresh; OAuth2HttpSignatureTokenProvider
+owns signed OAuth acquisition. Both use the selected TokenStore, which remains the
+sole storage and refresh-claim arbitration owner. AuthRuntimeResources alone owns
+factory-created resource lifetime; injected resources are borrowed.
 
-Template workers call it; shared profile/claim values live in auth-contracts.
-YAML reading, profile-file discovery, activation-set tokenKey collision detection
-and Redis policy selection remain here; AuthRuntimeResources constructs the store. Preparation completes before opening
-the token store. Existing ordinary OAuth request/parser behavior is unchanged.
+Ordinary and signed OAuth retain their explicitly different existing protocol and
+refresh policies in this ownership transfer. There is no protocol fallback or
+change to acquisition bytes, discovery precedence, expiry policy or wire fields.
+MutableHttpRequest is a top-level SDK application target; consumers use that type,
+with no nested alias. Preparation and collision checks precede resource opening.
 
-**Forbidden:** own product auth-service identity/authorization or duplicate token storage/claim behavior.
+**Forbidden:** profile/filesystem parsing, credential construction, HTTP token
+acquisition or a second token store/claim arbiter inside AuthRuntime; product-login
+identity in worker SUT authentication.
 
-**Required effect:** Configured auth material/refresh uses the selected TokenStore;
-profile resolution, validation, fingerprinting and collision checks precede store
-construction. Current discovery/ordinary HTTP effects remain visible for later extraction.
-
-**Verification entrypoints:** `AuthRuntimeTest`, `OAuth2HttpSignatureRuntimeTest`,
-`AuthRuntimeLifecycleTest`, `AuthHttpHeadersTest`, `HttpSequenceSecondPassAuthTest`.
-
-**Migration status:** Profile preparation and signed acquisition have separate
-owners. Discovery, credential application and ordinary OAuth acquisition remain
-in this existing mixed owner; broader B06/B07 separation is not claimed here.
+**Verification entrypoints:** AuthRuntimeTest, AuthRuntimeLifecycleTest,
+AuthProfilePreparationTest, AuthHttpHeadersTest and ordinary/signed OAuth wire,
+expiry, contention, failure and Redis process tests. Resource failure wrapping,
+redaction and interruption remain part of the contract.
 
 ## RESP-WORK-AUTH-PROFILE-PREPARATION
 
@@ -1687,7 +1685,7 @@ request; private-key and protocol failures are explicit. Ordinary OAuth stays un
 OAuth2HttpSignatureTokenProvider owns signed OAuth acquisition, bounded contention,
 strict token-response parsing and refresh-claim coordination through the selected
 TokenStore and HttpClient. OAuth2HttpSignature constructs each token request.
-AuthRuntime alone applies the returned material to downstream requests.
+AuthRuntime delegates downstream application to AuthCredentialApplication.
 
 **Forbidden:** implement token persistence/claim arbitration, resolve profiles,
 own product auth-service identity, or change ordinary OAuth acquisition behavior.
@@ -3242,40 +3240,34 @@ existing JSON shape and HTTP return values through the controller and real servi
 
 ## RESP-TCP-MOCK-WORKSPACES
 
+**Integration status:** active in the established TCP application on this release branch.
+
 **Current module(s):** `tcp-mock-server`.
 
-WorkspaceService owns the global, in-memory mock UI workspace catalogue.
-WorkspaceController maps `/api/workspaces` and delegates all state changes.
-Workspace and WorkspaceRequest carry the existing wire fields; service copies
-mutable boundary values on entry/exit, so they cannot mutate stored state.
-The unused former member/user-aware service/model are replaced, not merged into
-the active behaviour. Browser workspace state is a presentation cache.
+WorkspaceService owns the durable presentation catalogue, stable IDs, name
+validation, default selection and deletion policy. Workspace is an immutable
+response projection with server-owned `defaultWorkspace` and `deletable` flags;
+WorkspaceRequest carries only editable name/shared metadata. WorkspaceController
+maps HTTP and delegates; it cannot upsert identities or accept client ownership.
+The [retained workspace contract](../tcp-mock/legacy-workspaces.md) defines exact
+operations and failures.
 
-Preserve the active controller semantics: initial default workspace, timestamp
-IDs prefixed `ws-`, create owner `current-user`, HashMap iteration/storage, and
-no validation or uniqueness repair. Delete rejects only the path ID `default`
-with HTTP 400; missing other IDs return 200. Update is an upsert keyed by the
-path ID and preserves the body ID (even if different), name, owner and shared
-flag; it also permits replacing the default entry. These are existing policies,
-not new recommendations. No permissions/membership, persistence, timestamp
-metadata or concurrency redesign is introduced. HTTP fields/statuses stay unchanged.
+The browser commits its cache only after successful HTTP responses. It selects the
+server-designated default after a stale selection or successful active deletion;
+load failures preserve prior state and report failure. It never manufactures a
+workspace or infers policy from a particular ID. Selection and `shared` metadata
+provide no access control, mapping isolation, traffic routing or SUT attachment.
+Future ownership follows SUTs; no team/auth tenancy is added here.
+`WorkspaceView` owns safe DOM projection and explicit user actions; it delegates
+mutations and selection to WorkspaceModule without deciding default/deletion policy.
 
-Approved follow-up correctness fix: Workspace provides a no-argument constructor
-for Jackson field binding. The inherited PUT decode failure is corrected without
-changing field names, catalogue policy or adding required-field validation.
-Missing strings remain null and missing shared remains false.
+**Forbidden:** controller/browser-owned default or deletion rules, client-authored
+identities/ownership, writable aliases to stored state, or silent storage recovery,
+tenancy or authentication expansion.
 
-**Forbidden:** controller-owned catalogue, independent ID/default/deletion policy
-in Java consumers, or writable aliases to stored state.
-
-**Remaining F07 debt:** `static/workspace.js` still repeats default workspace data
-on load failure and blocks default deletion locally. That is an existing UI policy
-copy, not proof of end-to-end SSOT completion. Removing its fallback and consuming
-owner-derived policy requires a separate UI/contract slice; this backend extraction
-does not change it.
-
-**Verification entrypoints:** WorkspaceServiceTest for catalogue transitions and
-isolation; WorkspaceControllerTest for existing wire fields and response codes.
+**Verification entrypoints:** WorkspaceServiceTest (identity, validation, default
+protection and concurrent mutations), WorkspaceControllerTest (HTTP outcomes),
+`tests/ui/workspace.test.cjs` (failed requests and stale selection).
 
 ## RESP-TCP-MOCK-MAPPING-FILES
 
@@ -3401,3 +3393,103 @@ streams, preserving locations and lookup order; WebController retains filename v
 
 **Forbidden:** execution/recording, projection policy or filesystem reads in WebController;
 independent request storage or mapping execution in its collaborators.
+
+## RESP-WORK-AUTH-PROFILE-LOADING
+
+AuthProfileLoader owns existing profile-file discovery, strict YAML decoding and
+selection/preparation of referenced profiles through AuthProfilePreparation. It
+rejects unknown profile IDs, absent required SUT context and conflicting effective
+fingerprints for one token key. PreparedAuthProfiles is its immutable-map result.
+No Redis/HTTP resources are opened here. Existing documented discovery locations
+are retained in this extraction; the loader is their only implementation.
+
+
+## RESP-WORK-AUTH-APPLICATION
+
+AuthCredentialApplication owns credential byte construction and application to
+HTTP/TCP/ISO/mTLS targets. AuthProfileFields owns normalized ordinary credential
+field reads and resolved token-key access. MutableHttpRequest is a top-level
+application target and has no acquisition or authorization behavior. Signed OAuth
+retains untrimmed signing material under RESP-WORK-OAUTH-SIGNATURE. Application
+must not load profiles, acquire tokens, arbitrate refresh or emit independent
+application-success telemetry.
+
+
+## RESP-WORK-OAUTH-TOKENS
+
+OAuth2TokenProvider owns ordinary client-credentials/password token requests,
+response interpretation and ordinary refresh coordination using TokenStore and
+HttpClient. Signed request acquisition remains RESP-WORK-SIGNED-OAUTH-TOKENS.
+TokenStore owns arbitration/storage; this provider must not duplicate its state
+machine, profile preparation or downstream credential application. Ordinary
+refresh-ahead and contention behavior are preserved in this extraction.
+
+
+## RESP-MCP-CLIENT-INTERACTION
+
+McpCaller is an immutable application identity value. McpCallerDecoder alone reads
+MCP transport identity fields. ClientInteraction is the application port for form
+capability, elicitation and client identity; McpClientInteraction implements it
+through McpSyncServerExchange. Application workflow handlers must not import MCP
+SDK types or transport adapters. ClientElicitationResult uses the existing domain
+ElicitationAction. Adapter decoding does not grant scopes or approve workflow work.
+McpCaller owns the descriptor-required-scope membership check used for both invocation
+and visibility; descriptor scope selection remains RESP-MCP-CATALOGUE.
+
+Existing elicitation accept/decline/cancel wire values, unknown client metadata,
+no-mutation on missing capability/cancellation, and authenticated principal binding
+remain unchanged. These ports do not substitute for HiveGate approval or execution.
+
+
+### RESP-MCP-KNOWLEDGE-PROJECTION
+
+`McpKnowledgeProjection` owns caller-visible catalogue/capability/knowledge projections
+and their canonical digest. `KnowledgeDocumentSource` supplies immutable documents;
+`ClasspathKnowledgeDocuments` alone reads packaged resources. `McpKnowledgeResources`
+only packages these projections in MCP resource responses. `McpCaller` scope membership is the
+shared scope decision for catalogue visibility and invocation; descriptors remain
+its single required-scope source. None of these components decides owner-service
+operation success or changes entitlement policy.
+
+## RESP-TCP-MOCK-CATALOGUE-STORAGE
+
+WorkspaceService owns candidate validation and serial mutation admission. It publishes
+its in-memory projection only after WorkspacePersistence.save succeeds. WorkspaceFileStore
+owns the versioned workspace snapshot encoding and fences mutation after storage failure.
+AtomicSnapshotFile owns atomic snapshot IO shared by MappingFileStore and WorkspaceFileStore;
+it does not parse contracts, decide defaults or publish domain state. MappingPersistence
+and its existing wire semantics remain unchanged. The same instance data volume carries
+both independent catalogues; no workspace-to-mapping isolation is implied.
+
+Contract: [workspace catalogue](../tcp-mock/legacy-workspaces.md#durable-catalogue).
+Required effects: restart preserves identity, order, rename, deletion and default policy;
+failed storage does not publish a candidate; corrupt storage never fabricates fresh state.
+Tests: WorkspacePersistenceTest, WorkspaceServiceTest, MappingFileStoreTest.
+
+TcpMockStoragePaths owns the explicit data-directory setting and resolves mapping
+and workspace snapshot locations. File stores consume these paths without their
+own directory defaults.
+
+HttpClient.endpoint owns browser API path resolution relative to the served page
+directory, including the `/tcp-mock/` ingress prefix. Both authentication providers
+consume that same resolver for configuration and identity requests.
+
+## RESP-TCP-MOCK-AUTHENTICATION
+
+TcpMockAuthSelection owns the explicit NATIVE/POCKETHIVE provider selection.
+NativeSecurityConfig composes existing Basic authentication from native settings;
+PocketHiveSecurityConfig composes AuthServiceClient and TcpMockAuthFilter from its
+own required settings. SecurityConfig supplies shared public-path/security policy.
+No provider instantiates the other's credential client or substitutes on failure.
+TcpMockAuthFilter resolves administrative bearer identity and delegates global grant
+matching to PocketHiveGrantChecks. It does not authenticate TCP traffic or own users.
+TcpMockIdentityResolver converts the selected authenticated principal into the read-only
+TcpMockIdentity. WorkspaceController passes its provider-qualified owner ID to the
+catalogue owner; WorkspaceService persists attribution, not access-control decisions.
+
+The browser selects NativeAuthSession or PocketHiveAuthSession only from `/api/auth/config`.
+`ui-v2/src/lib/authSession.ts` owns PocketHive session parsing/storage and is published
+as `/auth-session.js`; the native provider does not load it. All TCP UI API paths use
+the existing HttpClient endpoint resolver. CurrentUserController exposes only the
+server-selected identity/configuration projections. No duplicate login/user directory
+is created for PocketHive mode. Contract: [authentication provider](../tcp-mock/legacy-workspaces.md#authentication-provider-and-ownership).

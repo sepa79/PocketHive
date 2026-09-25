@@ -1,21 +1,24 @@
 package io.pockethive.mcp.application;
-import io.pockethive.mcp.config.McpStateMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
+import io.pockethive.mcp.adapter.mcp.McpCallerDecoder;
+import io.pockethive.mcp.adapter.mcp.McpClientInteraction;
+import io.pockethive.mcp.config.McpStateMode;
 import io.pockethive.mcp.config.PocketHiveMcpProperties;
 import io.pockethive.mcp.domain.AgentSession;
 import io.pockethive.mcp.domain.PrincipalKey;
@@ -45,577 +48,809 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
-import static org.mockito.Mockito.mockStatic;
-
 class McpToolExecutionIntegrationTest {
-    private static final Instant NOW = Instant.parse("2026-08-18T12:00:00Z");
-    private static final PrincipalKey PRINCIPAL = new PrincipalKey(URI.create("https://issuer.example"), "qa-lead");
-    private static final String SHA = "sha256:" + "a".repeat(64);
-    private static final String COMMIT = "a".repeat(40);
+  private static final Instant NOW = Instant.parse("2026-08-18T12:00:00Z");
+  private static final PrincipalKey PRINCIPAL =
+      new PrincipalKey(URI.create("https://issuer.example"), "qa-lead");
+  private static final String SHA = "sha256:" + "a".repeat(64);
+  private static final String COMMIT = "a".repeat(40);
 
-    private final OwnerApiPort owners = mock(OwnerApiPort.class);
-    private final BundleUploadCoordinator uploads = mock(BundleUploadCoordinator.class);
-    private final MemoryState state = new MemoryState();
-    private final SwarmReadinessObserver readiness = mock(SwarmReadinessObserver.class);
-    private final McpSyncServerExchange exchange = mock(McpSyncServerExchange.class);
-    private final ToolCatalogue catalogue = ToolCatalogue.canonical();
-    private final McpToolExecutor executor = newExecutor(new ObjectMapper().findAndRegisterModules());
+  private final OwnerApiPort owners = mock(OwnerApiPort.class);
+  private final BundleUploadCoordinator uploads = mock(BundleUploadCoordinator.class);
+  private final MemoryState state = new MemoryState();
+  private final SwarmReadinessObserver readiness = mock(SwarmReadinessObserver.class);
+  private final McpSyncServerExchange exchange = mock(McpSyncServerExchange.class);
+  private final ToolCatalogue catalogue = ToolCatalogue.canonical();
+  private final McpToolExecutor executor = newExecutor(new ObjectMapper().findAndRegisterModules());
 
-    @BeforeEach
-    void authenticateCaller() {
-        when(exchange.transportContext()).thenReturn(McpTransportContext.create(Map.of(
-            "pockethive.issuer", PRINCIPAL.issuer().toString(),
-            "pockethive.subject", PRINCIPAL.subject(),
-            "pockethive.principalLabel", "qa-lead",
-            "pockethive.clientId", "test-client",
-            "pockethive.scopes", String.join(" ", Set.of(
-                PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ, PocketHiveMcpScopes.OPERATE,
-                PocketHiveMcpScopes.AUTHOR, PocketHiveMcpScopes.PUBLISH, PocketHiveMcpScopes.CLEANUP)))));
-        when(exchange.getClientCapabilities()).thenReturn(new McpSchema.ClientCapabilities(
-            null, null, null, new McpSchema.ClientCapabilities.Elicitation(
-                new McpSchema.ClientCapabilities.Elicitation.Form(), null)));
-        when(exchange.getClientInfo()).thenReturn(new McpSchema.Implementation("test-client", "1.0.0"));
+  @BeforeEach
+  void authenticateCaller() {
+    when(exchange.transportContext())
+        .thenReturn(
+            McpTransportContext.create(
+                Map.of(
+                    "pockethive.issuer", PRINCIPAL.issuer().toString(),
+                    "pockethive.subject", PRINCIPAL.subject(),
+                    "pockethive.principalLabel", "qa-lead",
+                    "pockethive.clientId", "test-client",
+                    "pockethive.scopes",
+                        String.join(
+                            " ",
+                            Set.of(
+                                PocketHiveMcpScopes.DISCOVER,
+                                PocketHiveMcpScopes.READ,
+                                PocketHiveMcpScopes.OPERATE,
+                                PocketHiveMcpScopes.AUTHOR,
+                                PocketHiveMcpScopes.PUBLISH,
+                                PocketHiveMcpScopes.CLEANUP)))));
+    when(exchange.getClientCapabilities())
+        .thenReturn(
+            new McpSchema.ClientCapabilities(
+                null,
+                null,
+                null,
+                new McpSchema.ClientCapabilities.Elicitation(
+                    new McpSchema.ClientCapabilities.Elicitation.Form(), null)));
+    when(exchange.getClientInfo()).thenReturn(new McpSchema.Implementation("test-client", "1.0.0"));
+  }
+
+  @Test
+  void runsTheNoInferenceWorkflowAndInvalidatesGeneratedFilesAfterCancellation() {
+    Object created = execute("agent_session_create", Map.of());
+    String sessionId = textField(created, "agentSessionId");
+    assertThat(sessionId).startsWith("as-");
+    assertThat(state.maintainedAt).isEqualTo(NOW);
+
+    Object workflowCreated =
+        execute(
+            "scenario_workflow_create",
+            Map.of("agentSessionId", sessionId, "expectedSessionRevision", 0));
+    String workflowId = textField(workflowCreated, "workflowId");
+    assertThat(
+            textField(
+                execute("scenario_workflow_get", Map.of("workflowId", workflowId)), "workflowId"))
+        .isEqualTo(workflowId);
+
+    when(exchange.createElicitation(any()))
+        .thenReturn(new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.DECLINE, null));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> declined =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_answer",
+                Map.of("workflowId", workflowId, "expectedRevision", 0, "topic", "goal_and_risk"));
+    assertThat(declined)
+        .containsEntry("disposition", "UNKNOWN")
+        .containsEntry("elicitationAction", "decline");
+    assertThat(state.workflows.get(workflowId).revision()).isZero();
+
+    for (QaRequirementTopic topic : QaRequirementTopic.values()) {
+      when(exchange.createElicitation(any()))
+          .thenReturn(accepted("NOT_APPLICABLE", "Not required: " + topic));
+      execute(
+          "scenario_workflow_answer",
+          Map.of(
+              "workflowId", workflowId,
+              "expectedRevision", state.workflows.get(workflowId).revision(),
+              "topic", topic.name()));
     }
-
-    @Test
-    void runsTheNoInferenceWorkflowAndInvalidatesGeneratedFilesAfterCancellation() {
-        Object created = execute("agent_session_create", Map.of());
-        String sessionId = textField(created, "agentSessionId");
-        assertThat(sessionId).startsWith("as-");
-        assertThat(state.maintainedAt).isEqualTo(NOW);
-
-        Object workflowCreated = execute("scenario_workflow_create", Map.of(
-            "agentSessionId", sessionId, "expectedSessionRevision", 0));
-        String workflowId = textField(workflowCreated, "workflowId");
-        assertThat(textField(execute("scenario_workflow_get", Map.of("workflowId", workflowId)), "workflowId"))
-            .isEqualTo(workflowId);
-
-        when(exchange.createElicitation(any())).thenReturn(new McpSchema.ElicitResult(
-            McpSchema.ElicitResult.Action.DECLINE, null));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> declined = (Map<String, Object>) execute("scenario_workflow_answer", Map.of(
-            "workflowId", workflowId, "expectedRevision", 0, "topic", "goal_and_risk"));
-        assertThat(declined).containsEntry("disposition", "UNKNOWN")
-            .containsEntry("elicitationAction", McpSchema.ElicitResult.Action.DECLINE);
-        assertThat(state.workflows.get(workflowId).revision()).isZero();
-
-        for (QaRequirementTopic topic : QaRequirementTopic.values()) {
-            when(exchange.createElicitation(any())).thenReturn(accepted("NOT_APPLICABLE", "Not required: " + topic));
-            execute("scenario_workflow_answer", Map.of(
-                "workflowId", workflowId,
-                "expectedRevision", state.workflows.get(workflowId).revision(),
-                "topic", topic.name()));
-        }
-        ArgumentCaptor<McpSchema.ElicitRequest> elicitation = ArgumentCaptor.forClass(McpSchema.ElicitRequest.class);
-        verify(exchange, org.mockito.Mockito.atLeastOnce()).createElicitation(elicitation.capture());
-        assertThat(elicitation.getAllValues()).allSatisfy(request -> {
-            assertThat(request.message()).isNotBlank();
-            assertThat(request.mode()).isEqualTo("form");
-        });
-        when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
-            .thenReturn(Map.of("fingerprint", "cap-a"));
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> generated = (Map<String, Object>) execute("scenario_workflow_generate", Map.of(
-            "workflowId", workflowId,
-            "expectedRevision", state.workflows.get(workflowId).revision(),
-            "files", List.of(
-                Map.of("path", "z/setup.sh", "content", "#!/bin/sh\ntrue\n"),
-                Map.of("path", "scenario.yaml", "content", "id: sample\n"))));
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
-        assertThat(files).extracting(file -> file.get("path"))
-            .containsExactly("scenario.yaml", "z/setup.sh");
-        assertThat(files).allSatisfy(file -> assertThat(file.get("sha256")).asString()
-            .matches("sha256:[0-9a-f]{64}"));
-        assertThat(state.workflows.get(workflowId).state().name()).isEqualTo("GENERATED");
-        assertThat(state.savedWorkflowsWithFiles).contains(workflowId);
-        assertThat(generated.get("fileSetDigest")).isNotEqualTo("sha256:" +
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-
-        Object cancelled = execute("scenario_workflow_cancel", Map.of(
-            "workflowId", workflowId, "expectedRevision", state.workflows.get(workflowId).revision()));
-        assertThat(cancelled).isNotNull();
-        assertThat(state.workflows.get(workflowId).state().name()).isEqualTo("CANCELLED");
-        assertThat(state.generatedFiles).doesNotContainKey(workflowId);
-        assertThat(state.removedGeneratedFiles).contains(workflowId);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> listed = (Map<String, Object>) execute(
-            "agent_session_list_workflows", Map.of("agentSessionId", sessionId));
-        assertThat(listed).containsEntry("count", 1);
-        assertThat(execute("scenario_workflow_list", Map.of("agentSessionId", sessionId))).isEqualTo(listed);
-
-        Object closed = execute("agent_session_close", Map.of("agentSessionId", sessionId, "expectedRevision", "1"));
-        assertThat(closed).isNotNull();
-        assertThat(state.savedSessions).contains(sessionId);
-        assertThat(textField(execute("agent_session_get", Map.of("agentSessionId", sessionId)), "state"))
-            .isEqualTo("CLOSED");
-    }
-
-    @Test
-    void recordsEachAcceptedAnswerDispositionWithExplicitSourceRules() {
-        ScenarioWorkflow workflow = workflow("wf-answer");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-
-        when(exchange.createElicitation(any())).thenReturn(accepted("USER_PROVIDED", "Explicit goal"));
-        Object firstAnswer = execute("scenario_workflow_answer", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK"));
-        assertThat(firstAnswer).isNotNull();
-        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value()).isEqualTo("Explicit goal");
-        assertThat(state.removedGeneratedFiles).contains(workflow.id());
-
-        when(exchange.createElicitation(any())).thenReturn(new McpSchema.ElicitResult(
-            McpSchema.ElicitResult.Action.ACCEPT,
-            Map.of("disposition", "USER_CONFIRMED_SOURCE", "answer", "Use the contract",
-                "sourceName", "openapi.yaml", "sourceDigest", SHA)));
-        execute("scenario_workflow_answer", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", 1,
-            "topic", "JOURNEYS_SCHEMAS_AND_EXPECTATIONS"));
-        assertThat(workflow.requirements().get(QaRequirementTopic.JOURNEYS_SCHEMAS_AND_EXPECTATIONS)
-            .confirmedSource().digest()).isEqualTo(SHA);
-        assertThat(workflow.requirements().get(QaRequirementTopic.JOURNEYS_SCHEMAS_AND_EXPECTATIONS)
-            .provenance().requestedSchemaDigest()).isNotEqualTo("sha256:" +
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    }
-
-    @Test
-    void recordsAnExplicitAgentMediatedAnswerWithoutFormElicitation() {
-        when(exchange.getClientCapabilities()).thenReturn(null);
-        Object created = execute("agent_session_create", Map.of());
-        String sessionId = textField(created, "agentSessionId");
-        Object workflowCreated = execute("scenario_workflow_create", Map.of(
-            "agentSessionId", sessionId, "expectedSessionRevision", 0));
-        String workflowId = textField(workflowCreated, "workflowId");
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> question = (Map<String, Object>) execute("scenario_workflow_question", Map.of(
-            "workflowId", workflowId, "topic", "GOAL_AND_RISK"));
-
-        assertThat(question)
-            .containsEntry("workflowId", workflowId)
-            .containsEntry("workflowRevision", 0L)
-            .containsEntry("topic", "GOAL_AND_RISK")
-            .containsEntry("captureMode", "AGENT_MEDIATED")
-            .containsEntry("message", "What goal, risks, scope, and out-of-scope behaviour must this test cover?");
-        assertThat(question.get("questionId")).isEqualTo("agent-mediated/goal_and_risk");
-        assertThat(question.get("requestedSchemaDigest")).asString().matches("sha256:[0-9a-f]{64}");
-        assertThat(question.get("responseSchema")).isInstanceOf(Map.class);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> submitted = (Map<String, Object>) execute("scenario_workflow_answer_submit", Map.of(
-            "workflowId", workflowId,
-            "expectedRevision", question.get("workflowRevision"),
-            "topic", "GOAL_AND_RISK",
-            "questionId", question.get("questionId"),
-            "requestedSchemaDigest", question.get("requestedSchemaDigest"),
-            "disposition", "USER_PROVIDED",
-            "answer", "Provision cardholders for later performance testing."));
-
-        assertThat(submitted).containsEntry("workflowId", workflowId).containsEntry("revision", 1L);
-        var answer = state.workflows.get(workflowId).requirements().get(QaRequirementTopic.GOAL_AND_RISK);
-        assertThat(answer.value()).isEqualTo("Provision cardholders for later performance testing.");
-        assertThat(answer.provenance().questionId()).isEqualTo("agent-mediated/goal_and_risk");
-        assertThat(answer.provenance().requestedSchemaDigest()).isEqualTo(question.get("requestedSchemaDigest"));
-        assertThat(answer.provenance().acceptedContentDigest()).matches("sha256:[0-9a-f]{64}");
-        verify(exchange, never()).createElicitation(any());
-    }
-
-    @Test
-    void preparesAndAtomicallySubmitsOneExplicitCompactReview() {
-        Object created = execute("agent_session_create", Map.of());
-        String sessionId = textField(created, "agentSessionId");
-        Object workflowCreated = execute("scenario_workflow_create", Map.of(
-            "agentSessionId", sessionId, "expectedSessionRevision", 0));
-        String workflowId = textField(workflowCreated, "workflowId");
-        Map<String, Object> candidate = compactReviewInput(workflowId);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> prepared = (Map<String, Object>) execute(
-            "scenario_workflow_review_prepare", candidate);
-
-        assertThat(prepared)
-            .containsEntry("workflowId", workflowId)
-            .containsEntry("workflowRevision", 0L)
-            .containsEntry("captureMode", "COMPACT_REVIEW")
-            .containsEntry("reviewId", "compact-review/all-topics");
-        assertThat(prepared.get("message")).asString()
-            .contains("Review every requirement below", "GOAL_AND_RISK", "Explicit goal");
-        assertThat(prepared.get("requestedSchemaDigest")).asString().matches("sha256:[0-9a-f]{64}");
-        assertThat(prepared.get("answerSetDigest")).asString().matches("sha256:[0-9a-f]{64}");
-        assertThat(prepared).containsEntry("sourceName", "user requirement narrative")
-            .containsEntry("sourceDigest", SHA);
-        assertThat(prepared.get("answers")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
-            .hasSize(QaRequirementTopic.values().length);
-        assertThat(state.workflows.get(workflowId).revision()).isZero();
-
-        Map<String, Object> submission = new LinkedHashMap<>(candidate);
-        submission.put("reviewId", prepared.get("reviewId"));
-        submission.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
-        submission.put("answerSetDigest", prepared.get("answerSetDigest"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> submitted = (Map<String, Object>) execute(
-            "scenario_workflow_review_submit", submission);
-
-        assertThat(submitted).containsEntry("revision", 1L)
-            .containsEntry("state", io.pockethive.mcp.domain.ScenarioWorkflowState.REVIEW_REQUIRED);
-        ScenarioWorkflow workflow = state.workflows.get(workflowId);
-        assertThat(workflow.requirements().values()).allSatisfy(answer -> {
-            assertThat(answer.provenance().questionId()).startsWith("compact-review/");
-            assertThat(answer.provenance().acceptedContentDigest()).isEqualTo(prepared.get("answerSetDigest"));
-        });
-        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value())
-            .isEqualTo("Explicit goal");
-        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).confirmedSource().name())
-            .isEqualTo("user requirement narrative");
-        assertThat(state.removedGeneratedFiles).contains(workflowId);
-    }
-
-    @Test
-    void compactReviewRejectsIncompleteDuplicateStaleAndTamperedEvidenceWithoutMutation() {
-        ScenarioWorkflow workflow = workflow("wf-compact-invalid");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        Map<String, Object> candidate = compactReviewInput(workflow.id());
-
-        Map<String, Object> stalePrepare = new LinkedHashMap<>(candidate);
-        stalePrepare.put("expectedRevision", 1);
-        assertCode("WORKFLOW_VERSION_CONFLICT",
-            () -> execute("scenario_workflow_review_prepare", stalePrepare));
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> prepared = (Map<String, Object>) execute(
-            "scenario_workflow_review_prepare", candidate);
-        Map<String, Object> valid = new LinkedHashMap<>(candidate);
-        valid.put("reviewId", prepared.get("reviewId"));
-        valid.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
-        valid.put("answerSetDigest", prepared.get("answerSetDigest"));
-
-        Map<String, Object> wrongId = new LinkedHashMap<>(valid);
-        wrongId.put("reviewId", "compact-review/wrong");
-        assertCode("QA_REVIEW_ID_MISMATCH",
-            () -> execute("scenario_workflow_review_submit", wrongId));
-
-        Map<String, Object> wrongSchema = new LinkedHashMap<>(valid);
-        wrongSchema.put("requestedSchemaDigest", SHA);
-        assertCode("QA_REVIEW_SCHEMA_MISMATCH",
-            () -> execute("scenario_workflow_review_submit", wrongSchema));
-
-        Map<String, Object> tampered = new LinkedHashMap<>(valid);
-        tampered.put("answerSetDigest", SHA);
-        assertCode("QA_REVIEW_ANSWER_SET_MISMATCH",
-            () -> execute("scenario_workflow_review_submit", tampered));
-
-        Map<String, Object> stale = new LinkedHashMap<>(valid);
-        stale.put("expectedRevision", 1);
-        assertCode("WORKFLOW_VERSION_CONFLICT",
-            () -> execute("scenario_workflow_review_submit", stale));
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> originalAnswers = (List<Map<String, Object>>) candidate.get("answers");
-        Map<String, Object> incomplete = new LinkedHashMap<>(candidate);
-        incomplete.put("answers", originalAnswers.subList(0, originalAnswers.size() - 1));
-        assertCode("QA_REVIEW_TOPICS_INCOMPLETE",
-            () -> execute("scenario_workflow_review_prepare", incomplete));
-
-        Map<String, Object> duplicate = new LinkedHashMap<>(candidate);
-        List<Map<String, Object>> duplicatedAnswers = new java.util.ArrayList<>(originalAnswers);
-        duplicatedAnswers.set(duplicatedAnswers.size() - 1, originalAnswers.getFirst());
-        duplicate.put("answers", duplicatedAnswers);
-        assertCode("QA_REVIEW_TOPIC_DUPLICATE",
-            () -> execute("scenario_workflow_review_prepare", duplicate));
-
-        assertThat(workflow.revision()).isZero();
-        assertThat(workflow.requirements().values())
-            .allSatisfy(answer -> assertThat(answer.value()).isNull());
-    }
-
-    @Test
-    void compactReviewRecordsUnknownClientAndEverySupportedDisposition() {
-        ScenarioWorkflow workflow = workflow("wf-compact-unknown-client");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(exchange.getClientInfo()).thenReturn(null);
-        List<Map<String, Object>> answers = java.util.Arrays.stream(QaRequirementTopic.values())
-            .map(topic -> Map.<String, Object>of(
-                "topic", topic.name(),
-                "disposition", topic == QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT
-                    ? "NOT_APPLICABLE" : "USER_PROVIDED",
-                "answer", "Explicit " + topic.name()))
-            .toList();
-        Map<String, Object> candidate = new LinkedHashMap<>();
-        candidate.put("workflowId", workflow.id());
-        candidate.put("expectedRevision", 0);
-        candidate.put("answers", answers);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> prepared = (Map<String, Object>) execute(
-            "scenario_workflow_review_prepare", candidate);
-        candidate.put("reviewId", prepared.get("reviewId"));
-        candidate.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
-        candidate.put("answerSetDigest", prepared.get("answerSetDigest"));
-        execute("scenario_workflow_review_submit", candidate);
-
-        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).provenance())
-            .satisfies(provenance -> {
-                assertThat(provenance.declaredClientName()).isEqualTo("unknown");
-                assertThat(provenance.declaredClientVersion()).isEqualTo("unknown");
+    ArgumentCaptor<McpSchema.ElicitRequest> elicitation =
+        ArgumentCaptor.forClass(McpSchema.ElicitRequest.class);
+    verify(exchange, org.mockito.Mockito.atLeastOnce()).createElicitation(elicitation.capture());
+    assertThat(elicitation.getAllValues())
+        .allSatisfy(
+            request -> {
+              assertThat(request.message()).isNotBlank();
+              assertThat(request.mode()).isEqualTo("form");
             });
-        assertThat(workflow.requirements().get(QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT).disposition())
-            .isEqualTo(io.pockethive.mcp.domain.RequirementDisposition.NOT_APPLICABLE);
-    }
+    when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
+        .thenReturn(Map.of("fingerprint", "cap-a"));
 
-    @Test
-    void rejectsNativeAnswersWithoutFormCapabilityAndNeverSwitchesCaptureMode() {
-        ScenarioWorkflow workflow = workflow("wf-native-no-form");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(exchange.getClientCapabilities()).thenReturn(null);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> generated =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_generate",
+                Map.of(
+                    "workflowId", workflowId,
+                    "expectedRevision", state.workflows.get(workflowId).revision(),
+                    "files",
+                        List.of(
+                            Map.of("path", "z/setup.sh", "content", "#!/bin/sh\ntrue\n"),
+                            Map.of("path", "scenario.yaml", "content", "id: sample\n"))));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
+    assertThat(files)
+        .extracting(file -> file.get("path"))
+        .containsExactly("scenario.yaml", "z/setup.sh");
+    assertThat(files)
+        .allSatisfy(
+            file -> assertThat(file.get("sha256")).asString().matches("sha256:[0-9a-f]{64}"));
+    assertThat(state.workflows.get(workflowId).state().name()).isEqualTo("GENERATED");
+    assertThat(state.savedWorkflowsWithFiles).contains(workflowId);
+    assertThat(generated.get("fileSetDigest"))
+        .isNotEqualTo(
+            "sha256:" + "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 
-        assertCode("ELICITATION_CAPABILITY_REQUIRED", () -> execute("scenario_workflow_answer", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+    Object cancelled =
+        execute(
+            "scenario_workflow_cancel",
+            Map.of(
+                "workflowId",
+                workflowId,
+                "expectedRevision",
+                state.workflows.get(workflowId).revision()));
+    assertThat(cancelled).isNotNull();
+    assertThat(state.workflows.get(workflowId).state().name()).isEqualTo("CANCELLED");
+    assertThat(state.generatedFiles).doesNotContainKey(workflowId);
+    assertThat(state.removedGeneratedFiles).contains(workflowId);
 
-        assertThat(workflow.revision()).isZero();
-        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value()).isNull();
-        verify(exchange, never()).createElicitation(any());
-    }
+    @SuppressWarnings("unchecked")
+    Map<String, Object> listed =
+        (Map<String, Object>)
+            execute("agent_session_list_workflows", Map.of("agentSessionId", sessionId));
+    assertThat(listed).containsEntry("count", 1);
+    assertThat(execute("scenario_workflow_list", Map.of("agentSessionId", sessionId)))
+        .isEqualTo(listed);
 
-    @Test
-    void rejectsInvalidNativeElicitationResultsAndUnexpectedFields() {
-        ScenarioWorkflow workflow = workflow("wf-invalid-native");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(exchange.createElicitation(any())).thenReturn(null);
-        assertCode("ELICITATION_RESULT_INVALID", () -> execute("scenario_workflow_answer", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+    Object closed =
+        execute(
+            "agent_session_close", Map.of("agentSessionId", sessionId, "expectedRevision", "1"));
+    assertThat(closed).isNotNull();
+    assertThat(state.savedSessions).contains(sessionId);
+    assertThat(
+            textField(execute("agent_session_get", Map.of("agentSessionId", sessionId)), "state"))
+        .isEqualTo("CLOSED");
+  }
 
-        when(exchange.createElicitation(any())).thenReturn(new McpSchema.ElicitResult(
-            McpSchema.ElicitResult.Action.ACCEPT,
-            Map.of("disposition", "USER_PROVIDED", "answer", "Explicit", "unexpected", "value")));
-        assertCode("QA_RESPONSE_FIELD_UNEXPECTED", () -> execute("scenario_workflow_answer", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
-        assertThat(workflow.revision()).isZero();
-    }
+  @Test
+  void recordsEachAcceptedAnswerDispositionWithExplicitSourceRules() {
+    ScenarioWorkflow workflow = workflow("wf-answer");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
 
-    @Test
-    void rejectsTamperedOrStaleAgentMediatedQuestionEvidenceWithoutMutation() {
-        ScenarioWorkflow workflow = workflow("wf-mediated-evidence");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> question = (Map<String, Object>) execute("scenario_workflow_question", Map.of(
-            "workflowId", workflow.id(), "topic", "GOAL_AND_RISK"));
-        Map<String, Object> valid = mediatedAnswer(question, "USER_PROVIDED", "Explicit goal");
+    when(exchange.createElicitation(any())).thenReturn(accepted("USER_PROVIDED", "Explicit goal"));
+    Object firstAnswer =
+        execute(
+            "scenario_workflow_answer",
+            Map.of("workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK"));
+    assertThat(firstAnswer).isNotNull();
+    assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value())
+        .isEqualTo("Explicit goal");
+    assertThat(state.removedGeneratedFiles).contains(workflow.id());
 
-        Map<String, Object> wrongId = new LinkedHashMap<>(valid);
-        wrongId.put("questionId", "agent-mediated/sut_and_endpoints");
-        assertCode("QA_QUESTION_ID_MISMATCH",
-            () -> execute("scenario_workflow_answer_submit", wrongId));
+    when(exchange.createElicitation(any()))
+        .thenReturn(
+            new McpSchema.ElicitResult(
+                McpSchema.ElicitResult.Action.ACCEPT,
+                Map.of(
+                    "disposition",
+                    "USER_CONFIRMED_SOURCE",
+                    "answer",
+                    "Use the contract",
+                    "sourceName",
+                    "openapi.yaml",
+                    "sourceDigest",
+                    SHA)));
+    execute(
+        "scenario_workflow_answer",
+        Map.of(
+            "workflowId",
+            workflow.id(),
+            "expectedRevision",
+            1,
+            "topic",
+            "JOURNEYS_SCHEMAS_AND_EXPECTATIONS"));
+    assertThat(
+            workflow
+                .requirements()
+                .get(QaRequirementTopic.JOURNEYS_SCHEMAS_AND_EXPECTATIONS)
+                .confirmedSource()
+                .digest())
+        .isEqualTo(SHA);
+    assertThat(
+            workflow
+                .requirements()
+                .get(QaRequirementTopic.JOURNEYS_SCHEMAS_AND_EXPECTATIONS)
+                .provenance()
+                .requestedSchemaDigest())
+        .isNotEqualTo(
+            "sha256:" + "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  }
 
-        Map<String, Object> wrongDigest = new LinkedHashMap<>(valid);
-        wrongDigest.put("requestedSchemaDigest", SHA);
-        assertCode("QA_QUESTION_SCHEMA_MISMATCH",
-            () -> execute("scenario_workflow_answer_submit", wrongDigest));
+  @Test
+  void recordsAnExplicitAgentMediatedAnswerWithoutFormElicitation() {
+    when(exchange.getClientCapabilities()).thenReturn(null);
+    Object created = execute("agent_session_create", Map.of());
+    String sessionId = textField(created, "agentSessionId");
+    Object workflowCreated =
+        execute(
+            "scenario_workflow_create",
+            Map.of("agentSessionId", sessionId, "expectedSessionRevision", 0));
+    String workflowId = textField(workflowCreated, "workflowId");
 
-        Map<String, Object> stale = new LinkedHashMap<>(valid);
-        stale.put("expectedRevision", 1);
-        assertCode("WORKFLOW_VERSION_CONFLICT",
-            () -> execute("scenario_workflow_answer_submit", stale));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> question =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_question",
+                Map.of("workflowId", workflowId, "topic", "GOAL_AND_RISK"));
 
-        assertThat(workflow.revision()).isZero();
-        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value()).isNull();
-    }
+    assertThat(question)
+        .containsEntry("workflowId", workflowId)
+        .containsEntry("workflowRevision", 0L)
+        .containsEntry("topic", "GOAL_AND_RISK")
+        .containsEntry("captureMode", "AGENT_MEDIATED")
+        .containsEntry(
+            "message", "What goal, risks, scope, and out-of-scope behaviour must this test cover?");
+    assertThat(question.get("questionId")).isEqualTo("agent-mediated/goal_and_risk");
+    assertThat(question.get("requestedSchemaDigest")).asString().matches("sha256:[0-9a-f]{64}");
+    assertThat(question.get("responseSchema")).isInstanceOf(Map.class);
 
-    @Test
-    void appliesTheSameDispositionAndSourceRulesToAgentMediatedAnswers() {
-        ScenarioWorkflow workflow = workflow("wf-mediated-source");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> question = (Map<String, Object>) execute("scenario_workflow_question", Map.of(
-            "workflowId", workflow.id(), "topic", "JOURNEYS_SCHEMAS_AND_EXPECTATIONS"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> submitted =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_answer_submit",
+                Map.of(
+                    "workflowId",
+                    workflowId,
+                    "expectedRevision",
+                    question.get("workflowRevision"),
+                    "topic",
+                    "GOAL_AND_RISK",
+                    "questionId",
+                    question.get("questionId"),
+                    "requestedSchemaDigest",
+                    question.get("requestedSchemaDigest"),
+                    "disposition",
+                    "USER_PROVIDED",
+                    "answer",
+                    "Provision cardholders for later performance testing."));
 
-        Map<String, Object> missingSource = mediatedAnswer(
-            question, "USER_CONFIRMED_SOURCE", "Use the referenced contract");
-        assertCode("TOOL_INPUT_REQUIRED",
-            () -> execute("scenario_workflow_answer_submit", missingSource));
+    assertThat(submitted).containsEntry("workflowId", workflowId).containsEntry("revision", 1L);
+    var answer =
+        state.workflows.get(workflowId).requirements().get(QaRequirementTopic.GOAL_AND_RISK);
+    assertThat(answer.value()).isEqualTo("Provision cardholders for later performance testing.");
+    assertThat(answer.provenance().questionId()).isEqualTo("agent-mediated/goal_and_risk");
+    assertThat(answer.provenance().requestedSchemaDigest())
+        .isEqualTo(question.get("requestedSchemaDigest"));
+    assertThat(answer.provenance().acceptedContentDigest()).matches("sha256:[0-9a-f]{64}");
+    verify(exchange, never()).createElicitation(any());
+  }
 
-        Map<String, Object> forbiddenSource = mediatedAnswer(question, "NOT_APPLICABLE", "No schema applies");
-        forbiddenSource.put("sourceName", "openapi.yaml");
-        forbiddenSource.put("sourceDigest", SHA);
-        assertCode("REQUIREMENT_SOURCE_FORBIDDEN",
-            () -> execute("scenario_workflow_answer_submit", forbiddenSource));
+  @Test
+  void preparesAndAtomicallySubmitsOneExplicitCompactReview() {
+    Object created = execute("agent_session_create", Map.of());
+    String sessionId = textField(created, "agentSessionId");
+    Object workflowCreated =
+        execute(
+            "scenario_workflow_create",
+            Map.of("agentSessionId", sessionId, "expectedSessionRevision", 0));
+    String workflowId = textField(workflowCreated, "workflowId");
+    Map<String, Object> candidate = compactReviewInput(workflowId);
 
-        Map<String, Object> valid = mediatedAnswer(
-            question, "USER_CONFIRMED_SOURCE", "Use the referenced contract");
-        valid.put("sourceName", "openapi.yaml");
-        valid.put("sourceDigest", SHA);
-        execute("scenario_workflow_answer_submit", valid);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> prepared =
+        (Map<String, Object>) execute("scenario_workflow_review_prepare", candidate);
 
-        var answer = workflow.requirements().get(QaRequirementTopic.JOURNEYS_SCHEMAS_AND_EXPECTATIONS);
-        assertThat(answer.confirmedSource().name()).isEqualTo("openapi.yaml");
-        assertThat(answer.confirmedSource().digest()).isEqualTo(SHA);
-    }
+    assertThat(prepared)
+        .containsEntry("workflowId", workflowId)
+        .containsEntry("workflowRevision", 0L)
+        .containsEntry("captureMode", "COMPACT_REVIEW")
+        .containsEntry("reviewId", "compact-review/all-topics");
+    assertThat(prepared.get("message"))
+        .asString()
+        .contains("Review every requirement below", "GOAL_AND_RISK", "Explicit goal");
+    assertThat(prepared.get("requestedSchemaDigest")).asString().matches("sha256:[0-9a-f]{64}");
+    assertThat(prepared.get("answerSetDigest")).asString().matches("sha256:[0-9a-f]{64}");
+    assertThat(prepared)
+        .containsEntry("sourceName", "user requirement narrative")
+        .containsEntry("sourceDigest", SHA);
+    assertThat(prepared.get("answers"))
+        .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+        .hasSize(QaRequirementTopic.values().length);
+    assertThat(state.workflows.get(workflowId).revision()).isZero();
 
-    @Test
-    void preparesWorkflowAndDirectValidationWithExactManifestAndSource() {
-        ScenarioWorkflow workflow = generatedWorkflow("wf-generated", "as-generated");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-generated", AgentSession.open("as-generated", PRINCIPAL, NOW, Duration.ofHours(1)));
-        Map<String, Object> input = bundleInput();
-        input.put("workflowId", workflow.id());
-        input.put("expectedRevision", workflow.revision());
-        ValidationUploadTicket ticket = mock(ValidationUploadTicket.class);
-        when(ticket.id()).thenReturn("uv-test");
-        when(ticket.expiresAt()).thenReturn(NOW.plusSeconds(300));
-        when(uploads.prepareValidationWithCapability(eq(PRINCIPAL), eq(UploadWorkflowBinding.workflow(workflow)), any(), any(), eq(NOW)))
-            .thenReturn(new PreparedUpload<>(ticket, "validation-capability"));
+    Map<String, Object> submission = new LinkedHashMap<>(candidate);
+    submission.put("reviewId", prepared.get("reviewId"));
+    submission.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
+    submission.put("answerSetDigest", prepared.get("answerSetDigest"));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> submitted =
+        (Map<String, Object>) execute("scenario_workflow_review_submit", submission);
 
-        assertThat(json(execute("scenario_bundle_validation_prepare", input)))
-            .contains("\"ticketId\":\"uv-test\"")
-            .contains("\"uploadUrl\":\"http://127.0.0.1:8080/mcp/uploads/uv-test\"")
-            .contains("\"uploadCapability\":\"validation-capability\"")
-            .contains("\"expiresAt\":");
-        ArgumentCaptor<io.pockethive.mcp.domain.BundleFileManifest> manifest =
-            ArgumentCaptor.forClass(io.pockethive.mcp.domain.BundleFileManifest.class);
-        verify(uploads).prepareValidationWithCapability(eq(PRINCIPAL), eq(UploadWorkflowBinding.workflow(workflow)),
-            eq(new SourceMetadata("git@example/repo", COMMIT, "scenarios/sample", SourceVerification.CLIENT_ASSERTED)),
-            manifest.capture(), eq(NOW));
-        assertThat(manifest.getValue().files()).hasSize(1);
-        assertThat(manifest.getValue().files().getFirst().byteCount()).isEqualTo(4);
+    assertThat(submitted)
+        .containsEntry("revision", 1L)
+        .containsEntry("state", io.pockethive.mcp.domain.ScenarioWorkflowState.REVIEW_REQUIRED);
+    ScenarioWorkflow workflow = state.workflows.get(workflowId);
+    assertThat(workflow.requirements().values())
+        .allSatisfy(
+            answer -> {
+              assertThat(answer.provenance().questionId()).startsWith("compact-review/");
+              assertThat(answer.provenance().acceptedContentDigest())
+                  .isEqualTo(prepared.get("answerSetDigest"));
+            });
+    assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value())
+        .isEqualTo("Explicit goal");
+    assertThat(
+            workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).confirmedSource().name())
+        .isEqualTo("user requirement narrative");
+    assertThat(state.removedGeneratedFiles).contains(workflowId);
+  }
 
-        ValidationUploadTicket direct = mock(ValidationUploadTicket.class);
-        when(direct.id()).thenReturn("uv-direct");
-        when(direct.expiresAt()).thenReturn(NOW.plusSeconds(300));
-        when(uploads.prepareDirectValidationWithCapability(eq(PRINCIPAL), any(), any(), eq(NOW)))
-            .thenReturn(new PreparedUpload<>(direct, "direct-capability"));
-        assertThat(json(execute("scenario_bundle_direct_validation_prepare", bundleInput())))
-            .contains("\"ticketId\":\"uv-direct\"")
-            .contains("\"uploadCapability\":\"direct-capability\"");
-        verify(uploads).prepareDirectValidationWithCapability(eq(PRINCIPAL), any(), any(), eq(NOW));
-    }
+  @Test
+  void compactReviewRejectsIncompleteDuplicateStaleAndTamperedEvidenceWithoutMutation() {
+    ScenarioWorkflow workflow = workflow("wf-compact-invalid");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    Map<String, Object> candidate = compactReviewInput(workflow.id());
 
-    @Test
-    void readsReceiptsAttemptsAndPreparesBothPublicationModes() {
-        BundleValidationReceipt directReceipt = receipt(UploadWorkflowBinding.direct());
-        when(uploads.validationReceipt("receipt-a", PRINCIPAL)).thenReturn(directReceipt);
-        Object receiptView = execute("scenario_bundle_validation_receipt_get", Map.of("receiptId", "receipt-a"));
-        assertThat(json(receiptView)).contains("\"receiptId\":\"receipt-a\"")
-            .contains("\"bundleContentDigest\":\"" + SHA + "\"")
-            .contains("\"scenarioId\":\"scenario-a\"")
-            .contains("\"scenarioName\":\"Scenario A\"")
-            .doesNotContain("qa-lead", "issuer.example");
+    Map<String, Object> stalePrepare = new LinkedHashMap<>(candidate);
+    stalePrepare.put("expectedRevision", 1);
+    assertCode(
+        "WORKFLOW_VERSION_CONFLICT",
+        () -> execute("scenario_workflow_review_prepare", stalePrepare));
 
-        PublicationUploadTicket publication = mock(PublicationUploadTicket.class);
-        when(publication.id()).thenReturn("up-test");
-        when(publication.expiresAt()).thenReturn(NOW.plusSeconds(300));
-        when(publication.attemptId()).thenReturn("attempt-a");
-        when(publication.validationReceiptId()).thenReturn("receipt-a");
-        when(publication.mode()).thenReturn(PublicationMode.CREATE);
-        when(uploads.preparePublicationWithCapability(eq(PRINCIPAL), eq("receipt-a"),
-            eq(PublicationMode.CREATE), eq(null), any(), any(), eq(SHA), eq(SHA), eq(NOW)))
-            .thenReturn(new PreparedUpload<>(publication, "publication-capability"));
-        Map<String, Object> create = bundleInput();
-        create.put("validationReceiptId", "receipt-a");
-        create.put("mode", "create");
-        create.put("archiveDigest", SHA);
-        create.put("bundleContentDigest", SHA);
-        assertThat(json(execute("scenario_bundle_publication_prepare", create)))
-            .contains("\"ticketId\":\"up-test\"")
-            .contains("\"uploadCapability\":\"publication-capability\"")
-            .contains("\"attemptId\":\"attempt-a\"")
-            .contains("\"mode\":\"CREATE\"");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> prepared =
+        (Map<String, Object>) execute("scenario_workflow_review_prepare", candidate);
+    Map<String, Object> valid = new LinkedHashMap<>(candidate);
+    valid.put("reviewId", prepared.get("reviewId"));
+    valid.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
+    valid.put("answerSetDigest", prepared.get("answerSetDigest"));
 
-        when(uploads.preparePublicationWithCapability(eq(PRINCIPAL), eq("receipt-a"),
-            eq(PublicationMode.REPLACE), eq("existing"), any(), any(), eq(SHA), eq(SHA), eq(NOW)))
-            .thenReturn(new PreparedUpload<>(publication, "replace-capability"));
-        Map<String, Object> replace = new LinkedHashMap<>(create);
-        replace.put("mode", "REPLACE");
-        replace.put("scenarioId", "existing");
-        when(publication.mode()).thenReturn(PublicationMode.REPLACE);
-        when(publication.scenarioId()).thenReturn("existing");
-        assertThat(json(execute("scenario_bundle_publication_prepare", replace)))
-            .contains("\"mode\":\"REPLACE\"", "\"scenarioId\":\"existing\"");
+    Map<String, Object> wrongId = new LinkedHashMap<>(valid);
+    wrongId.put("reviewId", "compact-review/wrong");
+    assertCode("QA_REVIEW_ID_MISMATCH", () -> execute("scenario_workflow_review_submit", wrongId));
 
-        PublicationAttempt attempt = mock(PublicationAttempt.class);
-        when(attempt.id()).thenReturn("attempt-a");
-        when(attempt.mode()).thenReturn(PublicationMode.CREATE);
-        when(attempt.scenarioId()).thenReturn("scenario-a");
-        when(attempt.expectedContentDigest()).thenReturn(SHA);
-        when(attempt.createdAt()).thenReturn(NOW);
-        when(attempt.state()).thenReturn(PublicationAttemptState.AMBIGUOUS);
-        when(uploads.publicationAttempt("attempt-a", PRINCIPAL)).thenReturn(attempt);
-        when(uploads.reconcile("attempt-a", PRINCIPAL)).thenReturn(attempt);
-        assertThat(json(execute("scenario_bundle_publication_attempt_get", Map.of("attemptId", "attempt-a"))))
-            .contains("\"attemptId\":\"attempt-a\"", "\"state\":\"AMBIGUOUS\"")
-            .doesNotContain("qa-lead", "issuer.example");
-        assertThat(json(execute("scenario_bundle_publication_reconcile", Map.of("attemptId", "attempt-a"))))
-            .contains("\"attemptId\":\"attempt-a\"");
-    }
+    Map<String, Object> wrongSchema = new LinkedHashMap<>(valid);
+    wrongSchema.put("requestedSchemaDigest", SHA);
+    assertCode(
+        "QA_REVIEW_SCHEMA_MISMATCH", () -> execute("scenario_workflow_review_submit", wrongSchema));
 
-    @Test
-    void requiresTheReceiptWorkflowOnlyForWorkflowBoundPublication() {
-        ScenarioWorkflow workflow = workflow("wf-bound");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(uploads.validationReceipt("receipt-a", PRINCIPAL))
-            .thenReturn(receipt(new UploadWorkflowBinding(UploadWorkflowMode.WORKFLOW, workflow.id(), 1, SHA,
-                new io.pockethive.mcp.domain.CapabilityFingerprint(SHA, NOW))));
-        when(uploads.preparePublicationWithCapability(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-            .thenReturn(new PreparedUpload<>(mock(PublicationUploadTicket.class), "publication-capability"));
-        Map<String, Object> input = bundleInput();
-        input.put("validationReceiptId", "receipt-a");
-        input.put("mode", "CREATE");
-        input.put("archiveDigest", SHA);
-        input.put("bundleContentDigest", SHA);
+    Map<String, Object> tampered = new LinkedHashMap<>(valid);
+    tampered.put("answerSetDigest", SHA);
+    assertCode(
+        "QA_REVIEW_ANSWER_SET_MISMATCH",
+        () -> execute("scenario_workflow_review_submit", tampered));
 
-        execute("scenario_bundle_publication_prepare", input);
+    Map<String, Object> stale = new LinkedHashMap<>(valid);
+    stale.put("expectedRevision", 1);
+    assertCode(
+        "WORKFLOW_VERSION_CONFLICT", () -> execute("scenario_workflow_review_submit", stale));
 
-        assertThat(state.findWorkflowCalls).contains(workflow.id());
-    }
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> originalAnswers =
+        (List<Map<String, Object>>) candidate.get("answers");
+    Map<String, Object> incomplete = new LinkedHashMap<>(candidate);
+    incomplete.put("answers", originalAnswers.subList(0, originalAnswers.size() - 1));
+    assertCode(
+        "QA_REVIEW_TOPICS_INCOMPLETE",
+        () -> execute("scenario_workflow_review_prepare", incomplete));
 
-    @Test
-    void rejectsMissingCapabilitiesScopesUnknownHandlersAndMalformedInputExplicitly() {
-        when(exchange.getClientCapabilities()).thenReturn(null);
-        assertThat(execute("agent_session_create", Map.of())).isNotNull();
+    Map<String, Object> duplicate = new LinkedHashMap<>(candidate);
+    List<Map<String, Object>> duplicatedAnswers = new java.util.ArrayList<>(originalAnswers);
+    duplicatedAnswers.set(duplicatedAnswers.size() - 1, originalAnswers.getFirst());
+    duplicate.put("answers", duplicatedAnswers);
+    assertCode(
+        "QA_REVIEW_TOPIC_DUPLICATE", () -> execute("scenario_workflow_review_prepare", duplicate));
 
-        when(exchange.transportContext()).thenReturn(McpTransportContext.create(Map.of(
-            "pockethive.issuer", PRINCIPAL.issuer().toString(), "pockethive.subject", PRINCIPAL.subject(),
-            "pockethive.principalLabel", "qa-lead",
-            "pockethive.clientId", "test-client", "pockethive.scopes", PocketHiveMcpScopes.READ)));
-        assertCode("MCP_SCOPE_REQUIRED", () -> execute("swarm_start", ownerInput()));
+    assertThat(workflow.revision()).isZero();
+    assertThat(workflow.requirements().values())
+        .allSatisfy(answer -> assertThat(answer.value()).isNull());
+  }
 
-        authenticateCaller();
-        assertCode("TOOL_INPUT_REQUIRED", () -> execute("scenario_get", Map.of()));
-        assertCode("TOOL_INPUT_REQUIRED", () -> execute("scenario_get", Map.of("scenarioId", " ")));
-        Object session = execute("agent_session_create", Map.of());
-        assertCode("TOOL_INPUT_INVALID", () -> execute("scenario_workflow_create", Map.of(
-            "agentSessionId", textField(session, "agentSessionId"), "expectedSessionRevision", "many")));
-        assertCode("SOURCE_METADATA_INVALID", () -> execute("scenario_bundle_direct_validation_prepare",
-            Map.of("source", "not-an-object", "fileManifest", manifestInput())));
-        Map<String, Object> invalidSource = bundleInput();
-        invalidSource.put("source", Map.of("repository", "repo", "commit", "abc", "bundlePath", "path",
-            "verification", "VERIFIED_BY_MAGIC"));
-        assertCode("SOURCE_METADATA_INVALID",
-            () -> execute("scenario_bundle_direct_validation_prepare", invalidSource));
-        Map<String, Object> invalidManifest = bundleInput();
-        invalidManifest.put("fileManifest", "not-an-array");
-        assertCode("BUNDLE_MANIFEST_INVALID",
-            () -> execute("scenario_bundle_direct_validation_prepare", invalidManifest));
-        Map<String, Object> invalidEntry = bundleInput();
-        invalidEntry.put("fileManifest", List.of("not-an-object"));
-        assertCode("BUNDLE_MANIFEST_INVALID",
-            () -> execute("scenario_bundle_direct_validation_prepare", invalidEntry));
-    }
+  @Test
+  void compactReviewRecordsUnknownClientAndEverySupportedDisposition() {
+    ScenarioWorkflow workflow = workflow("wf-compact-unknown-client");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(exchange.getClientInfo()).thenReturn(null);
+    List<Map<String, Object>> answers =
+        java.util.Arrays.stream(QaRequirementTopic.values())
+            .map(
+                topic ->
+                    Map.<String, Object>of(
+                        "topic",
+                        topic.name(),
+                        "disposition",
+                        topic == QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT
+                            ? "NOT_APPLICABLE"
+                            : "USER_PROVIDED",
+                        "answer",
+                        "Explicit " + topic.name()))
+            .toList();
+    Map<String, Object> candidate = new LinkedHashMap<>();
+    candidate.put("workflowId", workflow.id());
+    candidate.put("expectedRevision", 0);
+    candidate.put("answers", answers);
 
-    @Test
-    void rejectsUnsafeGeneratedFilesAndInvalidElicitationSourceCombinations() {
-        ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-files", "as-files");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-files", AgentSession.open("as-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> prepared =
+        (Map<String, Object>) execute("scenario_workflow_review_prepare", candidate);
+    candidate.put("reviewId", prepared.get("reviewId"));
+    candidate.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
+    candidate.put("answerSetDigest", prepared.get("answerSetDigest"));
+    execute("scenario_workflow_review_submit", candidate);
 
-        for (Object files : List.of(
+    assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).provenance())
+        .satisfies(
+            provenance -> {
+              assertThat(provenance.declaredClientName()).isEqualTo("unknown");
+              assertThat(provenance.declaredClientVersion()).isEqualTo("unknown");
+            });
+    assertThat(
+            workflow
+                .requirements()
+                .get(QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT)
+                .disposition())
+        .isEqualTo(io.pockethive.mcp.domain.RequirementDisposition.NOT_APPLICABLE);
+  }
+
+  @Test
+  void rejectsNativeAnswersWithoutFormCapabilityAndNeverSwitchesCaptureMode() {
+    ScenarioWorkflow workflow = workflow("wf-native-no-form");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(exchange.getClientCapabilities()).thenReturn(null);
+
+    assertCode(
+        "ELICITATION_CAPABILITY_REQUIRED",
+        () ->
+            execute(
+                "scenario_workflow_answer",
+                Map.of(
+                    "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+
+    assertThat(workflow.revision()).isZero();
+    assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value()).isNull();
+    verify(exchange, never()).createElicitation(any());
+  }
+
+  @Test
+  void rejectsInvalidNativeElicitationResultsAndUnexpectedFields() {
+    ScenarioWorkflow workflow = workflow("wf-invalid-native");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(exchange.createElicitation(any())).thenReturn(null);
+    assertCode(
+        "ELICITATION_RESULT_INVALID",
+        () ->
+            execute(
+                "scenario_workflow_answer",
+                Map.of(
+                    "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+
+    when(exchange.createElicitation(any()))
+        .thenReturn(
+            new McpSchema.ElicitResult(
+                McpSchema.ElicitResult.Action.ACCEPT,
+                Map.of(
+                    "disposition", "USER_PROVIDED", "answer", "Explicit", "unexpected", "value")));
+    assertCode(
+        "QA_RESPONSE_FIELD_UNEXPECTED",
+        () ->
+            execute(
+                "scenario_workflow_answer",
+                Map.of(
+                    "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+    assertThat(workflow.revision()).isZero();
+  }
+
+  @Test
+  void rejectsTamperedOrStaleAgentMediatedQuestionEvidenceWithoutMutation() {
+    ScenarioWorkflow workflow = workflow("wf-mediated-evidence");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> question =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_question",
+                Map.of("workflowId", workflow.id(), "topic", "GOAL_AND_RISK"));
+    Map<String, Object> valid = mediatedAnswer(question, "USER_PROVIDED", "Explicit goal");
+
+    Map<String, Object> wrongId = new LinkedHashMap<>(valid);
+    wrongId.put("questionId", "agent-mediated/sut_and_endpoints");
+    assertCode(
+        "QA_QUESTION_ID_MISMATCH", () -> execute("scenario_workflow_answer_submit", wrongId));
+
+    Map<String, Object> wrongDigest = new LinkedHashMap<>(valid);
+    wrongDigest.put("requestedSchemaDigest", SHA);
+    assertCode(
+        "QA_QUESTION_SCHEMA_MISMATCH",
+        () -> execute("scenario_workflow_answer_submit", wrongDigest));
+
+    Map<String, Object> stale = new LinkedHashMap<>(valid);
+    stale.put("expectedRevision", 1);
+    assertCode(
+        "WORKFLOW_VERSION_CONFLICT", () -> execute("scenario_workflow_answer_submit", stale));
+
+    assertThat(workflow.revision()).isZero();
+    assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value()).isNull();
+  }
+
+  @Test
+  void appliesTheSameDispositionAndSourceRulesToAgentMediatedAnswers() {
+    ScenarioWorkflow workflow = workflow("wf-mediated-source");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> question =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_question",
+                Map.of("workflowId", workflow.id(), "topic", "JOURNEYS_SCHEMAS_AND_EXPECTATIONS"));
+
+    Map<String, Object> missingSource =
+        mediatedAnswer(question, "USER_CONFIRMED_SOURCE", "Use the referenced contract");
+    assertCode(
+        "TOOL_INPUT_REQUIRED", () -> execute("scenario_workflow_answer_submit", missingSource));
+
+    Map<String, Object> forbiddenSource =
+        mediatedAnswer(question, "NOT_APPLICABLE", "No schema applies");
+    forbiddenSource.put("sourceName", "openapi.yaml");
+    forbiddenSource.put("sourceDigest", SHA);
+    assertCode(
+        "REQUIREMENT_SOURCE_FORBIDDEN",
+        () -> execute("scenario_workflow_answer_submit", forbiddenSource));
+
+    Map<String, Object> valid =
+        mediatedAnswer(question, "USER_CONFIRMED_SOURCE", "Use the referenced contract");
+    valid.put("sourceName", "openapi.yaml");
+    valid.put("sourceDigest", SHA);
+    execute("scenario_workflow_answer_submit", valid);
+
+    var answer = workflow.requirements().get(QaRequirementTopic.JOURNEYS_SCHEMAS_AND_EXPECTATIONS);
+    assertThat(answer.confirmedSource().name()).isEqualTo("openapi.yaml");
+    assertThat(answer.confirmedSource().digest()).isEqualTo(SHA);
+  }
+
+  @Test
+  void preparesWorkflowAndDirectValidationWithExactManifestAndSource() {
+    ScenarioWorkflow workflow = generatedWorkflow("wf-generated", "as-generated");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-generated", AgentSession.open("as-generated", PRINCIPAL, NOW, Duration.ofHours(1)));
+    Map<String, Object> input = bundleInput();
+    input.put("workflowId", workflow.id());
+    input.put("expectedRevision", workflow.revision());
+    ValidationUploadTicket ticket = mock(ValidationUploadTicket.class);
+    when(ticket.id()).thenReturn("uv-test");
+    when(ticket.expiresAt()).thenReturn(NOW.plusSeconds(300));
+    when(uploads.prepareValidationWithCapability(
+            eq(PRINCIPAL), eq(UploadWorkflowBinding.workflow(workflow)), any(), any(), eq(NOW)))
+        .thenReturn(new PreparedUpload<>(ticket, "validation-capability"));
+
+    assertThat(json(execute("scenario_bundle_validation_prepare", input)))
+        .contains("\"ticketId\":\"uv-test\"")
+        .contains("\"uploadUrl\":\"http://127.0.0.1:8080/mcp/uploads/uv-test\"")
+        .contains("\"uploadCapability\":\"validation-capability\"")
+        .contains("\"expiresAt\":");
+    ArgumentCaptor<io.pockethive.mcp.domain.BundleFileManifest> manifest =
+        ArgumentCaptor.forClass(io.pockethive.mcp.domain.BundleFileManifest.class);
+    verify(uploads)
+        .prepareValidationWithCapability(
+            eq(PRINCIPAL),
+            eq(UploadWorkflowBinding.workflow(workflow)),
+            eq(
+                new SourceMetadata(
+                    "git@example/repo",
+                    COMMIT,
+                    "scenarios/sample",
+                    SourceVerification.CLIENT_ASSERTED)),
+            manifest.capture(),
+            eq(NOW));
+    assertThat(manifest.getValue().files()).hasSize(1);
+    assertThat(manifest.getValue().files().getFirst().byteCount()).isEqualTo(4);
+
+    ValidationUploadTicket direct = mock(ValidationUploadTicket.class);
+    when(direct.id()).thenReturn("uv-direct");
+    when(direct.expiresAt()).thenReturn(NOW.plusSeconds(300));
+    when(uploads.prepareDirectValidationWithCapability(eq(PRINCIPAL), any(), any(), eq(NOW)))
+        .thenReturn(new PreparedUpload<>(direct, "direct-capability"));
+    assertThat(json(execute("scenario_bundle_direct_validation_prepare", bundleInput())))
+        .contains("\"ticketId\":\"uv-direct\"")
+        .contains("\"uploadCapability\":\"direct-capability\"");
+    verify(uploads).prepareDirectValidationWithCapability(eq(PRINCIPAL), any(), any(), eq(NOW));
+  }
+
+  @Test
+  void readsReceiptsAttemptsAndPreparesBothPublicationModes() {
+    BundleValidationReceipt directReceipt = receipt(UploadWorkflowBinding.direct());
+    when(uploads.validationReceipt("receipt-a", PRINCIPAL)).thenReturn(directReceipt);
+    Object receiptView =
+        execute("scenario_bundle_validation_receipt_get", Map.of("receiptId", "receipt-a"));
+    assertThat(json(receiptView))
+        .contains("\"receiptId\":\"receipt-a\"")
+        .contains("\"bundleContentDigest\":\"" + SHA + "\"")
+        .contains("\"scenarioId\":\"scenario-a\"")
+        .contains("\"scenarioName\":\"Scenario A\"")
+        .doesNotContain("qa-lead", "issuer.example");
+
+    PublicationUploadTicket publication = mock(PublicationUploadTicket.class);
+    when(publication.id()).thenReturn("up-test");
+    when(publication.expiresAt()).thenReturn(NOW.plusSeconds(300));
+    when(publication.attemptId()).thenReturn("attempt-a");
+    when(publication.validationReceiptId()).thenReturn("receipt-a");
+    when(publication.mode()).thenReturn(PublicationMode.CREATE);
+    when(uploads.preparePublicationWithCapability(
+            eq(PRINCIPAL),
+            eq("receipt-a"),
+            eq(PublicationMode.CREATE),
+            eq(null),
+            any(),
+            any(),
+            eq(SHA),
+            eq(SHA),
+            eq(NOW)))
+        .thenReturn(new PreparedUpload<>(publication, "publication-capability"));
+    Map<String, Object> create = bundleInput();
+    create.put("validationReceiptId", "receipt-a");
+    create.put("mode", "create");
+    create.put("archiveDigest", SHA);
+    create.put("bundleContentDigest", SHA);
+    assertThat(json(execute("scenario_bundle_publication_prepare", create)))
+        .contains("\"ticketId\":\"up-test\"")
+        .contains("\"uploadCapability\":\"publication-capability\"")
+        .contains("\"attemptId\":\"attempt-a\"")
+        .contains("\"mode\":\"CREATE\"");
+
+    when(uploads.preparePublicationWithCapability(
+            eq(PRINCIPAL),
+            eq("receipt-a"),
+            eq(PublicationMode.REPLACE),
+            eq("existing"),
+            any(),
+            any(),
+            eq(SHA),
+            eq(SHA),
+            eq(NOW)))
+        .thenReturn(new PreparedUpload<>(publication, "replace-capability"));
+    Map<String, Object> replace = new LinkedHashMap<>(create);
+    replace.put("mode", "REPLACE");
+    replace.put("scenarioId", "existing");
+    when(publication.mode()).thenReturn(PublicationMode.REPLACE);
+    when(publication.scenarioId()).thenReturn("existing");
+    assertThat(json(execute("scenario_bundle_publication_prepare", replace)))
+        .contains("\"mode\":\"REPLACE\"", "\"scenarioId\":\"existing\"");
+
+    PublicationAttempt attempt = mock(PublicationAttempt.class);
+    when(attempt.id()).thenReturn("attempt-a");
+    when(attempt.mode()).thenReturn(PublicationMode.CREATE);
+    when(attempt.scenarioId()).thenReturn("scenario-a");
+    when(attempt.expectedContentDigest()).thenReturn(SHA);
+    when(attempt.createdAt()).thenReturn(NOW);
+    when(attempt.state()).thenReturn(PublicationAttemptState.AMBIGUOUS);
+    when(uploads.publicationAttempt("attempt-a", PRINCIPAL)).thenReturn(attempt);
+    when(uploads.reconcile("attempt-a", PRINCIPAL)).thenReturn(attempt);
+    assertThat(
+            json(
+                execute(
+                    "scenario_bundle_publication_attempt_get", Map.of("attemptId", "attempt-a"))))
+        .contains("\"attemptId\":\"attempt-a\"", "\"state\":\"AMBIGUOUS\"")
+        .doesNotContain("qa-lead", "issuer.example");
+    assertThat(
+            json(
+                execute("scenario_bundle_publication_reconcile", Map.of("attemptId", "attempt-a"))))
+        .contains("\"attemptId\":\"attempt-a\"");
+  }
+
+  @Test
+  void requiresTheReceiptWorkflowOnlyForWorkflowBoundPublication() {
+    ScenarioWorkflow workflow = workflow("wf-bound");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(uploads.validationReceipt("receipt-a", PRINCIPAL))
+        .thenReturn(
+            receipt(
+                new UploadWorkflowBinding(
+                    UploadWorkflowMode.WORKFLOW,
+                    workflow.id(),
+                    1,
+                    SHA,
+                    new io.pockethive.mcp.domain.CapabilityFingerprint(SHA, NOW))));
+    when(uploads.preparePublicationWithCapability(
+            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(
+            new PreparedUpload<>(mock(PublicationUploadTicket.class), "publication-capability"));
+    Map<String, Object> input = bundleInput();
+    input.put("validationReceiptId", "receipt-a");
+    input.put("mode", "CREATE");
+    input.put("archiveDigest", SHA);
+    input.put("bundleContentDigest", SHA);
+
+    execute("scenario_bundle_publication_prepare", input);
+
+    assertThat(state.findWorkflowCalls).contains(workflow.id());
+  }
+
+  @Test
+  void rejectsMissingCapabilitiesScopesUnknownHandlersAndMalformedInputExplicitly() {
+    when(exchange.getClientCapabilities()).thenReturn(null);
+    assertThat(execute("agent_session_create", Map.of())).isNotNull();
+
+    when(exchange.transportContext())
+        .thenReturn(
+            McpTransportContext.create(
+                Map.of(
+                    "pockethive.issuer",
+                    PRINCIPAL.issuer().toString(),
+                    "pockethive.subject",
+                    PRINCIPAL.subject(),
+                    "pockethive.principalLabel",
+                    "qa-lead",
+                    "pockethive.clientId",
+                    "test-client",
+                    "pockethive.scopes",
+                    PocketHiveMcpScopes.READ)));
+    assertCode("MCP_SCOPE_REQUIRED", () -> execute("swarm_start", ownerInput()));
+
+    authenticateCaller();
+    assertCode("TOOL_INPUT_REQUIRED", () -> execute("scenario_get", Map.of()));
+    assertCode("TOOL_INPUT_REQUIRED", () -> execute("scenario_get", Map.of("scenarioId", " ")));
+    Object session = execute("agent_session_create", Map.of());
+    assertCode(
+        "TOOL_INPUT_INVALID",
+        () ->
+            execute(
+                "scenario_workflow_create",
+                Map.of(
+                    "agentSessionId",
+                    textField(session, "agentSessionId"),
+                    "expectedSessionRevision",
+                    "many")));
+    assertCode(
+        "SOURCE_METADATA_INVALID",
+        () ->
+            execute(
+                "scenario_bundle_direct_validation_prepare",
+                Map.of("source", "not-an-object", "fileManifest", manifestInput())));
+    Map<String, Object> invalidSource = bundleInput();
+    invalidSource.put(
+        "source",
+        Map.of(
+            "repository",
+            "repo",
+            "commit",
+            "abc",
+            "bundlePath",
+            "path",
+            "verification",
+            "VERIFIED_BY_MAGIC"));
+    assertCode(
+        "SOURCE_METADATA_INVALID",
+        () -> execute("scenario_bundle_direct_validation_prepare", invalidSource));
+    Map<String, Object> invalidManifest = bundleInput();
+    invalidManifest.put("fileManifest", "not-an-array");
+    assertCode(
+        "BUNDLE_MANIFEST_INVALID",
+        () -> execute("scenario_bundle_direct_validation_prepare", invalidManifest));
+    Map<String, Object> invalidEntry = bundleInput();
+    invalidEntry.put("fileManifest", List.of("not-an-object"));
+    assertCode(
+        "BUNDLE_MANIFEST_INVALID",
+        () -> execute("scenario_bundle_direct_validation_prepare", invalidEntry));
+  }
+
+  @Test
+  void rejectsUnsafeGeneratedFilesAndInvalidElicitationSourceCombinations() {
+    ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-files", "as-files");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-files", AgentSession.open("as-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+
+    for (Object files :
+        List.of(
             List.of(),
             List.of("not-an-object"),
             List.of(Map.of("path", "scenario.yaml", "content", 42)),
@@ -624,509 +859,717 @@ class McpToolExecutionIntegrationTest {
             List.of(Map.of("path", " scenario.yaml", "content", "x")),
             List.of(Map.of("path", "scenario.yaml ", "content", "x")),
             List.of(Map.of("path", "bad\\path", "content", "x")))) {
-            assertThatThrownBy(() -> execute("scenario_workflow_generate", Map.of(
-                "workflowId", workflow.id(), "expectedRevision", workflow.revision(), "files", files)))
-                .isInstanceOf(ToolExecutionException.class);
-        }
-
-        ScenarioWorkflow answer = workflow("wf-source-fields");
-        state.workflows.put(answer.id(), answer);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(exchange.createElicitation(any())).thenReturn(new McpSchema.ElicitResult(
-            McpSchema.ElicitResult.Action.ACCEPT,
-            Map.of("disposition", "USER_PROVIDED", "answer", "answer", "sourceName", "forbidden")));
-        assertCode("REQUIREMENT_SOURCE_FORBIDDEN", () -> execute("scenario_workflow_answer", Map.of(
-            "workflowId", answer.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
-
-        when(exchange.createElicitation(any())).thenReturn(new McpSchema.ElicitResult(
-            McpSchema.ElicitResult.Action.ACCEPT,
-            Map.of("disposition", "NOT_APPLICABLE", "answer", "not required", "sourceDigest", SHA)));
-        assertCode("REQUIREMENT_SOURCE_FORBIDDEN", () -> execute("scenario_workflow_answer", Map.of(
-            "workflowId", answer.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
-
-        when(exchange.createElicitation(any())).thenReturn(accepted("INFERRED", "not allowed"));
-        assertCode("REQUIREMENT_DISPOSITION_INVALID", () -> execute("scenario_workflow_answer", Map.of(
-            "workflowId", answer.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+      assertThatThrownBy(
+              () ->
+                  execute(
+                      "scenario_workflow_generate",
+                      Map.of(
+                          "workflowId",
+                          workflow.id(),
+                          "expectedRevision",
+                          workflow.revision(),
+                          "files",
+                          files)))
+          .isInstanceOf(ToolExecutionException.class);
     }
 
-    @Test
-    void preservesGeneratedTextExactlyIncludingWhitespaceAndEmptyFiles() {
-        ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-exact-files", "as-exact-files");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-exact-files",
-            AgentSession.open("as-exact-files", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
-            .thenReturn(Map.of("fingerprint", "cap-a"));
+    ScenarioWorkflow answer = workflow("wf-source-fields");
+    state.workflows.put(answer.id(), answer);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(exchange.createElicitation(any()))
+        .thenReturn(
+            new McpSchema.ElicitResult(
+                McpSchema.ElicitResult.Action.ACCEPT,
+                Map.of(
+                    "disposition",
+                    "USER_PROVIDED",
+                    "answer",
+                    "answer",
+                    "sourceName",
+                    "forbidden")));
+    assertCode(
+        "REQUIREMENT_SOURCE_FORBIDDEN",
+        () ->
+            execute(
+                "scenario_workflow_answer",
+                Map.of(
+                    "workflowId", answer.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> generated = (Map<String, Object>) execute("scenario_workflow_generate", Map.of(
-            "workflowId", workflow.id(),
-            "expectedRevision", workflow.revision(),
-            "files", List.of(
-                Map.of("path", "empty.txt", "content", ""),
-                Map.of("path", "templates/request.txt", "content", "  leading\ntrailing  \n"))));
+    when(exchange.createElicitation(any()))
+        .thenReturn(
+            new McpSchema.ElicitResult(
+                McpSchema.ElicitResult.Action.ACCEPT,
+                Map.of(
+                    "disposition",
+                    "NOT_APPLICABLE",
+                    "answer",
+                    "not required",
+                    "sourceDigest",
+                    SHA)));
+    assertCode(
+        "REQUIREMENT_SOURCE_FORBIDDEN",
+        () ->
+            execute(
+                "scenario_workflow_answer",
+                Map.of(
+                    "workflowId", answer.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
 
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
-        assertThat(files).containsExactly(
-            Map.of("path", "empty.txt", "content", "", "sha256",
+    when(exchange.createElicitation(any())).thenReturn(accepted("INFERRED", "not allowed"));
+    assertCode(
+        "REQUIREMENT_DISPOSITION_INVALID",
+        () ->
+            execute(
+                "scenario_workflow_answer",
+                Map.of(
+                    "workflowId", answer.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+  }
+
+  @Test
+  void preservesGeneratedTextExactlyIncludingWhitespaceAndEmptyFiles() {
+    ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-exact-files", "as-exact-files");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-exact-files", AgentSession.open("as-exact-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
+        .thenReturn(Map.of("fingerprint", "cap-a"));
+
+    @SuppressWarnings("unchecked")
+    Map<String, Object> generated =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_generate",
+                Map.of(
+                    "workflowId", workflow.id(),
+                    "expectedRevision", workflow.revision(),
+                    "files",
+                        List.of(
+                            Map.of("path", "empty.txt", "content", ""),
+                            Map.of(
+                                "path",
+                                "templates/request.txt",
+                                "content",
+                                "  leading\ntrailing  \n"))));
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
+    assertThat(files)
+        .containsExactly(
+            Map.of(
+                "path",
+                "empty.txt",
+                "content",
+                "",
+                "sha256",
                 "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-            Map.of("path", "templates/request.txt", "content", "  leading\ntrailing  \n", "sha256",
+            Map.of(
+                "path",
+                "templates/request.txt",
+                "content",
+                "  leading\ntrailing  \n",
+                "sha256",
                 "sha256:dad8d8c12ed46c6ddc48b31f103d94d1a12af1df89492ffc9c94e27214771ec3"));
-    }
+  }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("oauthAuthoringProfiles")
-    void preservesOAuthProfilesAndBearerReferencesAsExactProposedFiles(String name, String profile) throws Exception {
-        ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-oauth-files", "as-oauth-files");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-oauth-files",
-            AgentSession.open("as-oauth-files", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
-            .thenReturn(Map.of("fingerprint", "cap-oauth"));
-        String requestTemplate = """
-            protocol: HTTP
-            serviceId: default
-            callId: accounts
-            method: GET
-            pathTemplate: /accounts
-            authRef:
-              profileId: "tenant:api"
-              applyAs: HTTP_AUTHORIZATION_BEARER
-            """;
-        Map<String, String> authored = Map.of(
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("oauthAuthoringProfiles")
+  void preservesOAuthProfilesAndBearerReferencesAsExactProposedFiles(String name, String profile)
+      throws Exception {
+    ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-oauth-files", "as-oauth-files");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-oauth-files", AgentSession.open("as-oauth-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
+        .thenReturn(Map.of("fingerprint", "cap-oauth"));
+    String requestTemplate =
+        """
+        protocol: HTTP
+        serviceId: default
+        callId: accounts
+        method: GET
+        pathTemplate: /accounts
+        authRef:
+          profileId: "tenant:api"
+          applyAs: HTTP_AUTHORIZATION_BEARER
+        """;
+    Map<String, String> authored =
+        Map.of(
             "authProfiles.yaml", profile,
             "templates/http/default/accounts.yaml", requestTemplate);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> generated = (Map<String, Object>) execute("scenario_workflow_generate", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", workflow.revision(),
-            "files", authored.entrySet().stream()
-                .map(entry -> Map.of("path", entry.getKey(), "content", entry.getValue())).toList()));
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
-
-        assertThat(files).extracting(file -> file.get("path"))
-            .containsExactly("authProfiles.yaml", "templates/http/default/accounts.yaml");
-        for (Map<String, Object> file : files) {
-            String expected = authored.get(file.get("path"));
-            assertThat(file.get("content")).isEqualTo(expected);
-            assertThat(file.get("sha256")).isEqualTo("sha256:" + java.util.HexFormat.of().formatHex(
-                MessageDigest.getInstance("SHA-256").digest(expected.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
-        }
-        assertThat(state.generatedFiles.get(workflow.id())).isEqualTo(files);
-        assertThat(workflow.state().name()).isEqualTo("GENERATED");
-        assertThat(generated).doesNotContainKeys("validationReceiptId", "receiptId");
-        org.mockito.Mockito.verifyNoInteractions(uploads);
-    }
-
-    private static java.util.stream.Stream<Arguments> oauthAuthoringProfiles() {
-        String shared = """
-            profiles:
-              "tenant:api":
-                type: %s
-                storage:
-                  mode: REDIS
-                  tokenKey: tenant-api
-                tokenUrl: https://issuer.example.test/oauth/token
-                clientId: " client+&=%%é "
-            """;
-        return java.util.stream.Stream.of(
-            Arguments.of("signed empty scopes and file reference", shared.formatted("OAUTH2_HTTP_SIGNATURE") + """
-                    keyId: " key-01 +/= "
-                    privateKey:
-                      file: /run/secrets/oauth-signing-key.pem
-                    scopes: []
-                """),
-            Arguments.of("signed scopes, audience and env reference", shared.formatted("oauth2-http-signature") + """
-                    keyId: provider-key-02
-                    privateKey:
-                      env: OAUTH_SIGNING_PRIVATE_KEY
-                    scopes: [accounts.read, payments.write]
-                    audience: "https://api.example.test/resource?a=+&b=%C3%A9"
-                """),
-            Arguments.of("ordinary client credentials", shared.formatted("OAUTH2_CLIENT_CREDENTIALS") + """
-                    clientSecret:
-                      env: ORDINARY_CLIENT_SECRET
-                    scope: accounts.read
-                """),
-            Arguments.of("ordinary password grant", shared.formatted("OAUTH2_PASSWORD_GRANT") + """
-                    username: example-user
-                    password:
-                      file: /run/secrets/ordinary-password
-                    scope: accounts.read
-                """));
-    }
-
-    @Test
-    void rejectsDuplicateGeneratedFilePaths() {
-        ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-duplicate-files", "as-duplicate-files");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-duplicate-files",
-            AgentSession.open("as-duplicate-files", PRINCIPAL, NOW, Duration.ofHours(1)));
-
-        assertCode("BUNDLE_FILE_PATH_DUPLICATE", () -> execute("scenario_workflow_generate", Map.of(
-            "workflowId", workflow.id(),
-            "expectedRevision", workflow.revision(),
-            "files", List.of(
-                Map.of("path", "scenario.yaml", "content", "first"),
-                Map.of("path", "scenario.yaml", "content", "second")))));
-    }
-
-    @Test
-    void hidesForeignAndMissingStateAndPersistsExpiry() {
-        PrincipalKey foreign = new PrincipalKey(PRINCIPAL.issuer(), "other");
-        state.sessions.put("foreign", AgentSession.open("foreign", foreign, NOW, Duration.ofHours(1)));
-        state.workflows.put("foreign-wf", ScenarioWorkflow.create("foreign-wf", "foreign", foreign));
-        assertCode("AGENT_SESSION_NOT_FOUND",
-            () -> execute("agent_session_get", Map.of("agentSessionId", "foreign")));
-        assertCode("AGENT_SESSION_NOT_FOUND",
-            () -> execute("agent_session_get", Map.of("agentSessionId", "missing")));
-        assertCode("SCENARIO_WORKFLOW_NOT_FOUND",
-            () -> execute("scenario_workflow_get", Map.of("workflowId", "foreign-wf")));
-        assertCode("SCENARIO_WORKFLOW_NOT_FOUND",
-            () -> execute("scenario_workflow_get", Map.of("workflowId", "missing")));
-
-        AgentSession expired = AgentSession.open("expired", PRINCIPAL, NOW.minus(Duration.ofHours(2)), Duration.ofHours(1));
-        state.sessions.put(expired.id(), expired);
-        execute("agent_session_get", Map.of("agentSessionId", expired.id()));
-        assertThat(expired.state().name()).isEqualTo("EXPIRED");
-        assertThat(state.savedSessions).contains(expired.id());
-        assertThat(state.maintenanceCalls).isPositive();
-        ScenarioWorkflow workflow = ScenarioWorkflow.create("wf-expired", expired.id(), PRINCIPAL);
-        state.workflows.put(workflow.id(), workflow);
-        assertCode("AGENT_SESSION_NOT_OPEN", () -> execute("scenario_workflow_cancel", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", 0)));
-    }
-
-    @Test
-    void rejectsValidationWhenRevisionOrStateDoesNotMatch() {
-        ScenarioWorkflow workflow = workflow("wf-validation");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        Map<String, Object> input = bundleInput();
-        input.put("workflowId", workflow.id());
-        input.put("expectedRevision", 99);
-        assertCode("WORKFLOW_VERSION_CONFLICT", () -> execute("scenario_bundle_validation_prepare", input));
-        input.put("expectedRevision", 0);
-        assertCode("WORKFLOW_NOT_GENERATED", () -> execute("scenario_bundle_validation_prepare", input));
-        verify(uploads, never()).prepareValidationWithCapability(any(), any(), any(), any(), any());
-    }
-
-    @Test
-    void normalizesPublicationIntentFailuresToOneTypedError() {
-        when(uploads.validationReceipt("receipt-a", PRINCIPAL)).thenReturn(receipt(UploadWorkflowBinding.direct()));
-        Map<String, Object> input = bundleInput();
-        input.put("validationReceiptId", "receipt-a");
-        input.put("mode", "UPSERT");
-        input.put("archiveDigest", SHA);
-        input.put("bundleContentDigest", SHA);
-
-        assertCode("PUBLICATION_INTENT_INVALID", () -> execute("scenario_bundle_publication_prepare", input));
-    }
-
-    @Test
-    void usesExplicitUnknownClientIdentityWhenTheClientOmitsImplementationMetadata() {
-        ScenarioWorkflow workflow = workflow("wf-unknown-client");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(exchange.getClientInfo()).thenReturn(null);
-        when(exchange.createElicitation(any())).thenReturn(accepted("USER_PROVIDED", "explicit"));
-
-        execute("scenario_workflow_answer", Map.of(
-            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK"));
-
-        var provenance = workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).provenance();
-        assertThat(provenance.declaredClientName()).isEqualTo("unknown");
-        assertThat(provenance.declaredClientVersion()).isEqualTo("unknown");
-    }
-
-    @Test
-    void serializationAndRequiredDigestProviderFailuresAreExplicit() throws Exception {
-        ScenarioWorkflow workflow = workflow("wf-failure");
-        state.workflows.put(workflow.id(), workflow);
-        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
-        when(exchange.createElicitation(any())).thenReturn(accepted("USER_PROVIDED", "explicit"));
-
-        ObjectMapper failingMapper = mock(ObjectMapper.class);
-        when(failingMapper.writeValueAsString(any())).thenThrow(new JsonProcessingException("cannot serialize") { });
-        McpToolExecutor serialization = newExecutor(failingMapper);
-        assertCode("TOOL_RESULT_SERIALIZATION_FAILED", () -> serialization.execute(
-            catalogue.requireTool("scenario_workflow_answer"), exchange,
-            Map.of("workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
-
-        try (MockedStatic<MessageDigest> digests = mockStatic(MessageDigest.class)) {
-            digests.when(() -> MessageDigest.getInstance("SHA-256"))
-                .thenThrow(new NoSuchAlgorithmException("missing"));
-            assertThatThrownBy(() -> execute("scenario_workflow_answer", Map.of(
-                "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("SHA-256 is required by Java");
-        }
-    }
-
-    private Object execute(String toolId, Map<String, Object> input) {
-        return executor.execute(catalogue.requireTool(toolId), exchange, input);
-    }
-
-    private McpToolExecutor newExecutor(ObjectMapper objectMapper) {
-        PocketHiveMcpProperties configuration = properties();
-        Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
-        WorkflowAccess workflowAccess = new WorkflowAccess(state, configuration, fixedClock);
-        WorkflowProjection workflowProjection = new WorkflowProjection();
-        BundleToolExecutor bundleTools = new BundleToolExecutor(
-            uploads, configuration, workflowAccess, fixedClock);
-        AgentSessionToolExecutor sessionTools = new AgentSessionToolExecutor(
-            workflowAccess, configuration, state, workflowProjection, fixedClock);
-        ScenarioWorkflowToolExecutor workflowTools = new ScenarioWorkflowToolExecutor(
-            workflowAccess, owners, configuration, objectMapper, state, workflowProjection, fixedClock);
-        return new McpToolExecutor(
-            new ScenarioManagerToolExecutor(owners),
-            new OrchestratorToolExecutor(owners, readiness),
-            new QaWorkflowToolExecutor(bundleTools, sessionTools, workflowTools));
-    }
-
-    private static Map<String, Object> mediatedAnswer(Map<String, Object> question,
-                                                       String disposition, String answer) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("workflowId", question.get("workflowId"));
-        result.put("expectedRevision", question.get("workflowRevision"));
-        result.put("topic", String.valueOf(question.get("topic")));
-        result.put("questionId", question.get("questionId"));
-        result.put("requestedSchemaDigest", question.get("requestedSchemaDigest"));
-        result.put("disposition", disposition);
-        result.put("answer", answer);
-        return result;
-    }
-
-    private static Map<String, Object> compactReviewInput(String workflowId) {
-        List<Map<String, Object>> answers = java.util.Arrays.stream(QaRequirementTopic.values())
-            .map(topic -> Map.<String, Object>of(
-                "topic", topic.name(),
-                "disposition", "USER_CONFIRMED_SOURCE",
-                "answer", topic == QaRequirementTopic.GOAL_AND_RISK
-                    ? "Explicit goal"
-                    : "Explicit " + topic.name()))
-            .toList();
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("workflowId", workflowId);
-        input.put("expectedRevision", 0);
-        input.put("sourceName", "user requirement narrative");
-        input.put("sourceDigest", SHA);
-        input.put("answers", answers);
-        return input;
-    }
-
-    private static McpSchema.ElicitResult accepted(String disposition, String answer) {
-        return new McpSchema.ElicitResult(McpSchema.ElicitResult.Action.ACCEPT,
-            Map.of("disposition", disposition, "answer", answer));
-    }
-
-    private static Map<String, Object> ownerInput() {
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("scenarioId", "scenario/a");
-        input.put("bundleKey", "bundle/a");
-        input.put("path", "schema a.json");
-        input.put("swarmId", "swarm/a");
-        input.put("templateId", "template-a");
-        input.put("autoPullImages", true);
-        input.put("sutId", "sut-a");
-        input.put("variablesProfileId", "vars-a");
-        input.put("networkMode", "PROXIED");
-        input.put("networkProfileId", "proxy-a");
-        input.put("idempotencyKey", "idem-a");
-        input.put("limit", 25);
-        input.put("runId", "run/a");
-        input.put("severity", "WARN");
-        input.put("tapId", "tap/a");
-        input.put("drain", 3);
-        input.put("role", "generator");
-        input.put("direction", "IN");
-        input.put("ioName", "in");
-        input.put("maxItems", 5);
-        input.put("ttlSeconds", 60);
-        input.put("instanceId", "gen/a");
-        input.put("patch", Map.of("rate", 5));
-        input.put("runtimeId", "runtime-a");
-        input.put("candidateSetHash", SHA);
-        input.put("candidateIds", List.of("runtime-a"));
-        input.put("reason", "reviewed cleanup");
-        input.put("includeRunning", false);
-        input.put("includeRabbit", true);
-        return input;
-    }
-
-    private static Map<String, Object> bundleInput() {
-        Map<String, Object> input = new LinkedHashMap<>();
-        input.put("source", Map.of(
-            "repository", "git@example/repo", "commit", COMMIT, "bundlePath", "scenarios/sample",
-            "verification", "CLIENT_ASSERTED"));
-        input.put("fileManifest", manifestInput());
-        return input;
-    }
-
-    private static List<Map<String, Object>> manifestInput() {
-        return List.of(Map.of("path", "scenario.yaml", "byteCount", 4, "sha256", SHA));
-    }
-
-    private static String json(Object value) {
-        try {
-            return new ObjectMapper().findAndRegisterModules().writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
-            throw new AssertionError(exception);
-        }
-    }
-
-    private static BundleValidationReceipt receipt(UploadWorkflowBinding binding) {
-        return new BundleValidationReceipt("receipt-a", PRINCIPAL, binding,
-            new SourceMetadata("git@example/repo", COMMIT, "scenarios/sample", SourceVerification.CLIENT_ASSERTED),
-            new io.pockethive.mcp.domain.BundleFileManifest(List.of(
-                new io.pockethive.mcp.domain.BundleFileManifestEntry("scenario.yaml", 4, SHA))),
-            SHA, SHA, "scenario-a", "Scenario A", NOW);
-    }
-
-    private static ScenarioWorkflow workflow(String id) {
-        return ScenarioWorkflow.create(id, "as-answer", PRINCIPAL);
-    }
-
-    private static ScenarioWorkflow fullyAnsweredWorkflow(String id, String sessionId) {
-        ScenarioWorkflow workflow = ScenarioWorkflow.create(id, sessionId, PRINCIPAL);
-        for (QaRequirementTopic topic : QaRequirementTopic.values()) {
-            workflow.answer(workflow.revision(), topic,
-                io.pockethive.mcp.domain.RequirementAnswer.notApplicable("not required",
-                    new io.pockethive.mcp.domain.AnswerProvenance(
-                        PRINCIPAL, "test-client", "test-client", "1.0.0", id, workflow.revision(),
-                        topic.name(), SHA, io.pockethive.mcp.domain.ElicitationAction.ACCEPT, SHA, NOW)));
-        }
-        return workflow;
-    }
-
-    private static ScenarioWorkflow generatedWorkflow(String id, String sessionId) {
-        ScenarioWorkflow workflow = fullyAnsweredWorkflow(id, sessionId);
-        workflow.readyToGenerate(workflow.revision(),
-            new io.pockethive.mcp.domain.CapabilityFingerprint(SHA, NOW));
-        workflow.generated(workflow.revision(), SHA);
-        return workflow;
-    }
-
     @SuppressWarnings("unchecked")
-    private static String textField(Object value, String field) {
-        Object result = ((Map<String, Object>) value).get(field);
-        return result instanceof Enum<?> enumeration ? enumeration.name() : String.valueOf(result);
+    Map<String, Object> generated =
+        (Map<String, Object>)
+            execute(
+                "scenario_workflow_generate",
+                Map.of(
+                    "workflowId",
+                    workflow.id(),
+                    "expectedRevision",
+                    workflow.revision(),
+                    "files",
+                    authored.entrySet().stream()
+                        .map(entry -> Map.of("path", entry.getKey(), "content", entry.getValue()))
+                        .toList()));
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
+
+    assertThat(files)
+        .extracting(file -> file.get("path"))
+        .containsExactly("authProfiles.yaml", "templates/http/default/accounts.yaml");
+    for (Map<String, Object> file : files) {
+      String expected = authored.get(file.get("path"));
+      assertThat(file.get("content")).isEqualTo(expected);
+      assertThat(file.get("sha256"))
+          .isEqualTo(
+              "sha256:"
+                  + java.util.HexFormat.of()
+                      .formatHex(
+                          MessageDigest.getInstance("SHA-256")
+                              .digest(expected.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    }
+    assertThat(state.generatedFiles.get(workflow.id())).isEqualTo(files);
+    assertThat(workflow.state().name()).isEqualTo("GENERATED");
+    assertThat(generated).doesNotContainKeys("validationReceiptId", "receiptId");
+    org.mockito.Mockito.verifyNoInteractions(uploads);
+  }
+
+  private static java.util.stream.Stream<Arguments> oauthAuthoringProfiles() {
+    String shared =
+        """
+        profiles:
+          "tenant:api":
+            type: %s
+            storage:
+              mode: REDIS
+              tokenKey: tenant-api
+            tokenUrl: https://issuer.example.test/oauth/token
+            clientId: " client+&=%%é "
+        """;
+    return java.util.stream.Stream.of(
+        Arguments.of(
+            "signed empty scopes and file reference",
+            shared.formatted("OAUTH2_HTTP_SIGNATURE")
+                + """
+                      keyId: " key-01 +/= "
+                      privateKey:
+                        file: /run/secrets/oauth-signing-key.pem
+                      scopes: []
+                  """),
+        Arguments.of(
+            "signed scopes, audience and env reference",
+            shared.formatted("oauth2-http-signature")
+                + """
+                      keyId: provider-key-02
+                      privateKey:
+                        env: OAUTH_SIGNING_PRIVATE_KEY
+                      scopes: [accounts.read, payments.write]
+                      audience: "https://api.example.test/resource?a=+&b=%C3%A9"
+                  """),
+        Arguments.of(
+            "ordinary client credentials",
+            shared.formatted("OAUTH2_CLIENT_CREDENTIALS")
+                + """
+                      clientSecret:
+                        env: ORDINARY_CLIENT_SECRET
+                      scope: accounts.read
+                  """),
+        Arguments.of(
+            "ordinary password grant",
+            shared.formatted("OAUTH2_PASSWORD_GRANT")
+                + """
+                      username: example-user
+                      password:
+                        file: /run/secrets/ordinary-password
+                      scope: accounts.read
+                  """));
+  }
+
+  @Test
+  void rejectsDuplicateGeneratedFilePaths() {
+    ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-duplicate-files", "as-duplicate-files");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-duplicate-files",
+        AgentSession.open("as-duplicate-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+
+    assertCode(
+        "BUNDLE_FILE_PATH_DUPLICATE",
+        () ->
+            execute(
+                "scenario_workflow_generate",
+                Map.of(
+                    "workflowId", workflow.id(),
+                    "expectedRevision", workflow.revision(),
+                    "files",
+                        List.of(
+                            Map.of("path", "scenario.yaml", "content", "first"),
+                            Map.of("path", "scenario.yaml", "content", "second")))));
+  }
+
+  @Test
+  void hidesForeignAndMissingStateAndPersistsExpiry() {
+    PrincipalKey foreign = new PrincipalKey(PRINCIPAL.issuer(), "other");
+    state.sessions.put("foreign", AgentSession.open("foreign", foreign, NOW, Duration.ofHours(1)));
+    state.workflows.put("foreign-wf", ScenarioWorkflow.create("foreign-wf", "foreign", foreign));
+    assertCode(
+        "AGENT_SESSION_NOT_FOUND",
+        () -> execute("agent_session_get", Map.of("agentSessionId", "foreign")));
+    assertCode(
+        "AGENT_SESSION_NOT_FOUND",
+        () -> execute("agent_session_get", Map.of("agentSessionId", "missing")));
+    assertCode(
+        "SCENARIO_WORKFLOW_NOT_FOUND",
+        () -> execute("scenario_workflow_get", Map.of("workflowId", "foreign-wf")));
+    assertCode(
+        "SCENARIO_WORKFLOW_NOT_FOUND",
+        () -> execute("scenario_workflow_get", Map.of("workflowId", "missing")));
+
+    AgentSession expired =
+        AgentSession.open(
+            "expired", PRINCIPAL, NOW.minus(Duration.ofHours(2)), Duration.ofHours(1));
+    state.sessions.put(expired.id(), expired);
+    execute("agent_session_get", Map.of("agentSessionId", expired.id()));
+    assertThat(expired.state().name()).isEqualTo("EXPIRED");
+    assertThat(state.savedSessions).contains(expired.id());
+    assertThat(state.maintenanceCalls).isPositive();
+    ScenarioWorkflow workflow = ScenarioWorkflow.create("wf-expired", expired.id(), PRINCIPAL);
+    state.workflows.put(workflow.id(), workflow);
+    assertCode(
+        "AGENT_SESSION_NOT_OPEN",
+        () ->
+            execute(
+                "scenario_workflow_cancel",
+                Map.of("workflowId", workflow.id(), "expectedRevision", 0)));
+  }
+
+  @Test
+  void rejectsValidationWhenRevisionOrStateDoesNotMatch() {
+    ScenarioWorkflow workflow = workflow("wf-validation");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    Map<String, Object> input = bundleInput();
+    input.put("workflowId", workflow.id());
+    input.put("expectedRevision", 99);
+    assertCode(
+        "WORKFLOW_VERSION_CONFLICT", () -> execute("scenario_bundle_validation_prepare", input));
+    input.put("expectedRevision", 0);
+    assertCode(
+        "WORKFLOW_NOT_GENERATED", () -> execute("scenario_bundle_validation_prepare", input));
+    verify(uploads, never()).prepareValidationWithCapability(any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void normalizesPublicationIntentFailuresToOneTypedError() {
+    when(uploads.validationReceipt("receipt-a", PRINCIPAL))
+        .thenReturn(receipt(UploadWorkflowBinding.direct()));
+    Map<String, Object> input = bundleInput();
+    input.put("validationReceiptId", "receipt-a");
+    input.put("mode", "UPSERT");
+    input.put("archiveDigest", SHA);
+    input.put("bundleContentDigest", SHA);
+
+    assertCode(
+        "PUBLICATION_INTENT_INVALID", () -> execute("scenario_bundle_publication_prepare", input));
+  }
+
+  @Test
+  void usesExplicitUnknownClientIdentityWhenTheClientOmitsImplementationMetadata() {
+    ScenarioWorkflow workflow = workflow("wf-unknown-client");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(exchange.getClientInfo()).thenReturn(null);
+    when(exchange.createElicitation(any())).thenReturn(accepted("USER_PROVIDED", "explicit"));
+
+    execute(
+        "scenario_workflow_answer",
+        Map.of("workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK"));
+
+    var provenance = workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).provenance();
+    assertThat(provenance.declaredClientName()).isEqualTo("unknown");
+    assertThat(provenance.declaredClientVersion()).isEqualTo("unknown");
+  }
+
+  @Test
+  void serializationAndRequiredDigestProviderFailuresAreExplicit() throws Exception {
+    ScenarioWorkflow workflow = workflow("wf-failure");
+    state.workflows.put(workflow.id(), workflow);
+    state.sessions.put(
+        "as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+    when(exchange.createElicitation(any())).thenReturn(accepted("USER_PROVIDED", "explicit"));
+
+    ObjectMapper failingMapper = mock(ObjectMapper.class);
+    when(failingMapper.writeValueAsString(any()))
+        .thenThrow(new JsonProcessingException("cannot serialize") {});
+    McpToolExecutor serialization = newExecutor(failingMapper);
+    assertCode(
+        "TOOL_RESULT_SERIALIZATION_FAILED",
+        () ->
+            serialization.execute(
+                catalogue.requireTool("scenario_workflow_answer"),
+                McpCallerDecoder.from(exchange.transportContext()),
+                new McpClientInteraction(exchange),
+                Map.of(
+                    "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+
+    try (MockedStatic<MessageDigest> digests = mockStatic(MessageDigest.class)) {
+      digests
+          .when(() -> MessageDigest.getInstance("SHA-256"))
+          .thenThrow(new NoSuchAlgorithmException("missing"));
+      assertThatThrownBy(
+              () ->
+                  execute(
+                      "scenario_workflow_answer",
+                      Map.of(
+                          "workflowId",
+                          workflow.id(),
+                          "expectedRevision",
+                          0,
+                          "topic",
+                          "GOAL_AND_RISK")))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessage("SHA-256 is required by Java");
+    }
+  }
+
+  private Object execute(String toolId, Map<String, Object> input) {
+    return executor.execute(
+        catalogue.requireTool(toolId),
+        io.pockethive.mcp.adapter.mcp.McpCallerDecoder.from(exchange.transportContext()),
+        new io.pockethive.mcp.adapter.mcp.McpClientInteraction(exchange),
+        input);
+  }
+
+  private McpToolExecutor newExecutor(ObjectMapper objectMapper) {
+    PocketHiveMcpProperties configuration = properties();
+    Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
+    WorkflowAccess workflowAccess = new WorkflowAccess(state, configuration, fixedClock);
+    WorkflowProjection workflowProjection = new WorkflowProjection();
+    BundleToolExecutor bundleTools =
+        new BundleToolExecutor(uploads, configuration, workflowAccess, fixedClock);
+    AgentSessionToolExecutor sessionTools =
+        new AgentSessionToolExecutor(
+            workflowAccess, configuration, state, workflowProjection, fixedClock);
+    ScenarioWorkflowToolExecutor workflowTools =
+        new ScenarioWorkflowToolExecutor(
+            workflowAccess,
+            owners,
+            configuration,
+            objectMapper,
+            state,
+            workflowProjection,
+            fixedClock);
+    return new McpToolExecutor(
+        new ScenarioManagerToolExecutor(owners),
+        new OrchestratorToolExecutor(owners, readiness),
+        new QaWorkflowToolExecutor(bundleTools, sessionTools, workflowTools));
+  }
+
+  private static Map<String, Object> mediatedAnswer(
+      Map<String, Object> question, String disposition, String answer) {
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("workflowId", question.get("workflowId"));
+    result.put("expectedRevision", question.get("workflowRevision"));
+    result.put("topic", String.valueOf(question.get("topic")));
+    result.put("questionId", question.get("questionId"));
+    result.put("requestedSchemaDigest", question.get("requestedSchemaDigest"));
+    result.put("disposition", disposition);
+    result.put("answer", answer);
+    return result;
+  }
+
+  private static Map<String, Object> compactReviewInput(String workflowId) {
+    List<Map<String, Object>> answers =
+        java.util.Arrays.stream(QaRequirementTopic.values())
+            .map(
+                topic ->
+                    Map.<String, Object>of(
+                        "topic",
+                        topic.name(),
+                        "disposition",
+                        "USER_CONFIRMED_SOURCE",
+                        "answer",
+                        topic == QaRequirementTopic.GOAL_AND_RISK
+                            ? "Explicit goal"
+                            : "Explicit " + topic.name()))
+            .toList();
+    Map<String, Object> input = new LinkedHashMap<>();
+    input.put("workflowId", workflowId);
+    input.put("expectedRevision", 0);
+    input.put("sourceName", "user requirement narrative");
+    input.put("sourceDigest", SHA);
+    input.put("answers", answers);
+    return input;
+  }
+
+  private static McpSchema.ElicitResult accepted(String disposition, String answer) {
+    return new McpSchema.ElicitResult(
+        McpSchema.ElicitResult.Action.ACCEPT, Map.of("disposition", disposition, "answer", answer));
+  }
+
+  private static Map<String, Object> ownerInput() {
+    Map<String, Object> input = new LinkedHashMap<>();
+    input.put("scenarioId", "scenario/a");
+    input.put("bundleKey", "bundle/a");
+    input.put("path", "schema a.json");
+    input.put("swarmId", "swarm/a");
+    input.put("templateId", "template-a");
+    input.put("autoPullImages", true);
+    input.put("sutId", "sut-a");
+    input.put("variablesProfileId", "vars-a");
+    input.put("networkMode", "PROXIED");
+    input.put("networkProfileId", "proxy-a");
+    input.put("idempotencyKey", "idem-a");
+    input.put("limit", 25);
+    input.put("runId", "run/a");
+    input.put("severity", "WARN");
+    input.put("tapId", "tap/a");
+    input.put("drain", 3);
+    input.put("role", "generator");
+    input.put("direction", "IN");
+    input.put("ioName", "in");
+    input.put("maxItems", 5);
+    input.put("ttlSeconds", 60);
+    input.put("instanceId", "gen/a");
+    input.put("patch", Map.of("rate", 5));
+    input.put("runtimeId", "runtime-a");
+    input.put("candidateSetHash", SHA);
+    input.put("candidateIds", List.of("runtime-a"));
+    input.put("reason", "reviewed cleanup");
+    input.put("includeRunning", false);
+    input.put("includeRabbit", true);
+    return input;
+  }
+
+  private static Map<String, Object> bundleInput() {
+    Map<String, Object> input = new LinkedHashMap<>();
+    input.put(
+        "source",
+        Map.of(
+            "repository",
+            "git@example/repo",
+            "commit",
+            COMMIT,
+            "bundlePath",
+            "scenarios/sample",
+            "verification",
+            "CLIENT_ASSERTED"));
+    input.put("fileManifest", manifestInput());
+    return input;
+  }
+
+  private static List<Map<String, Object>> manifestInput() {
+    return List.of(Map.of("path", "scenario.yaml", "byteCount", 4, "sha256", SHA));
+  }
+
+  private static String json(Object value) {
+    try {
+      return new ObjectMapper().findAndRegisterModules().writeValueAsString(value);
+    } catch (JsonProcessingException exception) {
+      throw new AssertionError(exception);
+    }
+  }
+
+  private static BundleValidationReceipt receipt(UploadWorkflowBinding binding) {
+    return new BundleValidationReceipt(
+        "receipt-a",
+        PRINCIPAL,
+        binding,
+        new SourceMetadata(
+            "git@example/repo", COMMIT, "scenarios/sample", SourceVerification.CLIENT_ASSERTED),
+        new io.pockethive.mcp.domain.BundleFileManifest(
+            List.of(new io.pockethive.mcp.domain.BundleFileManifestEntry("scenario.yaml", 4, SHA))),
+        SHA,
+        SHA,
+        "scenario-a",
+        "Scenario A",
+        NOW);
+  }
+
+  private static ScenarioWorkflow workflow(String id) {
+    return ScenarioWorkflow.create(id, "as-answer", PRINCIPAL);
+  }
+
+  private static ScenarioWorkflow fullyAnsweredWorkflow(String id, String sessionId) {
+    ScenarioWorkflow workflow = ScenarioWorkflow.create(id, sessionId, PRINCIPAL);
+    for (QaRequirementTopic topic : QaRequirementTopic.values()) {
+      workflow.answer(
+          workflow.revision(),
+          topic,
+          io.pockethive.mcp.domain.RequirementAnswer.notApplicable(
+              "not required",
+              new io.pockethive.mcp.domain.AnswerProvenance(
+                  PRINCIPAL,
+                  "test-client",
+                  "test-client",
+                  "1.0.0",
+                  id,
+                  workflow.revision(),
+                  topic.name(),
+                  SHA,
+                  io.pockethive.mcp.domain.ElicitationAction.ACCEPT,
+                  SHA,
+                  NOW)));
+    }
+    return workflow;
+  }
+
+  private static ScenarioWorkflow generatedWorkflow(String id, String sessionId) {
+    ScenarioWorkflow workflow = fullyAnsweredWorkflow(id, sessionId);
+    workflow.readyToGenerate(
+        workflow.revision(), new io.pockethive.mcp.domain.CapabilityFingerprint(SHA, NOW));
+    workflow.generated(workflow.revision(), SHA);
+    return workflow;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static String textField(Object value, String field) {
+    Object result = ((Map<String, Object>) value).get(field);
+    return result instanceof Enum<?> enumeration ? enumeration.name() : String.valueOf(result);
+  }
+
+  private static void assertCode(String code, Runnable action) {
+    assertThatThrownBy(action::run)
+        .isInstanceOf(ToolExecutionException.class)
+        .extracting(exception -> ((ToolExecutionException) exception).code())
+        .isEqualTo(code);
+  }
+
+  private static PocketHiveMcpProperties properties() {
+    URI ingress = URI.create("http://127.0.0.1:8080");
+    return new PocketHiveMcpProperties(
+        ingress,
+        ingress,
+        McpStateMode.MEMORY,
+        Path.of("target/state"),
+        Path.of("target/spool"),
+        Duration.ofMinutes(30),
+        Duration.ofHours(1),
+        Duration.ofHours(1),
+        Duration.ofHours(1),
+        Duration.ofMinutes(5),
+        100,
+        10,
+        100,
+        10,
+        10_000_000,
+        2,
+        10,
+        10_000_000,
+        20_000_000,
+        200,
+        20_000_000,
+        8,
+        100,
+        List.of("http://127.0.0.1:8080"),
+        List.of("127.0.0.1:8080"),
+        ingress,
+        URI.create("http://127.0.0.1:8080/mcp"),
+        URI.create("http://127.0.0.1:8080/oauth/introspect"),
+        "mcp",
+        "secret",
+        "pockethive-mcp",
+        "service-secret");
+  }
+
+  private static final class MemoryState implements CoordinationStateRepository {
+    private final Map<String, AgentSession> sessions = new HashMap<>();
+    private final Map<String, ScenarioWorkflow> workflows = new HashMap<>();
+    private final Map<String, List<Map<String, Object>>> generatedFiles = new HashMap<>();
+    private final List<String> savedSessions = new java.util.ArrayList<>();
+    private final List<String> savedWorkflowsWithFiles = new java.util.ArrayList<>();
+    private final List<String> removedGeneratedFiles = new java.util.ArrayList<>();
+    private final List<String> findWorkflowCalls = new java.util.ArrayList<>();
+    private Instant maintainedAt;
+    private int maintenanceCalls;
+
+    @Override
+    public Optional<AgentSession> findSession(String sessionId) {
+      return Optional.ofNullable(sessions.get(sessionId));
     }
 
-    private static void assertCode(String code, Runnable action) {
-        assertThatThrownBy(action::run)
-            .isInstanceOf(ToolExecutionException.class)
-            .extracting(exception -> ((ToolExecutionException) exception).code())
-            .isEqualTo(code);
+    @Override
+    public Optional<ScenarioWorkflow> findWorkflow(String workflowId) {
+      findWorkflowCalls.add(workflowId);
+      return Optional.ofNullable(workflows.get(workflowId));
     }
 
-    private static PocketHiveMcpProperties properties() {
-        URI ingress = URI.create("http://127.0.0.1:8080");
-        return new PocketHiveMcpProperties(
-            ingress, ingress, McpStateMode.MEMORY,
-            Path.of("target/state"), Path.of("target/spool"), Duration.ofMinutes(30), Duration.ofHours(1),
-            Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(5), 100, 10, 100, 10, 10_000_000,
-            2, 10, 10_000_000, 20_000_000, 200, 20_000_000, 8, 100,
-            List.of("http://127.0.0.1:8080"), List.of("127.0.0.1:8080"), ingress,
-            URI.create("http://127.0.0.1:8080/mcp"), URI.create("http://127.0.0.1:8080/oauth/introspect"),
-            "mcp", "secret", "pockethive-mcp", "service-secret");
+    @Override
+    public List<ScenarioWorkflow> findWorkflows(List<String> workflowIds) {
+      return workflowIds.stream().map(workflows::get).filter(java.util.Objects::nonNull).toList();
     }
 
-    private static final class MemoryState implements CoordinationStateRepository {
-        private final Map<String, AgentSession> sessions = new HashMap<>();
-        private final Map<String, ScenarioWorkflow> workflows = new HashMap<>();
-        private final Map<String, List<Map<String, Object>>> generatedFiles = new HashMap<>();
-        private final List<String> savedSessions = new java.util.ArrayList<>();
-        private final List<String> savedWorkflowsWithFiles = new java.util.ArrayList<>();
-        private final List<String> removedGeneratedFiles = new java.util.ArrayList<>();
-        private final List<String> findWorkflowCalls = new java.util.ArrayList<>();
-        private Instant maintainedAt;
-        private int maintenanceCalls;
-
-        @Override
-        public Optional<AgentSession> findSession(String sessionId) {
-            return Optional.ofNullable(sessions.get(sessionId));
-        }
-
-        @Override
-        public Optional<ScenarioWorkflow> findWorkflow(String workflowId) {
-            findWorkflowCalls.add(workflowId);
-            return Optional.ofNullable(workflows.get(workflowId));
-        }
-
-        @Override
-        public List<ScenarioWorkflow> findWorkflows(List<String> workflowIds) {
-            return workflowIds.stream().map(workflows::get).filter(java.util.Objects::nonNull).toList();
-        }
-
-        @Override
-        public List<Map<String, Object>> findGeneratedFiles(String workflowId) {
-            return generatedFiles.getOrDefault(workflowId, List.of());
-        }
-
-        @Override
-        public void createSession(AgentSession session) {
-            sessions.put(session.id(), session);
-        }
-
-        @Override
-        public void saveSession(AgentSession session) {
-            sessions.put(session.id(), session);
-            savedSessions.add(session.id());
-        }
-
-        @Override
-        public void createWorkflow(AgentSession session, ScenarioWorkflow workflow) {
-            sessions.put(session.id(), session);
-            workflows.put(workflow.id(), workflow);
-        }
-
-        @Override
-        public void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision, List<Map<String, Object>> files) {
-            workflows.put(workflow.id(), workflow);
-            generatedFiles.put(workflow.id(), List.copyOf(files));
-            savedWorkflowsWithFiles.add(workflow.id());
-        }
-
-        @Override
-        public void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision) {
-            workflows.put(workflow.id(), workflow);
-        }
-
-        @Override
-        public void saveWorkflowAndUploadCoordination(ScenarioWorkflow workflow, long expectedRevision,
-                                                     UploadCoordinationSnapshot uploadState) {
-            saveWorkflow(workflow, expectedRevision);
-            saveUploadCoordination(uploadState);
-        }
-
-        @Override
-        public void saveWorkflowAndRemoveGeneratedFiles(ScenarioWorkflow workflow, long expectedRevision) {
-            workflows.put(workflow.id(), workflow);
-            generatedFiles.remove(workflow.id());
-            removedGeneratedFiles.add(workflow.id());
-        }
-
-        @Override
-        public long countOpenSessions(PrincipalKey principal) {
-            return sessions.values().stream().filter(session -> session.principal().equals(principal)).count();
-        }
-
-        @Override
-        public UploadCoordinationSnapshot loadUploadCoordination() {
-            return UploadCoordinationSnapshot.empty();
-        }
-
-        @Override
-        public void saveUploadCoordination(UploadCoordinationSnapshot uploadCoordination) {
-        }
-
-        @Override
-        public void maintainSessions(Instant now, Duration terminalRetention) {
-            maintainedAt = now;
-            maintenanceCalls++;
-        }
+    @Override
+    public List<Map<String, Object>> findGeneratedFiles(String workflowId) {
+      return generatedFiles.getOrDefault(workflowId, List.of());
     }
+
+    @Override
+    public void createSession(AgentSession session) {
+      sessions.put(session.id(), session);
+    }
+
+    @Override
+    public void saveSession(AgentSession session) {
+      sessions.put(session.id(), session);
+      savedSessions.add(session.id());
+    }
+
+    @Override
+    public void createWorkflow(AgentSession session, ScenarioWorkflow workflow) {
+      sessions.put(session.id(), session);
+      workflows.put(workflow.id(), workflow);
+    }
+
+    @Override
+    public void saveWorkflow(
+        ScenarioWorkflow workflow, long expectedRevision, List<Map<String, Object>> files) {
+      workflows.put(workflow.id(), workflow);
+      generatedFiles.put(workflow.id(), List.copyOf(files));
+      savedWorkflowsWithFiles.add(workflow.id());
+    }
+
+    @Override
+    public void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision) {
+      workflows.put(workflow.id(), workflow);
+    }
+
+    @Override
+    public void saveWorkflowAndUploadCoordination(
+        ScenarioWorkflow workflow, long expectedRevision, UploadCoordinationSnapshot uploadState) {
+      saveWorkflow(workflow, expectedRevision);
+      saveUploadCoordination(uploadState);
+    }
+
+    @Override
+    public void saveWorkflowAndRemoveGeneratedFiles(
+        ScenarioWorkflow workflow, long expectedRevision) {
+      workflows.put(workflow.id(), workflow);
+      generatedFiles.remove(workflow.id());
+      removedGeneratedFiles.add(workflow.id());
+    }
+
+    @Override
+    public long countOpenSessions(PrincipalKey principal) {
+      return sessions.values().stream()
+          .filter(session -> session.principal().equals(principal))
+          .count();
+    }
+
+    @Override
+    public UploadCoordinationSnapshot loadUploadCoordination() {
+      return UploadCoordinationSnapshot.empty();
+    }
+
+    @Override
+    public void saveUploadCoordination(UploadCoordinationSnapshot uploadCoordination) {}
+
+    @Override
+    public void maintainSessions(Instant now, Duration terminalRetention) {
+      maintainedAt = now;
+      maintenanceCalls++;
+    }
+  }
 }
