@@ -11,6 +11,26 @@ F08 state/correctness decisions, remaining F07/F09 service work and promotion of
 runtime mappings into PocketHive scenarios remain separate follow-ups. Historical
 baseline analysis and intermediate verification remain below and in Git history.
 
+## Current remaining work
+
+This is the current backlog after integration into PR #520. Completed slice sections
+below retain implementation evidence; their older test counts are not current gates.
+
+| ID / area | Current status and next action |
+| --- | --- |
+| F01–F05 | Closed in the selected scope: Redis, local inputs, Docker, journal/filesystem and ClickHouse. Do not repeat these extractions. |
+| F06 | Open: trace worker OAuth/signed OAuth, profile loading/preparation, credential application and token coordination; extract only confirmed ownership leaks. Preserve existing behavior. |
+| F07 | Scenario Manager producer contracts closed. Open: UI grants/network-mode projections and TCP workspace UI policy copies; broader model sharing needs evidence, not automatic consolidation. Unknown network mode handling requires a behavior decision. |
+| F08 | Open: establish observation/freshness ownership and distinguish readiness, health and stale semantics before changing writers or thresholds. |
+| F09 | Processor pacing/HTTP/TCP mechanics and the agreed TCP mock extraction/persistence are closed. Open: trace remaining Scenario Manager and MCP application/projection boundaries. |
+| Separate correctness | Orchestrator reset/registry/recovery and orphan-removal outcomes follow `orchestrator-correctness.md`. Processor transport replacement/failure/shutdown lifecycle is also deferred; extraction did not repair it. |
+| Separate TCP debt/features | Mock scenario-state reset/persistence/null semantics, public nested DTOs and promotion of runtime mappings into PH scenarios are outside the closed TCP slice. Workspace UI duplication belongs to F07. |
+
+This backlog does not authorize behavior or public-contract changes. F06 and bounded
+F09 extractions can start with existing behavior; raise concrete conflicting semantics
+or contract changes for review when found. Full-Swarm qualification is not implied by
+unit/component evidence.
+
 ## Objective and rules
 
 Each functional responsibility has one implementation owner and a supported API.
@@ -74,18 +94,18 @@ separated from historical findings that still require revalidation.
 | Freshness | `SwarmReadinessTracker.STATUS_TTL_MS` and `SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS` remain separate 15s definitions | First decide whether they describe the same fact; then one owner/projection for that fact |
 | UI network projection | `ui-v2/src/lib/networkProxy.ts` maps every unknown mode to DIRECT | Separate contract/behavior decision; do not silently change acceptance during extraction |
 
-Older Scenario contract copies, metadata resolution, UI grants, MCP readiness,
-HTTP client construction and TCP-mock persistence findings are audit leads, not
-newly confirmed defects. Recheck their current owners and actual callers before
-adding an implementation task. In particular, do not reuse the old MCP/auth class
-inventory or old test counts as current evidence.
+Selected Scenario contract copies, processor HTTP client ownership and TCP mapping
+persistence were resolved by the completed slices below. Remaining metadata, UI
+grants, MCP readiness and broader service findings are audit leads: recheck their
+current owners and callers before adding implementation work. Do not reuse old
+MCP/auth inventories or test counts as current evidence.
 
 ## Delivery order and stable task IDs
 
-Keep F identifiers for existing references. Execution order is **F01 → F03 → F04
-→ F05**, then individually selected F02/F06/F07/F09 slices. F08 and correctness
-work need behavior decisions first. This ordering does not authorize parallel
-changes across those areas or require every area to be finished for the next PR.
+Keep F identifiers for existing references. F01–F05 and selected F07/F09 slices
+are completed. The proposed next sequence is F06, remaining Scenario Manager F09,
+remaining F07 projections and MCP F09. F08 and separate correctness work need
+behavior decisions first. This sequence does not authorize changes in deferred scope.
 
 ### F01 — Redis, one PR closing the shared technology responsibility
 
@@ -199,8 +219,8 @@ F03. Separate source review on 2026-09-23 found no actionable issues in the comp
 change set, including connection/compute composition, naming, diagnostics and removal.
 All six review passes were recorded in HiveMind; deployed acceptance was not rerun.
 
-The remaining startup audit findings are plan-only under F04, F05 and F08 below,
-as explicitly requested. They are not prerequisites for completing this F03 slice.
+The startup audit findings assigned to F04/F05 were subsequently implemented.
+F08 observation/freshness work remains open and was not part of F03.
 
 Gate: raw Docker imports allowed only in docker-client/test fixtures; both services use the same client
 construction owner. Removal-result semantics retain the separately approved contract. Keep explicit human approval
@@ -225,7 +245,7 @@ and RepositoryImportBoundaryTest. Test log: `/tmp/ph-f04-tests.log` (local evide
 No deployed E2E was repeated for this slice. Invalid file-query run identifiers now
 follow the existing layout validation; no new HTTP response contract was introduced.
 
-**Event reads reviewed, uncommitted:** Hive/swarm/live/archive event SELECTs,
+**Event reads implemented and reviewed in `1aa5e3d1`:** Hive/swarm/live/archive event SELECTs,
 row mapping and cursor construction now use JournalEventQueries in journal-postgres.
 SwarmJournalRunSelector is the sole explicit/active/observed run selector for file
 and stored reads, including pinning. SwarmStoredJournalQuery retains archive
@@ -240,7 +260,7 @@ Command: `./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am t
 with the focused journal/filesystem/auth/import test selection; local log
 `/tmp/ph-f04-sql-tests.log`. No deployed E2E or full reactor repeat in this slice.
 
-**Run lists reviewed, uncommitted:** list SQL, summary/tag mapping and live/pinned
+**Run lists implemented and reviewed in `1aa5e3d1`:** list SQL, summary/tag mapping and live/pinned
 merge now use JournalRunQueries; ordering/filter/limit semantics are preserved. The
 metadata update response uses the same summary reader. See RESP-JOURNAL-RUN-QUERIES.
 
@@ -434,9 +454,10 @@ interruption and reported pacing duration are preserved. Configuration stays
 with ProcessorWorkerConfig. See RESP-PROCESSOR-PACING for exact semantics.
 
 This is a local processor responsibility, not a universal rate limiter. Moderator
-shaping and scheduler quotas differ and remain separate. HTTP client construction,
-TCP transport lifetime, Scenario Manager/MCP/TCP-mock boundaries remain to audit;
-this slice does not close F09 as a whole. No TLS/security or ACK behavior change.
+shaping and scheduler quotas differ and remain separate. HTTP client ownership,
+TCP transport mechanics and the selected TCP mock boundaries were subsequently
+completed below. Scenario Manager/MCP and the explicitly deferred transport lifecycle
+repairs remain open. No TLS/security or ACK behavior change.
 
 All constructor call sites were traced: the worker supplies the same non-null
 pacer to all handlers, and the existing HTTP test supplies its own pacer. Old
@@ -542,7 +563,8 @@ change lifecycle timing during F03.
 Original plan review (PR #519): that update removed stale prerequisites, preserved existing owners,
 added the omitted Redis capture consumer and split implementation from behavioral
 redesign. That plan-only update changed no production code, public contract, dependencies or deployment.
-F01, F03, F04 and F05 were subsequently authorized explicitly by the user; other entries remain plans.
+F01–F05 and the selected F07/F09 slices were subsequently authorized and implemented.
+Only the current backlog above describes outstanding work.
 
 ### F09 — TCP mock notification slice
 
@@ -561,7 +583,7 @@ response fields/statuses. Controller tests call Java methods and serialize value
 they do not claim deployed HTTP/security acceptance. No security config changed.
 The existing repository import gate also passed (3 tests,
 `/tmp/ph-f09-notifications-imports.log`). No deployment or full reactor repeated.
-This does not close the broader TCP mock/F09 audit.
+Later TCP sections close the agreed mock scope; broader F09 remains open.
 
 ### F09 — TCP mock workspace slice
 
@@ -590,174 +612,59 @@ Both failed with InvalidDefinitionException before the fix
 (`/tmp/ph-workspace-json-green.log`). No new field validation, HTTP fields or
 catalogue policy. These remain mapper/controller tests, not deployed HTTP checks.
 
-### F09 — TCP mock authored mapping files
+### F09 — TCP mock mapping and execution closure
 
-**Implemented and reviewed; committed in `7e75105e`.** Base: `08efc686`.
-Extract save/delete mechanics from FileBasedMappingLoader into MappingFileStore.
-Registry delegates to the store; loader only imports at startup. Remove their
-lazy cycle, preserve existing distinct roots and error/ordering semantics.
-See RESP-TCP-MOCK-MAPPING-FILES. Controller orchestration, registry matching,
-filename validation and durability/restart behaviour remain separate work.
-Verification: 30 tests passed, zero failures/errors/skips
-(`/tmp/ph-f09-mapping-files.log`): 7 new file-store behavior tests, 20 prior TCP mock
-tests and 3 existing import checks. Real temporary files cover non-default root,
-JSON/YAML values, overwrite, all deletion variants, missing files, suppressed IO
-failures and propagated runtime failures. Existing format-selection semantics
-remain unchanged, including non-yaml values selecting JSON. No deployment,
-new architecture scanner or test of bean identity; startup composition was traced
-in source. This slice does not close controller orchestration or all F09.
+**Implemented, reviewed and integrated into PR #520 through #523.** Extraction
+commits: `7e75105e`, `d45bcc13`, `ebf9b9a5`; persistence/housekeeping: `474912ef`.
+The integration commit is `60c039a5`.
 
-### F09 — TCP mock mapping authoring
+Current ownership:
+- MappingAuthoringParser decodes JSON/YAML; MappingAuthoringService coordinates
+  sequential authoring through the registry. StubMappingConverter owns admin/file
+  conversion and reverse export. HTTP controllers delegate to application owners.
+- MessageTypeRegistry is the sole catalogue mutation owner. MappingPersistence
+  delegates snapshot IO to MappingFileStore; StartupMappingSource delegates fresh
+  initialization to FileBasedMappingLoader. There is no old per-id write path.
+- MappingExecutor serves text, binary and manual execution. TextRequestProcessor,
+  admin services and diagnostic/web projections own their respective boundaries.
+- DocumentationReader and WireMockImporter close their streams. Unused
+  AdvancedTemplateEngine, AdvancedMatcher and PaymentLogicEngine were removed.
 
-**Implemented and reviewed; committed in `d45bcc13`.** Base: `7e75105e`.
-Extract controller parsing and import/delete orchestration into MappingAuthoringParser
-and MappingAuthoringService. Remove registry storage forwarding/dependency; keep
-startup and WireMock boundaries distinct. Preserve dual-format decode, sequential
-partial effects, response fields and error suppression. See
-RESP-TCP-MOCK-MAPPING-AUTHORING. Verification: 41 tests passed, zero failures/errors/
-skips (`/tmp/ph-f09-authoring-final.log`): 11 parser/authoring/controller behavior
-cases plus 27 existing TCP mock cases and 3 import checks. Tests use actual registry
-CRUD and temporary files; protocol execution dependencies are outside the authoring
-fixture. They cover JSON/YAML, batches, replacements, empty batches, late invalid
-entry retaining earlier effects, initial rejection, suppressed file IO failure,
-delete effects and unchanged HTTP response mapping. No deployed HTTP/full reactor
-repeated. Startup import and WireMock admin remain distinct; registry execution
-and wider TCP mock separation are not closed by this slice.
+See RESP-TCP-MOCK-MAPPING-FILES, RESP-TCP-MOCK-MAPPING-AUTHORING,
+RESP-TCP-MOCK-STUB-CONVERSION and RESP-TCP-MOCK-EXECUTION for canonical contracts.
+Earlier per-file writes, suppressed storage errors and different startup/write roots
+were intermediate behavior, superseded by the approved durability change below.
+They are neither current implementation nor outstanding extraction tasks.
 
-### F09 — TCP mock stub conversion
+### TCP mock runtime mapping persistence — closed
 
-**Implemented and accepted in the subsequent TCP closure review.** Base: `d45bcc13`.
-Share duplicated admin/file StubMapping conversion and reverse file export.
-Public DTOs remain unchanged; nested-type extraction was blocked by automatic
-approval review as a protected contract change and is outside this narrower slice.
-Preserve source-specific descriptions and defaults. See RESP-TCP-MOCK-STUB-CONVERSION.
-Verification: 47 tests passed, zero failures/errors/skips
-(`/tmp/ph-f09-stub-conversion.log`): 6 conversion/boundary tests plus 38 existing
-TCP mock tests and 3 import checks. Covers unchanged JSON, defaults and nulls,
-missing nested object rejection, distinct source descriptions, registry effects
-and real temp-file import/export. Direct controller calls do not claim deployed
-HTTP acceptance; no full reactor/deployment repeated. Admin orchestration and
-importer filesystem lifecycle remain separate F09 work.
+The runtime retains its complete catalogue at `/app/data/mapping-catalogue.json`.
+Fresh instances initialize from defaults and startup files; an existing snapshot,
+including an empty array, is authoritative. Authoring, admin and imports persist
+through one serialized registry mutation before publishing accepted in-memory state.
+Save failures retain accepted configuration; corrupt saved state fails startup.
+Sequential bulk imports retain earlier successful entries after a later failure.
 
-### F09 TCP mock closure — implemented and reviewed
+Catalogue order resolves equal-priority ties and survives edits and restart.
+Replacing an id keeps its position; new ids append. Existing Compose/HiveForge
+mounts retain `/app/data`; one instance owns each data root. Diagnostic counters
+are not guaranteed durable after each request. No legacy per-file migration or
+promotion into PocketHive scenarios is provided.
 
-Implemented catalogue/execution separation for text, binary and manual requests;
-extracted text processing, admin orchestration/diagnostic projections and web
-test/documentation operations. Preserve public DTOs and behavior. Reset semantics, durability, startup
-versus authored mapping roots and nested DTO cleanup remain separate debt.
-Acceptance: behavior tests at extracted owners, repository import check, then separate
-review of complete call paths.
+Mapping clear is durable and does not reset the separate mock scenario state or
+request journals. Scenario-state reset/persistence/null semantics and public nested
+DTO cleanup remain distinct deferred work; they do not reopen mapping persistence.
 
-Verification at `d45bcc13` plus this uncommitted slice:
-`./mvnw -ntp -pl tcp-mock-server,common/control-plane-core -am test -Dtest='*Test' -Dsurefire.failIfNoSpecifiedTests=false`
-passed 405 tests (58 TCP mock, including 14 new behavioral tests; 3 repository
-import checks included in the dependency reactor), no failures/errors/skips.
-Local log: `/tmp/ph-tcp-closure-tests.log`. No deployed/E2E acceptance claimed.
-The mapping execution body and ten compatibility methods were compared to HEAD:
-only delegation/signature annotations and the unused registry counter changed.
-Repository search confirms a single runtime mapping map and a single caller of
-EnhancedTemplateEngine. AdvancedTemplateEngine, AdvancedMatcher and PaymentLogicEngine
-have no Java consumers in the inspected tree; their existing inactive code is not a
-second active execution path. Separate review still required.
+Final evidence:
+- All 74 TCP tests passed in separate review, including runtime import/edit/delete/
+  empty-state restoration, storage failures and ordered response selection.
+- The ordering regression failed before its fix; eight independent JVM reloads
+  selected the same response after it.
+- Three repository import-boundary tests passed. The module's Mockito subclass
+  maker/reflection accessor also permits the full TCP suite without dynamic attach.
+- After integration into #520: 74 TCP tests and 160 focused input/processor/scenario/
+  import-boundary tests passed. No fresh full-reactor or deployed acceptance claim.
 
-This closes the agreed admin/execution slice, not all historical TCP debt. Existing
-reset persistence/null semantics, importer file lifecycle, documentation resource
-handling and public nested types remain unchanged. Direct controller tests do not
-verify deployed Spring/Netty lifecycle or scenario persistence behavior.
-
-Review follow-up: CompatibilityCommandsTest adds nine behavioral cases covering
-both journal clears before scenario reset, retained partial effects on reset failure,
-no scenario reset after journal failure, exact update/delete commands and payloads,
-null/missing-state rejection propagation and update/delete failures. Real RequestStore;
-ScenarioManager is mocked to avoid constructor IO against `/app` (test-scoped Mockito,
-version from the existing Spring Boot BOM).
-These tests verify command-boundary behavior, not scenario persistence internals.
-No production code or reset semantics changed. Full TCP suite: 67 passed, zero
-failures/errors/skips (`/tmp/ph-tcp-commands-fix.log`); diff check clean.
-
-Mockito review fix: module test resources select `mock-maker-subclass` and
-`member-accessor-reflection`; redundant per-mock selection removed. Selecting only
-the mock maker still triggered instrumentation through the default member accessor.
-Both settings are now explicit in `src/test/resources/mockito-extensions`.
-Full TCP suite with `-DargLine=-XX:-EnableDynamicAgentLoading`: 67 passed,
-zero failures/errors/skips, no self-attach warning (`/tmp/ph-tcp-subclass-fix.log`).
-Production code unchanged; diff check clean.
-
-Separate follow-up review accepted the bounded TCP slice after both test fixes.
-Fresh agent-disabled run: 67 tests passed (`/tmp/ph-tcp-subclass-review.log`), no
-self-attach warnings; no remaining findings in the reviewed scope. Deployment
-and explicitly deferred TCP debt remain outside this acceptance.
-
-### TCP mock housekeeping
-
-After the bounded extraction review, remove unused AdvancedTemplateEngine,
-AdvancedMatcher and PaymentLogicEngine (including its unused nested payment models).
-Repository-wide name/bean/reflection searches found no consumers; runtime still uses
-EnhancedTemplateEngine and AdvancedRequestMatcher. Close classpath documentation
-streams and WireMockImporter directory walks with try-with-resources. Preserve lookup
-order, parsing, import results and public HTTP contracts. Reset semantics, scenario
-persistence and live public DTOs remain outside this cleanup.
-
-Verification: clean TCP module build and all 67 tests passed with dynamic agent
-loading disabled (`/tmp/ph-tcp-housekeeping.log`); no stale compiled classes used.
-Existing documentation HTTP and real-file stub import/export tests passed.
-No new runtime dependencies or ownership boundaries; no deployment/commit.
-
-### TCP mock runtime mapping persistence — implemented and reviewed
-
-Human decision: runtime mapping changes must survive restarts of the same mock
-instance with its retained data volume. Exporting/promoting those changes into a
-PocketHive scenario is a separate task and is not part of this change.
-
-Required behavior:
-- Fresh runtime initializes its mapping catalogue from built-in defaults and the
-  existing startup mapping source. Once initialized, the persisted runtime catalogue
-  is authoritative; startup files must not overwrite edits or resurrect deletions.
-- Additions, replacements, deletions and an explicitly empty catalogue survive
-  restart. This applies to authored mappings, admin stub operations and imports.
-- One persistence owner serves all mutation entrypoints. A successful mutation
-  must have been persisted; an IO failure cannot become a successful API response.
-- Existing data mounts already retain `/app/data` in local Compose and HiveForge.
-  A fresh deployment with no retained data remains a fresh runtime.
-- No automatic promotion to scenario files and no implicit migration of historical
-  per-file writes. Any migration requires a separate explicit decision.
-
-Implemented: a complete persisted catalogue snapshot, atomically
-replaced on accepted mutation. An empty snapshot is valid initialized state, not
-an instruction to reload startup defaults. Fail explicitly on an unreadable or
-corrupt saved catalogue. The storage contract is recorded in
-RESP-TCP-MOCK-MAPPING-FILES/AUTHORING.
-Acceptance must exercise restart with the same data root after add/edit/delete/reset,
-including a modified startup source, plus write failure retaining the accepted state.
-The former startup/write directory divergence is removed.
-
-Implementation contract: RESP-TCP-MOCK-MAPPING-FILES/AUTHORING now specify a full
-atomic snapshot at `/app/data/mapping-catalogue.json`. One registry mutation owner
-serves authoring/admin/import paths; no legacy per-file migration or PH scenario export.
-Existing local and HiveForge data mounts already cover this path. Request acceptance
-requires persistence; saved state, including an empty catalogue, overrides seed loading.
-
-Verification: 73 TCP tests passed with dynamic agent loading disabled; 3 repository
-import-boundary tests passed separately. Tests cover restart after authoring, admin
-creation/delete/clear and file imports, seed bypass for saved/empty state, parallel
-mutations, failed serialization/replacement, failed admin writes and corrupt snapshots.
-Logs: `/tmp/ph-tcp-durability.log`, `/tmp/ph-tcp-import-boundary.log`.
-A broader invocation failed in Rabbit Mockito initialization because the TCP-specific
-no-attach JVM option was applied there too; that run is not a passing reactor result.
-No deployment performed. Separate review found the ordering issue below; the follow-up
-review accepted its fix.
-
-Review fix: preserve catalogue encounter order through immutable LinkedHashMap
-snapshots instead of Map.copyOf. Equal-priority matching uses persisted catalogue
-order; replacements keep their position, new ids append. Regression exercises both
-id orders, saved array order, response selection before/after restart, replacement,
-unrelated insertion and deletion. It failed before the fix (expected updated,
-received b); all 74 TCP tests pass after the fix. Evidence:
-`/tmp/ph-tcp-order-red.log`, `/tmp/ph-tcp-order-green.log`. No commit/deployment.
-
-Final review (2026-09-24): no findings after the ordering fix. All 74 TCP tests
-passed again (`/tmp/ph-tcp-order-review.log`); eight independent JVM reloads selected
-the same response. `git diff --check` passed. The prior 3 import-boundary tests remain
-applicable; this fix changed no module dependencies. Ready for publication as the
-next PR based on `codex/journal-filesystem` (#522). No full-reactor or deployed
-acceptance rerun is claimed for this delivery.
+Evidence logs: `/tmp/ph-tcp-order-review.log`, `/tmp/pr520-merge-tcp.log`,
+`/tmp/pr520-merge-tests.log`. Intermediate test counts and superseded implementation
+steps remain in Git history; they are not additional pending work or acceptance gates.
