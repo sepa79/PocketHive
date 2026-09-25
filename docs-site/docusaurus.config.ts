@@ -43,6 +43,7 @@ const config: Config = {
             "scenarios/**",
             "sdk/**",
             "mcp/README.md",
+            "tcp-mock/legacy-workspaces.md",
             "control-plane/worker-guide.md",
             "ARCHITECTURE.md",
             "ENGINEERING_RULES.md",

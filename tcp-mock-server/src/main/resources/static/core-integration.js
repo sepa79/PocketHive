@@ -13,7 +13,9 @@ class CoreIntegration {
     async init() {
         // Initialize authentication
         this.auth = new AuthModule();
-        const authenticated = await this.auth.init();
+        let authenticated = false;
+        try { authenticated = await this.auth.init(); }
+        catch (error) { document.getElementById('loginStatus').textContent = error.message; }
         
         if (!authenticated) {
             this.showLoginModal();
@@ -26,6 +28,7 @@ class CoreIntegration {
         // Initialize all modules
         const http = new HttpClient(this.auth);
         this.workspace = new WorkspaceModule(http);
+        this.workspaceView = new WorkspaceView(this.workspace);
         this.commandPalette = new CommandPaletteModule();
         this.notificationCenter = new NotificationModule(http);
         this.dashboard = new DashboardModule();
@@ -44,82 +47,30 @@ class CoreIntegration {
     }
 
     showLoginModal() {
-        const modal = document.getElementById('loginModal');
-        if (modal) {
-            modal.classList.add('active');
-            document.getElementById('loginForm').onsubmit = (e) => {
-                e.preventDefault();
-                this.handleLogin();
-            };
-        }
-    }
-
-    async handleLogin() {
-        const username = document.getElementById('loginUsername').value;
-        const password = document.getElementById('loginPassword').value;
-        
-        if (!username || !password) {
-            alert('Username and password required');
-            return;
-        }
-        
-        try {
-            const success = await this.auth.login(username, password);
-            
-            if (!success) {
-                alert('Invalid credentials');
-                return;
-            }
-            
-            document.getElementById('loginModal').classList.remove('active');
-            
-            // Initialize modules after successful login
-            const http = new HttpClient(this.auth);
-            this.workspace = new WorkspaceModule(http);
-            this.notificationCenter = new NotificationModule(http);
-            this.commandPalette = new CommandPaletteModule();
-            this.dashboard = new DashboardModule();
-            this.tour = new TourModule();
-
-            await this.workspace.init();
-            await this.notificationCenter.init();
-            this.commandPalette.init(this.app);
-            
-            // Initialize app components
-            this.app.http = http;
-            this.app.recording.setHttpClient(http);
-            this.app.initTestEditor();
-            this.app.modules.init(this.app);
-            
-            this.updateUserUI();
-            this.app.loadData();
-            this.notificationCenter.add('Welcome back!', 'success');
-            
-            // Start auto-refresh
-            setInterval(() => this.app.loadData(), 5000);
-        } catch (error) {
-            console.error('Login error:', error);
-            alert('Login failed: ' + error.message);
-        }
+        document.getElementById('loginModal')?.classList.add('active');
+        document.getElementById('loginForm').onsubmit = async event => {
+            event.preventDefault();
+            try {
+                const accepted = await this.auth.login(document.getElementById('loginUsername').value,
+                    document.getElementById('loginPassword').value);
+                if (accepted) location.reload();
+                else document.getElementById('loginStatus').textContent = 'Native login rejected';
+            } catch (error) { document.getElementById('loginStatus').textContent = error.message; }
+        };
     }
 
     updateUserUI() {
         const user = this.auth.getCurrentUser();
         if (!user) return;
 
-        document.getElementById('userMenuName').textContent = user.username;
-        document.getElementById('userMenuRole').textContent = user.role;
+        document.getElementById('userMenuName').textContent = user.displayName;
+        document.getElementById('userMenuRole').textContent = user.provider;
         
-        if (this.workspace) {
-            const currentWorkspace = this.workspace.getCurrentWorkspace();
-            if (currentWorkspace) {
-                document.getElementById('currentWorkspaceName').textContent = currentWorkspace.name;
-            }
-        }
-        
+        this.workspaceView?.render();
+
         // Generate avatar
         const avatar = document.getElementById('userAvatar');
-        avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=f59e0b&color=fff`;
+        avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=f59e0b&color=fff`;
     }
 
     bindEvents() {
@@ -169,7 +120,9 @@ class CoreIntegration {
     }
 
     handleOutsideClick(e) {
-        if (!e.target.closest('#workspaceSwitcher') && !e.target.closest('#workspaceDropdown')) {
+        const path = e.composedPath();
+        if (!path.includes(document.getElementById('workspaceSwitcher')) &&
+            !path.includes(document.getElementById('workspaceDropdown'))) {
             document.getElementById('workspaceDropdown')?.classList.add('hidden');
         }
         if (!e.target.closest('#userMenuBtn') && !e.target.closest('#userMenuDropdown')) {
@@ -191,16 +144,7 @@ class CoreIntegration {
     }
 
     renderWorkspaceList() {
-        const list = document.getElementById('workspaceList');
-        const workspaces = this.workspace.getAll();
-        const current = this.workspace.getCurrentWorkspace();
-        
-        list.innerHTML = workspaces.map(ws => `
-            <button onclick="tcpMockUI.switchWorkspace('${ws.id}')" 
-                    class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 ${ws.id === current.id ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400' : 'text-gray-700 dark:text-gray-300'}">
-                <i class="fas fa-${ws.shared ? 'users' : 'user'} mr-2"></i>${ws.name}
-            </button>
-        `).join('');
+        this.workspaceView.render();
     }
 
     toggleUserMenu() {
@@ -227,11 +171,7 @@ class CoreIntegration {
     }
 
     async switchWorkspace(id) {
-        await this.workspace.switch(id);
-        this.updateUserUI();
-        this.closeAllDropdowns();
-        this.app.loadData();
-        await this.notificationCenter.add('Switched workspace', 'info');
+        return this.workspaceView.select(id);
     }
 
     createWorkspace() {
@@ -239,29 +179,14 @@ class CoreIntegration {
     }
 
     async saveWorkspace() {
-        const name = document.getElementById('workspaceName').value.trim();
-        const shared = document.getElementById('workspaceShared').checked;
-        
-        if (!name) {
-            this.app.modules.showNotification('Workspace name required', 'error');
-            return;
-        }
-        
-        const workspace = await this.workspace.create(name, shared);
-        if (workspace) {
-            document.getElementById('workspaceCreateModal')?.classList.remove('active');
-            this.updateUserUI();
-            await this.notificationCenter.add(`Workspace "${name}" created`, 'success');
-        } else {
-            this.app.modules.showNotification('Failed to create workspace', 'error');
-        }
+        return this.workspaceView.create();
     }
 
     showAuditLog() {
         const modal = document.getElementById('auditLogModal');
         const list = document.getElementById('auditLogList');
         
-        const logs = this.auth.getAuditLog();
+        const logs = BrowserAuditLog.read();
         list.innerHTML = logs.map(log => `
             <div class="flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                 <i class="fas fa-${this.getAuditIcon(log.action)} text-gray-400 mt-1"></i>

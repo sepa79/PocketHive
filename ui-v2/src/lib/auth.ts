@@ -1,25 +1,7 @@
-export type AuthGrant = {
-  product: string
-  permission: string
-  resourceType: string
-  resourceSelector: string
-}
-
-export type AuthenticatedUser = {
-  id: string
-  username: string
-  displayName: string
-  active: boolean
-  authProvider: string
-  grants: AuthGrant[]
-}
-
-export type AuthSession = {
-  accessToken: string
-  tokenType: string
-  expiresAt: string | null
-  user: AuthenticatedUser
-}
+import { normalizeUser, normalizeSession, readStoredAuthSession, writeStoredAuthSession, readStoredAccessToken } from './authSession'
+import type { AuthGrant, AuthenticatedUser, AuthSession } from './authSession'
+export { readStoredAuthSession, writeStoredAuthSession, readStoredAccessToken, clearAuthSession, replaceSessionUser } from './authSession'
+export type { AuthGrant, AuthenticatedUser, AuthSession } from './authSession'
 
 export type UserUpsertRequest = {
   username: string
@@ -33,63 +15,10 @@ export type UserGrantsReplaceRequest = {
 
 type ApiError = Error & { status?: number }
 
-const AUTH_SESSION_KEY = 'PH_UI_V2_AUTH_SESSION'
 const AUTH_PREFIXES = ['/scenario-manager/', '/orchestrator/', '/network-proxy-manager/', '/auth-service/']
 const AUTH_EXCLUDED_PATHS = new Set(['/auth-service/api/auth/dev/login'])
 
 let authenticatedFetchInstalled = false
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-function asString(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : null
-}
-
-function normalizeGrant(input: unknown): AuthGrant | null {
-  if (!isRecord(input)) return null
-  const product = asString(input.product)
-  const permission = asString(input.permission)
-  const resourceType = asString(input.resourceType)
-  const resourceSelector = asString(input.resourceSelector)
-  if (!product || !permission || !resourceType || !resourceSelector) return null
-  return { product, permission, resourceType, resourceSelector }
-}
-
-function normalizeUser(input: unknown): AuthenticatedUser | null {
-  if (!isRecord(input)) return null
-  const id = asString(input.id)
-  const username = asString(input.username)
-  if (!id || !username) return null
-  const grants = Array.isArray(input.grants)
-    ? input.grants.map((entry) => normalizeGrant(entry)).filter((entry): entry is AuthGrant => entry !== null)
-    : []
-  return {
-    id,
-    username,
-    displayName: asString(input.displayName) ?? username,
-    active: input.active !== false,
-    authProvider: asString(input.authProvider) ?? 'UNKNOWN',
-    grants,
-  }
-}
-
-function normalizeSession(input: unknown): AuthSession | null {
-  if (!isRecord(input)) return null
-  const accessToken = asString(input.accessToken)
-  const tokenType = asString(input.tokenType)
-  const user = normalizeUser(input.user)
-  if (!accessToken || !tokenType || !user) return null
-  return {
-    accessToken,
-    tokenType,
-    expiresAt: asString(input.expiresAt),
-    user,
-  }
-}
 
 async function ensureOk(response: Response, fallback: string) {
   if (response.ok) return
@@ -114,34 +43,6 @@ async function ensureOk(response: Response, fallback: string) {
   const error: ApiError = new Error(message || fallback)
   error.status = response.status
   throw error
-}
-
-export function readStoredAuthSession(): AuthSession | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.sessionStorage.getItem(AUTH_SESSION_KEY)
-    if (!raw) return null
-    return normalizeSession(JSON.parse(raw))
-  } catch {
-    return null
-  }
-}
-
-export function writeStoredAuthSession(session: AuthSession | null) {
-  if (typeof window === 'undefined') return
-  try {
-    if (!session) {
-      window.sessionStorage.removeItem(AUTH_SESSION_KEY)
-      return
-    }
-    window.sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session))
-  } catch {
-    // ignore
-  }
-}
-
-export function readStoredAccessToken(): string | null {
-  return readStoredAuthSession()?.accessToken ?? null
 }
 
 export async function loginDevUser(username: string): Promise<AuthSession> {
@@ -256,14 +157,4 @@ export function installAuthenticatedFetch() {
   }) as typeof window.fetch
 
   authenticatedFetchInstalled = true
-}
-
-export function clearAuthSession() {
-  writeStoredAuthSession(null)
-}
-
-export function replaceSessionUser(user: AuthenticatedUser) {
-  const session = readStoredAuthSession()
-  if (!session) return
-  writeStoredAuthSession({ ...session, user })
 }

@@ -4,6 +4,8 @@
   <artifactId>redis-config</artifactId>
   <name>PocketHive Redis Configuration</name>
   <properties><maven.compiler.release>21</maven.compiler.release><maven.compiler.parameters>true</maven.compiler.parameters></properties>
+  <!-- Constructor binding requires the parameter metadata already declared above. -->
+  <build><plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.11.0</version></plugin></plugins></build>
   <dependencies>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-config</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.10.2</version><scope>test</scope></dependency>

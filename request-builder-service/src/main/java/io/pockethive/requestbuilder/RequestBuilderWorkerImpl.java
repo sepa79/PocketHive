@@ -1,5 +1,7 @@
 package io.pockethive.requestbuilder;
 
+import io.pockethive.worker.sdk.auth.MutableHttpRequest;
+
 import io.pockethive.work.api.HttpRequest;
 import io.pockethive.work.api.Iso8583Request;
 import io.pockethive.work.api.IsoSchemaRef;
@@ -161,7 +163,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
           Map<String, String> headers = new HashMap<>(rendered.headers());
 
           String method = requireNonBlank(rendered.method(), "method").toUpperCase(Locale.ROOT);
-          AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
+          MutableHttpRequest authRequest = new MutableHttpRequest(
               method, rendered.path(), headers, rendered.body());
           if (httpDef.authRef() != null) {
             authRuntime.applyHttp(httpDef.authRef(), authRequest, effectiveSeed, context);

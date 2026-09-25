@@ -16,142 +16,157 @@ import io.pockethive.mcp.config.PocketHiveMcpProperties;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.boot.info.BuildProperties;
+import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * Responsibility: Assemble the MCP server, tool callbacks, and bounded coordination repository.
- * Must not: Own domain state transitions or reinterpret owner-service outcomes.
- * Contract: docs/mcp/README.md.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes. Contract:
+ * docs/mcp/README.md.
  */
-
 @Configuration
 public class McpServerConfiguration {
-    private static final String SERVER_NAME = "pockethive-mcp";
-    private static final String JSON_SCHEMA_TYPE = "type";
-    private static final String JSON_SCHEMA_OBJECT = "object";
+  private static final String SERVER_NAME = "pockethive-mcp";
+  private static final String JSON_SCHEMA_TYPE = "type";
+  private static final String JSON_SCHEMA_OBJECT = "object";
 
-    @Bean
-    ToolCatalogue toolCatalogue() {
-        return ToolCatalogue.canonical();
-    }
+  @Bean
+  ToolCatalogue toolCatalogue() {
+    return ToolCatalogue.canonical();
+  }
 
-    @Bean
-    HttpServletStreamableServerTransportProvider transport(ObjectMapper objectMapper,
-                                                            PocketHiveMcpProperties properties) {
-        JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(objectMapper);
-        DefaultServerTransportSecurityValidator validator =
-            DefaultServerTransportSecurityValidator.builder()
-                .allowedOrigins(properties.allowedOrigins())
-                .allowedHosts(properties.allowedHosts())
-                .build();
-        return HttpServletStreamableServerTransportProvider.builder()
-            .jsonMapper(mapper)
-            .mcpEndpoint("/mcp")
-            .disallowDelete(false)
-            .contextExtractor(McpTransportContextFactory::from)
-            .keepAliveInterval(Duration.ofSeconds(20))
-            .securityValidator(validator)
+  @Bean
+  HttpServletStreamableServerTransportProvider transport(
+      ObjectMapper objectMapper, PocketHiveMcpProperties properties) {
+    JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(objectMapper);
+    DefaultServerTransportSecurityValidator validator =
+        DefaultServerTransportSecurityValidator.builder()
+            .allowedOrigins(properties.allowedOrigins())
+            .allowedHosts(properties.allowedHosts())
             .build();
-    }
+    return HttpServletStreamableServerTransportProvider.builder()
+        .jsonMapper(mapper)
+        .mcpEndpoint("/mcp")
+        .disallowDelete(false)
+        .contextExtractor(McpTransportContextFactory::from)
+        .keepAliveInterval(Duration.ofSeconds(20))
+        .securityValidator(validator)
+        .build();
+  }
 
-    @Bean(destroyMethod = "close")
-    McpSyncServer server(HttpServletStreamableServerTransportProvider transport,
-                         ToolCatalogue catalogue,
-                         McpKnowledgeResources resources,
-                         McpToolExecutor executor,
-                         ToolFailureMapper failureMapper,
-                         ObjectMapper objectMapper,
-                         BuildProperties buildProperties) {
-        JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(objectMapper);
-        List<McpServerFeatures.SyncToolSpecification> tools = catalogue.tools().stream()
+  @Bean(destroyMethod = "close")
+  McpSyncServer server(
+      HttpServletStreamableServerTransportProvider transport,
+      ToolCatalogue catalogue,
+      McpKnowledgeResources resources,
+      McpToolExecutor executor,
+      ToolFailureMapper failureMapper,
+      ObjectMapper objectMapper,
+      BuildProperties buildProperties) {
+    JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(objectMapper);
+    List<McpServerFeatures.SyncToolSpecification> tools =
+        catalogue.tools().stream()
             .map(descriptor -> tool(descriptor, executor, failureMapper, objectMapper))
             .toList();
-        return McpServer.sync(transport)
-            .serverInfo(SERVER_NAME, buildProperties.getVersion())
-            .instructions("Read pockethive://knowledge/overview, pockethive://capabilities/current, and pockethive://skills/catalogue before operating PocketHive.")
-            .capabilities(McpSchema.ServerCapabilities.builder()
-                .tools(false)
-                .resources(false, false)
-                .build())
-            .jsonMapper(mapper)
-            .strictToolNameValidation(true)
-            .validateToolInputs(true)
-            .immediateExecution(true)
-            .tools(tools)
-            .resources(resources.specifications())
-            .build();
-    }
+    return McpServer.sync(transport)
+        .serverInfo(SERVER_NAME, buildProperties.getVersion())
+        .instructions(
+            "Read pockethive://knowledge/overview, pockethive://capabilities/current, and"
+                + " pockethive://skills/catalogue before operating PocketHive.")
+        .capabilities(
+            McpSchema.ServerCapabilities.builder().tools(false).resources(false, false).build())
+        .jsonMapper(mapper)
+        .strictToolNameValidation(true)
+        .validateToolInputs(true)
+        .immediateExecution(true)
+        .tools(tools)
+        .resources(resources.specifications())
+        .build();
+  }
 
-    @Bean
-    ServletRegistrationBean<HttpServletStreamableServerTransportProvider> mcpServlet(
-        HttpServletStreamableServerTransportProvider transport) {
-        ServletRegistrationBean<HttpServletStreamableServerTransportProvider> registration =
-            new ServletRegistrationBean<>(transport, "/mcp");
-        registration.setName("pockethiveMcpTransport");
-        registration.setLoadOnStartup(1);
-        return registration;
-    }
+  @Bean
+  ServletRegistrationBean<HttpServletStreamableServerTransportProvider> mcpServlet(
+      HttpServletStreamableServerTransportProvider transport) {
+    ServletRegistrationBean<HttpServletStreamableServerTransportProvider> registration =
+        new ServletRegistrationBean<>(transport, "/mcp");
+    registration.setName("pockethiveMcpTransport");
+    registration.setLoadOnStartup(1);
+    return registration;
+  }
 
-    private static McpServerFeatures.SyncToolSpecification tool(ToolDescriptor descriptor,
-                                                                 McpToolExecutor executor,
-                                                                 ToolFailureMapper failureMapper,
-                                                                 ObjectMapper mapper) {
-        McpSchema.ToolAnnotations annotations = McpSchema.ToolAnnotations.builder()
+  private static McpServerFeatures.SyncToolSpecification tool(
+      ToolDescriptor descriptor,
+      McpToolExecutor executor,
+      ToolFailureMapper failureMapper,
+      ObjectMapper mapper) {
+    McpSchema.ToolAnnotations annotations =
+        McpSchema.ToolAnnotations.builder()
             .readOnlyHint(descriptor.readOnly())
             .destructiveHint(descriptor.destructive())
             .idempotentHint(descriptor.idempotent())
             .openWorldHint(true)
             .build();
-        var toolBuilder = McpSchema.Tool.builder()
+    var toolBuilder =
+        McpSchema.Tool.builder()
             .name(descriptor.id())
             .description(descriptor.description())
             .inputSchema(descriptor.inputSchema())
             .annotations(annotations)
-            .meta(Map.of(
-                "owner", descriptor.owner().name(),
-                "requiredScope", descriptor.requiredScope(),
-                "skills", descriptor.skillIds()));
-        if (hasObjectRoot(descriptor.outputSchema())) {
-            toolBuilder.outputSchema(descriptor.outputSchema());
-        }
-        McpSchema.Tool tool = toolBuilder.build();
-        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            try {
-                Object result = executor.execute(descriptor, exchange, request.arguments());
-                Object structuredContent = ToolStructuredContent.normalize(mapper, result);
-                ToolOutputValidator.validate(descriptor, structuredContent);
-                var resultBuilder = McpSchema.CallToolResult.builder()
+            .meta(
+                Map.of(
+                    "owner", descriptor.owner().name(),
+                    "requiredScope", descriptor.requiredScope(),
+                    "skills", descriptor.skillIds()));
+    if (hasObjectRoot(descriptor.outputSchema())) {
+      toolBuilder.outputSchema(descriptor.outputSchema());
+    }
+    McpSchema.Tool tool = toolBuilder.build();
+    return new McpServerFeatures.SyncToolSpecification(
+        tool,
+        (exchange, request) -> {
+          try {
+            Object result =
+                executor.execute(
+                    descriptor,
+                    McpCallerDecoder.from(exchange.transportContext()),
+                    new McpClientInteraction(exchange),
+                    request.arguments());
+            Object structuredContent = ToolStructuredContent.normalize(mapper, result);
+            ToolOutputValidator.validate(descriptor, structuredContent);
+            var resultBuilder =
+                McpSchema.CallToolResult.builder()
                     .addTextContent(json(mapper, structuredContent))
                     .isError(false);
-                if (hasObjectRoot(descriptor.outputSchema())) {
-                    resultBuilder.structuredContent(structuredContent);
-                }
-                return resultBuilder.build();
-            } catch (RuntimeException exception) {
-                KnownToolFailure failure = failureMapper.known(exception)
-                    .orElseThrow(() -> failureMapper.unexpected(descriptor.id(), exception));
-                Map<String, Object> error = failure.structuredContent();
-                return McpSchema.CallToolResult.builder()
-                    .addTextContent(json(mapper, error))
-                    .structuredContent(error)
-                    .isError(true)
-                    .build();
+            if (hasObjectRoot(descriptor.outputSchema())) {
+              resultBuilder.structuredContent(structuredContent);
             }
+            return resultBuilder.build();
+          } catch (RuntimeException exception) {
+            KnownToolFailure failure =
+                failureMapper
+                    .known(exception)
+                    .orElseThrow(() -> failureMapper.unexpected(descriptor.id(), exception));
+            Map<String, Object> error = failure.structuredContent();
+            return McpSchema.CallToolResult.builder()
+                .addTextContent(json(mapper, error))
+                .structuredContent(error)
+                .isError(true)
+                .build();
+          }
         });
-    }
+  }
 
-    private static boolean hasObjectRoot(Map<String, Object> schema) {
-        return JSON_SCHEMA_OBJECT.equals(schema.get(JSON_SCHEMA_TYPE));
-    }
+  private static boolean hasObjectRoot(Map<String, Object> schema) {
+    return JSON_SCHEMA_OBJECT.equals(schema.get(JSON_SCHEMA_TYPE));
+  }
 
-    private static String json(ObjectMapper mapper, Object value) {
-        try {
-            return mapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("TOOL_RESULT_SERIALIZATION_FAILED", exception);
-        }
+  private static String json(ObjectMapper mapper, Object value) {
+    try {
+      return mapper.writeValueAsString(value);
+    } catch (JsonProcessingException exception) {
+      throw new IllegalStateException("TOOL_RESULT_SERIALIZATION_FAILED", exception);
     }
+  }
 }

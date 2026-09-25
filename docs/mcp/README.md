@@ -391,3 +391,16 @@ In HiveForge explicitly set `POCKETHIVE_ALLOW_REMOTE_HTTP` (`false` for HTTPS,
 `true` for HTTP) alongside its existing
 explicit `pockethive_public_ingress` and allowed host settings.
 In the companion select **Remote HTTP (unencrypted)** explicitly and connect.
+
+Application handlers consume immutable `McpCaller` identity and the
+`ClientInteraction` form/metadata port. MCP transport context and SDK elicitation
+messages are decoded only by their adapters. Descriptor scope checks share
+`McpCaller` scope membership for invocation and catalogue visibility. This boundary change
+preserves external tool/resource schemas and elicitation actions; it grants no
+additional authority to the MCP or an agent.
+
+Knowledge and capability resource content is projected by `McpKnowledgeProjection`.
+The MCP adapter serializes and wraps it; packaged document reads belong to
+`ClasspathKnowledgeDocuments`. Tool catalogue filtering and invocation use the
+same scope check against each canonical descriptor. Existing JSON content and
+canonical digest encoding remain unchanged.

@@ -20,7 +20,7 @@ class MappingFilterModule {
             const term = this.filters.search.toLowerCase();
             filtered = filtered.filter(m => 
                 m.id.toLowerCase().includes(term) ||
-                m.pattern.toLowerCase().includes(term) ||
+                m.requestPattern.toLowerCase().includes(term) ||
                 (m.description && m.description.toLowerCase().includes(term))
             );
         }

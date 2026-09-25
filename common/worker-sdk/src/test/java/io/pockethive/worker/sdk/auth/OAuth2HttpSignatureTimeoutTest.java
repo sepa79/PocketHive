@@ -103,7 +103,7 @@ class OAuth2HttpSignatureTimeoutTest {
             when(context.statusPublisher()).thenReturn(mock(StatusPublisher.class));
             AuthRuntime runtime = new AuthRuntime(Map.of(PROFILE_ID, profile), Map.of(PROFILE_ID, FINGERPRINT),
                 store, (template, ignored) -> template, client);
-            AuthRuntime.MutableHttpRequest downstream = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+            MutableHttpRequest downstream = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
             worker = new Thread(() -> {
                 try {
                     runtime.applyHttp(REF, downstream, null, context);

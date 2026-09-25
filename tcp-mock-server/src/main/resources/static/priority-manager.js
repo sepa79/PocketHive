@@ -10,7 +10,7 @@ class PriorityManagerModule {
             for (let j = i + 1; j < mappings.length; j++) {
                 const m1 = mappings[i];
                 const m2 = mappings[j];
-                if (this.patternsOverlap(m1.pattern, m2.pattern)) {
+                if (this.patternsOverlap(m1.requestPattern, m2.requestPattern)) {
                     conflicts.push({
                         mapping1: m1.id,
                         mapping2: m2.id,
@@ -41,7 +41,7 @@ class PriorityManagerModule {
 
     suggestPriority(pattern, existingMappings) {
         const specificity = this.calculateSpecificity(pattern);
-        const similar = existingMappings.filter(m => this.patternsOverlap(pattern, m.pattern));
+        const similar = existingMappings.filter(m => this.patternsOverlap(pattern, m.requestPattern));
         if (similar.length === 0) return 10;
         const avgPriority = similar.reduce((sum, m) => sum + m.priority, 0) / similar.length;
         return Math.round(avgPriority + (specificity > 0.7 ? 5 : -5));
