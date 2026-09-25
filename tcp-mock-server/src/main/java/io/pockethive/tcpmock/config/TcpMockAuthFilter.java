@@ -4,14 +4,13 @@ import io.pockethive.auth.client.AuthServiceClient;
 import io.pockethive.auth.client.AuthServiceClientException;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHiveGrantChecks;
-import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHivePermissionSets;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
-import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -20,16 +19,13 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Responsibility: resolve administrative bearer identity and apply canonical global grant checks.
+ * Responsibility: resolve administrative bearer identity and apply canonical global grant checks
+ * using PocketHivePermissionSets.
  * Must not: authenticate TCP traffic, cache authority, persist users or mutate workspaces.
  * Contract: RESP-TCP-MOCK-AUTHENTICATION —
  * docs/architecture/runtime-responsibilities.md#resp-tcp-mock-authentication.
  */
 public final class TcpMockAuthFilter extends OncePerRequestFilter {
-  private static final Set<String> READ =
-      Set.of(
-          PocketHivePermissionIds.VIEW, PocketHivePermissionIds.RUN, PocketHivePermissionIds.ALL);
-  private static final Set<String> WRITE = Set.of(PocketHivePermissionIds.ALL);
   private final AuthServiceClient client;
   private final RequestMatcher publicRequests;
 
@@ -70,7 +66,8 @@ public final class TcpMockAuthFilter extends OncePerRequestFilter {
     boolean read =
         HttpMethod.GET.matches(request.getMethod()) || HttpMethod.HEAD.matches(request.getMethod());
     if (!user.active()
-        || !PocketHiveGrantChecks.hasPermissionInScope(user, read ? READ : WRITE, null, null)) {
+        || !PocketHiveGrantChecks.hasPermissionInScope(
+            user, read ? PocketHivePermissionSets.READ : PocketHivePermissionSets.MANAGE, null, null)) {
       response.sendError(403, "Global PocketHive permission required");
       return;
     }

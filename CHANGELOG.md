@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Worker auth: separate profile discovery/preparation, credential application and ordinary
+  OAuth token acquisition; reuse the canonical Scenario Bundle layout after integration.
+- MCP: keep caller/client interaction behind application ports and knowledge projection
+  separate from transport packaging, preserving explicit remote HTTP configuration.
+- TCP mock: reuse canonical PocketHive read/manage permission sets in administration
+  authentication, removing duplicate definitions without changing access policy.
+- TCP mock: persist workspace metadata, share backend default/deletion policy, and select
+  NATIVE or POCKETHIVE administration explicitly; reuse the PH browser session owner.
+  Workspace selection remains presentation metadata, without mapping or traffic isolation.
+
+- Report malformed UTF-8 bundle text as a validation error instead of aborting
+  Scenario Manager catalogue reload/startup; keep healthy bundles available.
+
+- Scenario Manager: reject occupied CREATE destinations with HTTP 409 without deleting
+  existing content; validate existing bundles from current files and derive catalogue
+  runnability from complete canonical validation, preserving warning-only acceptance.
+
+- Fix Scenario Manager catalogue visibility for duplicate/missing scenario IDs using
+  exact bundle access; fingerprint the entire authoring response for cache freshness.
+
+- Share bundle SUT/template/schema paths and the worker mount destination through
+  ScenarioBundleLayout across authoring, validation, workers and Orchestrator.
+- Move authoring projection assembly out of REST; obtain HTTP requirements from
+  the request-template parser and variables version/enums from their contracts.
+  Derive scenario requirements from descriptor metadata and include the already
+  required protocolVersion in the authoring response.
+
 - Scenario Manager: consolidate bundle operations behind ScenarioBundleService and
   catalogue/operation access behind ScenarioAccessService; share one controller for
   the approved access projections, preserving HTTP contracts and permission policy.

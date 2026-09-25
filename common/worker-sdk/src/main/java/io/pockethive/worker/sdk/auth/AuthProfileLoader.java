@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.work.api.WorkerContext;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -20,13 +21,13 @@ import java.util.Map;
  * not: open token stores, acquire credentials or mutate downstream requests. Contract:
  * RESP-WORK-AUTH-PROFILE-LOADING —
  * docs/architecture/runtime-responsibilities.md#resp-work-auth-profile-loading.
+ * Uses ScenarioBundleLayout for canonical bundle paths (RESP-SCENARIO-BUNDLE-LAYOUT).
  */
 final class AuthProfileLoader {
   private static final ObjectMapper YAML =
       new ObjectMapper(
               YAMLFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
           .findAndRegisterModules();
-  private static final String AUTH_PROFILES_FILE = "authProfiles.yaml";
   private static final String SCENARIO_ROOT_PROPERTY = "pockethive.scenario.root";
   private static final String SCENARIO_ROOT_ENV = "POCKETHIVE_SCENARIO_ROOT";
 
@@ -86,7 +87,7 @@ final class AuthProfileLoader {
   }
 
   static Path forApplications() {
-    Path file = scenarioRoot().resolve(AUTH_PROFILES_FILE);
+    Path file = ScenarioBundleLayout.authProfilesFile(scenarioRoot());
     if (!Files.isRegularFile(file)) {
       throw AuthFailureException.configuration(
           "missing-auth-profiles",
@@ -101,11 +102,11 @@ final class AuthProfileLoader {
     if (templateRoot != null && !templateRoot.isBlank()) {
       Path cursor = Path.of(templateRoot).toAbsolutePath().normalize();
       while (cursor != null) {
-        candidates.add(cursor.resolve(AUTH_PROFILES_FILE));
+        candidates.add(ScenarioBundleLayout.authProfilesFile(cursor));
         cursor = cursor.getParent();
       }
     }
-    candidates.add(Path.of("/app/scenario").resolve(AUTH_PROFILES_FILE));
+    candidates.add(ScenarioBundleLayout.authProfilesFile(Path.of(ScenarioBundleLayout.CONTAINER_ROOT)));
     for (Path candidate : candidates) {
       if (Files.isRegularFile(candidate)) {
         return candidate;
@@ -124,7 +125,7 @@ final class AuthProfileLoader {
       configured = System.getenv(SCENARIO_ROOT_ENV);
     }
     if (configured == null || configured.isBlank()) {
-      configured = "/app/scenario";
+      configured = ScenarioBundleLayout.CONTAINER_ROOT;
     }
     return Path.of(configured).toAbsolutePath().normalize();
   }

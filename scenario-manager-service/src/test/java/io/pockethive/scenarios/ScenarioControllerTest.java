@@ -101,6 +101,10 @@ class ScenarioControllerTest {
                       {
                         "role": "worker",
                         "image": "worker-image:latest",
+                        "config": {
+                          "inputs": {"type": "RABBITMQ"},
+                          "outputs": {"type": "RABBITMQ"}
+                        },
                         "work": {
                           "in": {
                             "in": "a"
@@ -521,6 +525,27 @@ class ScenarioControllerTest {
                 .andExpect(status().isNoContent());
 
         org.junit.jupiter.api.Assertions.assertFalse(Files.exists(scenariosDir.resolve("quarantine").resolve("broken-bundle")));
+    }
+
+    @Test
+    void uploadReturnsConflictAndPreservesOccupiedDestination() throws Exception {
+        Path target = Files.createDirectories(scenariosDir.resolve("bundles/new-id"));
+        String existing = """
+            protocolVersion: "2.0.0"
+            id: other-id
+            name: Existing
+            template:
+              image: ctrl-image:latest
+              bees: []
+            """;
+        Files.writeString(target.resolve("scenario.yaml"), existing);
+        Files.writeString(target.resolve("sentinel.txt"), "keep");
+        mvc.perform(post("/scenarios/reload")).andExpect(status().isNoContent());
+        mvc.perform(post("/scenarios/bundles").contentType("application/zip")
+                .content(bundleZip("scenario.yaml", existing.replace("other-id", "new-id"))))
+            .andExpect(status().isConflict());
+        org.assertj.core.api.Assertions.assertThat(target.resolve("scenario.yaml")).hasContent(existing);
+        org.assertj.core.api.Assertions.assertThat(target.resolve("sentinel.txt")).hasContent("keep");
     }
 
     @Test
@@ -3509,6 +3534,8 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.endpoints.validateTemplates").doesNotExist())
                 .andExpect(jsonPath("$.scenario.descriptorNames", hasSize(1)))
                 .andExpect(jsonPath("$.scenario.descriptorNames[0]").value("scenario.yaml"))
+                .andExpect(jsonPath("$.scenario.requiredTopLevelFields", org.hamcrest.Matchers.contains(
+                        "protocolVersion", "id", "name", "template")))
                 .andExpect(jsonPath("$.sut.root").value("sut/<sutId>/sut.yaml"))
                 .andExpect(jsonPath("$.cache.sessionCacheable").value(true));
 

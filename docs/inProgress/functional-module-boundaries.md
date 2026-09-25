@@ -1,11 +1,12 @@
 # Functional module boundaries — next refactors
 
-## Release priority — 25 September 2026
+## Integrated Tim delivery — 25 September 2026
 
-User-selected release scope: F06 worker authentication, F09 MCP application/projection
+Tim’s delivered scope: F06 worker authentication, F09 MCP application/projection
 boundaries, and F07 TCP workspace catalogue correctness. Baseline: PR #523 head
 `474912ef8f817b750ec259bad719fbf6f207e57b`, including #522 ancestry.
-Worktree branch: `fix/f06-f07-f09-release`.
+Source branch: `fix/f06-f07-f09-release`, commit `ed9ceacf`.
+Integrated locally by `7308aee2`; the combined delivery lives on `codex/f07-ph-ui`.
 
 F07 retains the single-user KISS foundation: server-owned default/deletion policy,
 confirmed mutation results, visible errors and explicit reload. Workspace selection
@@ -23,9 +24,9 @@ Native TCP upgrade code, tests and qualification progress remain preserved in
 `feat/tcp-mock-upgrade`; they are deferred from this release candidate. This branch
 retains the established TCP runtime and UI style; Compose selects PocketHive login.
 
-Acceptance requires fresh component/consumer regression including real OAuth and
-Redis coordination, workspace UI failure tests, packaging, existing import gate,
-and the separate responsibility review. Test evidence does not imply release approval.
+Tim’s component, browser and review evidence is recorded in
+[his handoff](../ci/evidence/2026-09-25-f06-f07-f09/README.md). Integrated verification
+is separate from that source snapshot; test evidence does not imply release approval.
 
 
 Status (2026-09-25): PR #520 integrates F01/F03 from #521, F04/F05 from #522,
@@ -34,30 +35,32 @@ F02 local inputs, F07 producer-owned Scenario Manager contracts, and selected F0
 processor and TCP mock boundaries. TCP mapping persistence and the equal-priority
 restart fix are implemented, tested and accepted in separate review.
 
-This closes the selected delivery, not every F07/F09 audit lead. F06 auth/rendering,
-F08 state/correctness decisions, remaining F07/F09 service work and promotion of TCP
-runtime mappings into PocketHive scenarios remain separate follow-ups. Historical
+Tim’s F06/F07-TCP/F09-MCP delivery (`ed9ceacf`) is now integrated into
+`codex/f07-ph-ui`. The current table includes our subsequent PH UI and Scenario
+Manager repairs. F08, lifecycle correctness and promotion of TCP runtime mappings
+into PocketHive scenarios remain separate follow-ups. Historical
 baseline analysis and intermediate verification remain below and in Git history.
 
 ## Current remaining work
 
-This is the current backlog after integration into PR #520. Completed slice sections
+This is the current backlog on `codex/f07-ph-ui`, based on PR #520 and integrated
+with Tim’s release branch. Completed slice sections
 below retain implementation evidence; their older test counts are not current gates.
 
 | ID / area | Current status and next action |
 | --- | --- |
 | F01–F05 | Closed in the selected scope: Redis, local inputs, Docker, journal/filesystem and ClickHouse. Do not repeat these extractions. |
-| F06 | Open: trace worker OAuth/signed OAuth, profile loading/preparation, credential application and token coordination; extract only confirmed ownership leaks. Preserve existing behavior. |
+| F06 — Tim | Implemented and integrated: AuthProfileLoader, AuthCredentialApplication and OAuth2TokenProvider own profile discovery/preparation, credential application and ordinary token acquisition. Existing signed OAuth and coordination owners remain. Loader consumes our ScenarioBundleLayout. |
 | F07 — completed contracts | Scenario Manager producer contracts closed; do not repeat this extraction. Remaining work is split into F07-TCP and F07-UI below. |
-| F07-TCP — Tim | TCP mock UI workspace catalogue/default-policy duplication and mutation-result handling. The attempted browser fix was discarded by user decision; no implementation is retained. Decide whether to remove the workspace feature rather than repair it: it currently does not isolate mappings or TCP traffic. |
+| F07-TCP — Tim | Implemented and integrated: server-owned workspace policy, durable catalogue, confirmed UI mutations and explicit NATIVE/POCKETHIVE administration. Workspace selection does not isolate mappings or traffic. Tim’s acceptance evidence is linked below; it is not a deployment check of this integrated tree. |
 | F07-UI — Zbigniew | Implemented: main PH UI uses backend access projections and explicit network modes; approved endpoints and UI consumers are complete. Browser/deployed acceptance remains unperformed. Broader model sharing requires evidence. Excludes TCP mock UI. |
 | F08 | Open: establish observation/freshness ownership and distinguish readiness, health and stale semantics before changing writers or thresholds. |
-| F09 | Processor pacing/HTTP/TCP mechanics and the agreed TCP mock extraction/persistence are closed. Open: trace remaining Scenario Manager and MCP application/projection boundaries. |
+| F09 | Processor/TCP extraction closed. MCP caller/client-interaction and knowledge projection boundaries integrated from Tim. SM bundle/access/authoring APIs, shared layout and S1–S3/S9–S10 repairs implemented; final integrated review remains before PR. |
 | Separate correctness | Orchestrator reset/registry/recovery and orphan-removal outcomes follow `orchestrator-correctness.md`. Processor transport replacement/failure/shutdown lifecycle is also deferred; extraction did not repair it. |
 | Separate TCP debt/features | Mock scenario-state reset/persistence/null semantics, public nested DTOs and promotion of runtime mappings into PH scenarios are outside the closed TCP slice. Workspace UI work belongs to F07-TCP (Tim). |
 
-This backlog does not authorize behavior or public-contract changes. F06 and bounded
-F09 extractions can start with existing behavior; raise concrete conflicting semantics
+This backlog does not authorize behavior or public-contract changes. Remaining
+extractions preserve existing behavior; raise concrete conflicting semantics
 or contract changes for review when found. Full-Swarm qualification is not implied by
 unit/component evidence.
 
@@ -120,7 +123,7 @@ separated from historical findings that still require revalidation.
 | Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
 | Journal/files | Shared file paths; query, metadata, capture and retention ports implemented; 111 focused tests green | F04 implemented and reviewed; Hive and swarm producer contracts remain distinct |
 | ClickHouse | Both sinks use `ClickHouseJsonEachRowTransport`; shared ENV projections and property-owned defaults replace service copies | F05 implemented, tested and reviewed; separate domain/buffering policies preserved |
-| Worker auth | AuthRuntime now delegates preparation/validation to AuthProfilePreparation; OAuth/signature work changed these paths in PR #517 | Re-trace current authoring/runtime/token flow before alleging duplicate validation or extracting worker-auth |
+| Worker auth | AuthRuntime delegates discovery/preparation to AuthProfileLoader, application to AuthCredentialApplication and ordinary acquisition to OAuth2TokenProvider; signed acquisition and TokenStore retain their separate owners | F06 integrated from Tim; shared bundle layout is consumed by the loader |
 | Freshness | `SwarmReadinessTracker.STATUS_TTL_MS` and `SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS` remain separate 15s definitions | First decide whether they describe the same fact; then one owner/projection for that fact |
 | UI network projection | `ui-v2/src/lib/networkProxy.ts` maps every unknown mode to DIRECT | Separate contract/behavior decision; do not silently change acceptance during extraction |
 
@@ -922,3 +925,140 @@ Separate review of the consolidation: no actionable findings. Re-ran 156 Scenari
 Manager tests plus 3 import-boundary tests; log /tmp/ph-bundle-access-review.log.
 Checked endpoint-to-owner call paths, former-owner removal, preserved locks/error
 mapping and canonical permission decisions. No deployed/browser E2E claimed.
+
+### F09-SM — S7 layout and S5 authoring metadata (implemented; awaiting review)
+
+Base 33626518. User authorized S7 followed by S5. Reuse ScenarioBundleLayout for
+resolved bundle directories and the default worker mount; wire existing callers
+without changing their containment or auth lookup policy. S5 moves authoring
+assembly out of REST and derives metadata from contract owners. No per-field
+services. The user subsequently approved the required protocolVersion response correction.
+Acceptance: preserved editing, template path validation, worker auth lookup and
+Orchestrator mount behavior; authoring API projects parser/type metadata; existing
+wire shape, catalogue filter and fingerprint behavior stay unchanged apart from any
+explicitly approved field-list correction. S1/S2/S3/S9/S10 remain out of scope.
+
+S7 implemented: ScenarioBundleLayout owns SUT/template/schema paths and CONTAINER_ROOT.
+Content/SUT services and validator consume resolved directory paths; Orchestrator
+uses the mount constant; AuthProfileLoader consumes the same default mount and canonical
+auth-profile filename. Its existing property/env override and ancestor-search order
+are preserved. No new filesystem policy or fallback is introduced. Repository-wide
+production Java search finds /app/scenario only in the layout owner and no remaining
+resolve("sut"|"templates"|"schemas") literals.
+
+S5 implemented: ScenarioAuthoringService owns assembly and the existing
+run-filtered catalogue projection; REST delegates. RequestTemplateParser owns ordered
+required-field lists used by both parsing and authoring. VariablesDocument owns the
+version used by validation and authoring; enum values are projected from their types.
+The user approved protocolVersion in the required-field response. Scenario owns
+field metadata; Jackson introspection projects existing NotBlank fields and required
+template presence into the response, with no manually maintained required-field list.
+Scenario field-name constants bind template/trafficPolicy/plan annotations and their
+metadata. Validation execution remains unchanged. No changes to S9 filter or S10 fingerprint.
+
+Verification: S7 run passed 150 tests across SM, worker auth, Orchestrator and the
+import boundary (/tmp/ph-s7-layout-tests.log). Subsequent S5 run passed 126 tests
+including parser/authoring behavior and HTTP regressions (/tmp/ph-s5-metadata-tests.log);
+these sets overlap. git diff --check passes. No deployment, review, commit or push.
+
+S5 completion verification: 127 tests passed in the latest run, including the public
+required-field response, missing/malformed/incompatible protocol validation, bundle
+publication/runtime regressions, HTTP parser metadata behavior and 3 import-boundary
+checks. Log: /tmp/ph-s5-complete-tests.log. Previous S7 worker/Orchestrator evidence
+remains applicable; the completion changes only descriptor metadata and projection.
+No deployed E2E, commit or push. Separate review pending.
+
+### F09-SM — S9/S10 repair (implemented; separate review passed)
+
+User authorized fixing bundle catalogue identity and incomplete authoring fingerprint.
+Read/run catalogue filtering now uses existing findBundleAccess(bundleKey), including
+malformed bundles without a scenario ID. The full authoring response (excluding its
+fingerprint) drives the digest through deterministic JSON with sorted object keys.
+Regression tests cover duplicate IDs with distinct folder grants, missing bundle
+access, malformed bundles, metadata changes and stable repeated responses/map order.
+No new endpoints or grant matching rules. This supersedes earlier S9/S10 deferrals
+in the historical slices above; S1/S2/S3 remain outside this change.
+
+Verification: 148 tests passed (145 Scenario Manager tests plus 3 repository import
+boundary tests), zero failures/errors/skips. Log: /tmp/ph-s9-s10-tests.log. No deployed
+E2E or UI rerun. git diff --check passed. No commit created.
+
+### F09-SM — S1/S2/S3 (implemented; awaiting review)
+
+Implement CREATE target collision rejection without replacement; validate-existing
+reads current files; reload derives defunct from complete canonical validation.
+Acceptance: preserve occupied CREATE target, allow normal CREATE/REPLACE, reject
+changed/multiple descriptors consistently, recover after fixing an invalid descriptor,
+and match catalogue/runtime/validation outcomes including warnings and catalogue
+restrictions. No concurrency snapshot or runtime layout redesign.
+
+Implementation: CREATE uses createDirectory (no clear); only REPLACE clears existing
+contents. validate-existing no longer receives a cached Scenario/defunct reason.
+Reload projects defunct from full BundleValidationResult.ok; descriptor prerequisites
+are now private to the validator. Removed the obsolete cached-defunct finding helper.
+This supersedes the earlier S1/S2/S3 deferrals in this worktree.
+
+Verification: 7 regression failures reproduced before the repair (/tmp/ph-s123-red.log).
+Final selected reactor run: 243 tests, zero failures/errors/skips (/tmp/ph-s123-tests.log),
+including 239 Scenario Manager tests and repository import checks. Covers occupied
+CREATE (including HTTP 409 and content preservation), normal CREATE/REPLACE, current
+protocol, recovery from stale parse errors, nested descriptors, invalid bundle extras,
+missing Work settings and warning-only AUTHORING acceptance. Existing fixtures for
+healthy worker scenarios now declare required inputs/outputs; six old tests had
+relied on the narrower catalogue check. git diff --check passed.
+No deployed E2E, atomic snapshot for concurrent external edits, commit or push.
+
+S3 review correction implemented: one bundle UTF-8 text read helper converts only
+CharacterCodingException into canonical BUNDLE_INVALID findings. Invalid template,
+variables or schema text cannot abort reload/init; no alternative decoder or broad
+IO suppression was introduced. Regression RED: three encoding cases errored before
+the fix (/tmp/ph-encoding-red.log). GREEN: 246 selected reactor tests passed with
+zero failures/errors/skips (/tmp/ph-encoding-tests.log). Tests exercise validation,
+reload, new ScenarioService initialization and preservation of existing runtime
+contents when materialization rejects the broken bundle. Review pending; no commit.
+
+
+### Integrated verification — 2026-09-25
+
+Merged Tim’s `ed9ceacf` into `codex/f07-ph-ui` as `7308aee2`, retaining our PH UI
+access projections and uncommitted SM repairs. AuthProfileLoader consumes the shared
+ScenarioBundleLayout; it remains the sole profile-discovery owner. Browser session
+storage/parsing is owned by authSession.ts, with PH access decisions still supplied
+by backend projections. MCP projection/transport separation preserves the current
+remote-HTTP properties and PR #520 catalogue content.
+
+Conflict-resolution checks covered ownership/plan consistency, implementation
+boundaries, absence of new policy or libraries, current auth/scope contracts, and
+readability of the combined paths. Corrected the MVC test composition to include
+ScenarioAuthoringService and updated Tim’s golden catalogue fingerprint to the
+already-changed PR #520 descriptions. These are integration checks, not a new
+independent acceptance review of every change in either branch.
+
+Verification: 2,269 Java tests passed, zero remaining failures/errors/skips, counting
+the latest result per test class across the main run and focused completions. Scope:
+SM, Orchestrator, Processor, MCP, TCP mock, Request Builder, HTTP Sequence and their
+selected reactor dependencies (including Worker SDK and the import-boundary gate).
+Real disposable Redis and OpenSSL fixtures were used for auth/sequence cases.
+101 PH UI tests, both normal/plugin builds, five TCP browser-module test files,
+Compose parsing and the HiveForge contract check passed. No deployed E2E/browser
+acceptance was run against this integrated tree.
+
+Local logs: `/tmp/ph-tim-merge-java-complete.log`,
+`/tmp/ph-tim-merge-services.log`, `/tmp/ph-tim-merge-final-services.log`,
+`/tmp/ph-tim-merge-http-redis.log`. Earlier failures remain in their logs; subsequent
+focused completions resolve them without rerunning already-passing suites.
+
+### Integrated review disposition — 2026-09-25
+
+- Large-file fingerprint memory use: explicitly accepted by the user as a current
+  limitation, not a blocker for this PR. Full validation on startup/reload reads
+  each file into heap while computing its digest. The review reproduced OOM with
+  a 128 MiB data file and a 64 MiB heap; these values are reproduction conditions,
+  not a supported size boundary. Large files are not planned for immediate use.
+  Streaming the identical digest is deferred; no code or validation changes made.
+- TCP permission-set duplication fixed: TcpMockAuthFilter now consumes
+  PocketHivePermissionSets.READ/MANAGE; its local READ/WRITE definitions are removed.
+  HTTP method selection, global scope and authentication behavior are unchanged.
+  Five AdministrationAuthenticationTest/WorkspaceControllerTest cases pass, with no
+  failures/errors/skips. Repository search finds these combinations only in the
+  shared owner; git diff --check passes. The large-file limitation above stays deferred.

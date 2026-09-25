@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Own raw scenario, plan, schema, and template authoring within an existing scenario bundle.
  * Must not: Discover bundles, own catalogue state, or implement generic workspace and ZIP publication operations.
+ * Uses RESP-SCENARIO-BUNDLE-LAYOUT — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-layout for paths.
  * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
@@ -64,7 +65,8 @@ class ScenarioBundleContentService {
     }
 
     public List<String> listSchemaFiles(String scenarioId) throws IOException {
-        return listFiles(scenarioId, "schemas");
+        Path bundle = scenarios.bundleDirFor(scenarioId);
+        return listFiles(bundle, ScenarioBundleLayout.schemasRoot(bundle));
     }
 
     public void writeSchemaFile(String scenarioId, String relativePath, String content) throws IOException {
@@ -100,7 +102,8 @@ class ScenarioBundleContentService {
     }
 
     public List<String> listTemplateFiles(String scenarioId) throws IOException {
-        return listFiles(scenarioId, "templates");
+        Path bundle = scenarios.bundleDirFor(scenarioId);
+        return listFiles(bundle, ScenarioBundleLayout.templatesRoot(bundle));
     }
 
     public void writeTemplate(String scenarioId, String relativePath, String content) throws IOException {
@@ -128,7 +131,7 @@ class ScenarioBundleContentService {
             throw new IllegalArgumentException("Template paths must not be null or blank");
         }
         Path bundle = scenarios.bundleDirFor(scenarioId);
-        Path templates = bundle.resolve("templates").normalize();
+        Path templates = ScenarioBundleLayout.templatesRoot(bundle);
         Path source = bundle.resolve(fromPath).normalize();
         Path target = bundle.resolve(toPath).normalize();
         if (!source.startsWith(bundle) || !target.startsWith(bundle)) {
@@ -160,7 +163,7 @@ class ScenarioBundleContentService {
             throw new IllegalArgumentException("Template path must not be null or blank");
         }
         Path bundle = scenarios.bundleDirFor(scenarioId);
-        Path templates = bundle.resolve("templates").normalize();
+        Path templates = ScenarioBundleLayout.templatesRoot(bundle);
         Path file = bundle.resolve(relativePath).normalize();
         if (!file.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid template path");
@@ -175,9 +178,7 @@ class ScenarioBundleContentService {
         Files.delete(file);
     }
 
-    private List<String> listFiles(String scenarioId, String directoryName) throws IOException {
-        Path bundle = scenarios.bundleDirFor(scenarioId);
-        Path directory = bundle.resolve(directoryName).normalize();
+    private List<String> listFiles(Path bundle, Path directory) throws IOException {
         if (!directory.startsWith(bundle) || !Files.isDirectory(directory)) {
             return List.of();
         }

@@ -47,6 +47,7 @@ import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequestJsonCodec;
 import io.pockethive.swarm.model.lifecycle.SwarmLifecycleContractException;
 import io.pockethive.swarm.model.lifecycle.OperationState;
+import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.swarm.model.lifecycle.OperationType;
 import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.SwarmOperation;
@@ -87,6 +88,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Responsibility: expose the existing swarm lifecycle HTTP workflows.
  * Must not: resolve authorization scope or duplicate per-swarm grant policy.
+ * Uses RESP-SCENARIO-BUNDLE-LAYOUT — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-layout for paths.
  * Contract: RESP-SWARM-ACCESS-PROJECTION — docs/architecture/runtime-responsibilities.md#resp-swarm-access-projection.
  * <p>
  * Each method below corresponds to an endpoint documented in {@code docs/ORCHESTRATOR-REST.md}. The
@@ -252,7 +254,7 @@ public class SwarmController {
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
                 String scenarioVolume = io.pockethive.controlplane.filesystem.RuntimeFilesystemMount
                     .of(scenariosRuntimeRootSource)
-                    .swarmVolume(swarmId, "/app/scenario", true);
+                    .swarmVolume(swarmId, ScenarioBundleLayout.CONTAINER_ROOT, true);
                 String sutId = normalize(req.sutId());
                 String variablesProfileId = normalize(req.variablesProfileId());
                 NetworkMode networkMode = req.networkMode();

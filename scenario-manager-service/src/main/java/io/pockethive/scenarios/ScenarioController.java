@@ -702,7 +702,12 @@ public class ScenarioController {
         if (!access.canUpload(currentUser())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.manageDeniedMessage());
         }
-        Scenario created = bundles.create(body);
+        Scenario created;
+        try {
+            created = bundles.create(body);
+        } catch (java.nio.file.FileAlreadyExistsException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Bundle destination already exists", e);
+        }
         log.info("[REST] POST /scenarios/bundles -> status=201 body={}", safeJson(created));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .contentType(MediaType.APPLICATION_JSON)

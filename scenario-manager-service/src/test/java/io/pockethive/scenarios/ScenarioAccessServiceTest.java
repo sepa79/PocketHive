@@ -38,12 +38,12 @@ class ScenarioAccessServiceTest {
             .containsExactly(new BundleAccessView("team/broken", true));
     }
 
-    @Test void preservesIdFirstReadVisibilityButComputesEditByBundleKey() {
+    @Test void duplicateIdDoesNotGrantReadOrEditToAnotherBundle() {
         bundle("team/a", "duplicate"); bundle("other/b", "duplicate");
         when(scenarios.findScenarioAccess("duplicate")).thenReturn(Optional.of(new ScenarioAccessDescriptor("duplicate", "team/a", "team")));
-        when(scenarios.listBundleTemplates()).thenReturn(List.of(summary("other/b", "duplicate")));
+        when(scenarios.listBundleTemplates()).thenReturn(List.of(summary("team/a", "duplicate"), summary("other/b", "duplicate")));
         assertThat(access.bundles(user(PocketHivePermissionIds.ALL)).bundles())
-            .containsExactly(new BundleAccessView("other/b", false));
+            .containsExactly(new BundleAccessView("team/a", true));
     }
 
     @Test void missingBundleDescriptorNeverInventsEditPermission() {
@@ -51,7 +51,7 @@ class ScenarioAccessServiceTest {
         when(scenarios.findBundleAccess("team/a")).thenReturn(Optional.empty());
         when(scenarios.listBundleTemplates()).thenReturn(List.of(summary("team/a", "a")));
         assertThat(access.bundles(user(PocketHivePermissionIds.ALL)).bundles())
-            .containsExactly(new BundleAccessView("team/a", false));
+            .isEmpty();
     }
 
     @Test void retainsAuthDisabledSemantics() {

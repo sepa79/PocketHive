@@ -88,6 +88,46 @@ class ScenarioBundleServiceTest extends ScenarioComponentTestFixture {
         Files.writeString(bundle.resolve("scenario.yaml"), "broken: ["); scenarios.reload();
         assertThat(contents(bundles.downloadByBundleKey("broken").bytes())).containsEntry("scenario.yaml", "broken: [");
     }
+    @Test
+    void createNeverClearsOccupiedDirectoryWithAnotherScenarioId() throws Exception {
+        writeBundleScenario("other-id");
+        Path target = Files.createDirectories(scenariosDir.resolve("bundles")).resolve("new-id");
+        Files.move(scenariosDir.resolve("other-id"), target);
+        String descriptor = Files.readString(target.resolve("scenario.yaml"));
+        Files.writeString(target.resolve("sentinel.txt"), "keep");
+        scenarios.reload();
+        byte[] upload = scenarioBundleZip(descriptor.replace("other-id", "new-id"));
+        assertThatThrownBy(() -> bundles.create(upload))
+            .isInstanceOf(java.nio.file.FileAlreadyExistsException.class);
+        assertThat(target.resolve("scenario.yaml")).hasContent(descriptor);
+        assertThat(target.resolve("sentinel.txt")).hasContent("keep");
+        assertThat(scenarios.find("other-id")).isPresent();
+    }
+
+    @Test
+    void createRejectsEvenAnEmptyOccupiedDirectory() throws Exception {
+        writeBundleScenario("example");
+        String descriptor = Files.readString(scenariosDir.resolve("example/scenario.yaml"));
+        Path target = Files.createDirectories(scenariosDir.resolve("bundles/example"));
+        assertThatThrownBy(() -> bundles.create(scenarioBundleZip(descriptor)))
+            .isInstanceOf(java.nio.file.FileAlreadyExistsException.class);
+        try (var files = Files.list(target)) {
+            assertThat(files).isEmpty();
+        }
+    }
+
+    @Test
+    void replaceStillReplacesExistingContents() throws Exception {
+        writeBundleScenario("example");
+        Path target = scenariosDir.resolve("example");
+        String descriptor = Files.readString(target.resolve("scenario.yaml"));
+        Files.writeString(target.resolve("old.txt"), "old");
+        scenarios.reload();
+        bundles.replace("example", scenarioBundleZip(Map.of("scenario.yaml", descriptor, "new.txt", "new")));
+        assertThat(target.resolve("old.txt")).doesNotExist();
+        assertThat(target.resolve("new.txt")).hasContent("new");
+    }
+
     private Map<String, String> contents(byte[] bytes) throws Exception {
         Map<String, String> result = new HashMap<>();
         try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(bytes))) {

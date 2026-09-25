@@ -367,3 +367,44 @@ and disables operations during loading, missing or failed observations. The comb
 Reload & validate UI workflow requires canReload; for the selected bundle it also
 requires that bundle's existing canManage projection. Upload uses canUpload alone.
 Backend commands continue authorizing actual execution.
+
+### S5 required-field correction (approved)
+
+The authoring projection includes `protocolVersion` in
+`scenario.requiredTopLevelFields`. The approved response lists `protocolVersion`,
+`id`, `name`, `template`, deriving requirements from the descriptor contract.
+This does not change accepted scenario documents or runtime validation. Other
+authoring payload fields, routes, catalogue selection and fingerprint behavior
+remain unchanged.
+
+### S9/S10 catalogue identity and freshness
+
+Bundle catalogue read/run visibility uses the exact `bundleKey` for authorization,
+including when multiple bundles declare the same scenario ID. Missing bundle access
+does not fall back to another bundle with that ID. Grant matching is unchanged. Malformed bundles without a scenario ID remain visible
+according to their bundle access; their defunct state still prevents execution.
+The authoring fingerprint is SHA-256 over the entire projected response except the
+`fingerprint` property, with deterministic JSON object-key ordering and preserved
+array order. Both authoring endpoints and their ETags use this same calculation.
+
+### S1–S3 publication and validation consistency
+
+CREATE rejects an occupied destination directory with HTTP 409 without changing its
+contents, even when its descriptor declares another ID or is malformed. Duplicate
+scenario-ID validation remains unchanged. Only REPLACE may clear an existing target.
+Existing-bundle validation reads the current descriptor and bundle files through the
+same validator as uploaded ZIPs and runtime materialization; cached descriptor data
+and cached parse errors cannot replace that read. Catalogue-only duplicate-ID and
+quarantine findings remain inputs from the catalogue.
+At reload, bundle runnability is projected from that same complete validation result:
+errors make the bundle defunct; warnings alone do not. Catalogue-only restrictions
+are applied in addition. This does not introduce an atomic filesystem snapshot for
+external concurrent edits or change runtime directory ownership by swarmId.
+
+Known limitation (accepted for the current PR on 2026-09-25): bundle fingerprinting
+reads each file fully into memory, including bundled data files. Full validation
+during catalogue startup/reload also takes this path. A sufficiently large file
+relative to available JVM heap can cause OutOfMemoryError and abort the operation.
+No fixed safe file-size threshold or enforced size limit is defined. Such large
+files are outside the immediate planned usage; streaming the same digest is deferred
+and is not a blocker for this PR. Validation behavior remains unchanged.

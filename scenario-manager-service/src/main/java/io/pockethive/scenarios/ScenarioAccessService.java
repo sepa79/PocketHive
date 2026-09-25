@@ -33,9 +33,6 @@ public class ScenarioAccessService {
         if (summary == null) {
             return false;
         }
-        if (summary.id() != null && !summary.id().isBlank()) {
-            return canRead(user, summary.id());
-        }
         return service.findBundleAccess(summary.bundleKey())
                 .map(access -> authorization.canRead(user, access))
                 .orElse(false);

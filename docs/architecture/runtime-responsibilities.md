@@ -3798,11 +3798,11 @@ a newer in-flight marker or publish permissions for another caller.
 
 ## RESP-SCENARIO-CATALOGUE-ACCESS
 
-ScenarioAccessService owns the existing scenario-ID/bundle-key selection used to
-filter the workspace catalogue, delegating scope resolution to ScenarioService and
+ScenarioAccessService owns catalogue visibility: scenario-ID lists use scenario
+access; bundle lists always use bundle-key access, delegating scope resolution to ScenarioService and
 permission policy to ScenarioManagerAuthorization. ScenarioController and
 ScenarioAccessController share this visibility owner. The projection uses
-findBundleAccess(bundleKey) and canManage for edit permission, exactly as bundle
+findBundleAccess(bundleKey) for bundle visibility and canManage for edit permission, exactly as bundle
 mutations do. Commands retain their existing authorization and error semantics.
 ScenarioAccessController maps both /api/access/bundles and /api/access/scenarios with no-store.
 
@@ -3811,7 +3811,8 @@ projections, invalidating observations on caller change/close. CreateSwarmModal
 uses the existing /api/templates run-filtered catalogue; ScenariosPage uses the
 existing read-filtered workspace catalogue. Neither interprets grant scopes.
 Both use scenariosApi's existing BundleTemplateEntry parser; its duplicate template
-parser in CreateSwarmModal is removed. Defunct/missing-ID eligibility is unchanged.
+parser in CreateSwarmModal is removed. Malformed bundles remain visible when their bundle grant permits access; visibility
+does not make a defunct bundle executable.
 Global navigation/admin/toolbar projections are implemented as described below.
 
 Forbidden: copying grant matching rules, treating projection as command authority,
@@ -3982,7 +3983,10 @@ PocketHiveSecurityConfig composes AuthServiceClient and TcpMockAuthFilter from i
 own required settings. SecurityConfig supplies shared public-path/security policy.
 No provider instantiates the other's credential client or substitutes on failure.
 TcpMockAuthFilter resolves administrative bearer identity and delegates global grant
-matching to PocketHiveGrantChecks. It does not authenticate TCP traffic or own users.
+matching to PocketHiveGrantChecks using PocketHivePermissionSets.READ/MANAGE.
+The shared contract owns these permission combinations; the TCP filter selects the
+existing read/write operation and global scope only. It does not authenticate TCP
+traffic or own users.
 TcpMockIdentityResolver converts the selected authenticated principal into the read-only
 TcpMockIdentity. WorkspaceController passes its provider-qualified owner ID to the
 catalogue owner; WorkspaceService persists attribution, not access-control decisions.
@@ -3993,3 +3997,47 @@ as `/auth-session.js`; the native provider does not load it. All TCP UI API path
 the existing HttpClient endpoint resolver. CurrentUserController exposes only the
 server-selected identity/configuration projections. No duplicate login/user directory
 is created for PocketHive mode. Contract: [authentication provider](../tcp-mock/legacy-workspaces.md#authentication-provider-and-ownership).
+
+## RESP-SCENARIO-BUNDLE-LAYOUT
+
+ScenarioBundleLayout (scenario-validation-contracts) owns bundle-relative SUT,
+template and schema directory names, descriptor paths and the default worker mount
+/app/scenario. Scenario Manager editing/validation, Orchestrator mount composition
+and AuthProfileLoader consume this contract. RuntimeFilesystemContract.CONTAINER_ROOT
+remains the distinct shared runtime-storage root /app/scenarios-runtime.
+Path methods do not read files or enforce caller policy. Existing containment checks,
+auth profile search order and scenario-root overrides remain with their consumers.
+This transfer preserves names and normalization; no new resolver service or fallback.
+
+## RESP-SCENARIO-AUTHORING-PROJECTION
+
+ScenarioAuthoringService projects metadata from the canonical Scenario descriptor,
+request-template parser, variables types and bundle layout. Scenario field requirements
+are derived through Jackson property metadata: existing NotBlank constraints describe
+required text fields; the template property declares required presence. This projection
+does not run or replace validation. The mutable descriptor's existing validation paths
+remain unchanged; its JSON metadata introduces no creator-property validation.
+Scenario owns wire names for template, trafficPolicy and plan; their field annotations
+and the authoring projection use those names. No parallel required-field list exists.
+
+CapabilityCatalogueController maps HTTP and delegates. Bundle catalogue read/run checks resolve access by bundleKey, never by a potentially
+duplicated scenario ID. Scenario-ID endpoints retain their existing identity contract.
+The fingerprint hashes the full authoring projection except its own fingerprint field,
+using JSON with sorted object keys and preserved array order. The user approved
+adding protocolVersion to the required-field response. The projection must not
+define a parallel validator or repeat lists of parser-required fields/enums.
+
+### Scenario publication/catalogue consistency (S1–S3)
+
+RESP-SCENARIO-BUNDLE-API: ScenarioBundleService CREATE reserves a new directory with
+createDirectory and never clears an occupied target; REPLACE alone owns replacement.
+RESP-SCENARIO-VALIDATE: ScenarioBundleValidator remains the sole owner of bundle
+validation rules and success. ScenarioService reload projects defunct from the full
+result; the narrower descriptor/image check is private to validation, not a second
+runnability API. Existing-bundle validation uses current files, retaining only location
+and catalogue-specific findings from ScenarioService. REST maps occupied CREATE
+destinations to 409. User authorized these behavior corrections together.
+
+S3 review correction: malformed UTF-8 in bundle text is a canonical validation ERROR
+(BUNDLE_INVALID), with the relative file path in its message. It must not abort global
+catalogue reload/startup; genuine infrastructure IO failures are not reclassified.

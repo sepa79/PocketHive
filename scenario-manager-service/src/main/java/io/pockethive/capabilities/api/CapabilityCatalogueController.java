@@ -4,7 +4,6 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.scenarios.BundleTemplateSummary;
-import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
@@ -18,18 +17,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
  * Responsibility: Map the capability catalogue HTTP surface to catalogue and scenario projections.
  * Must not: Own capability discovery, scenario catalogue state, or authoring contract definitions.
- * Contract: docs/architecture/workerCapabilities.md and docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ * Contract: RESP-SCENARIO-AUTHORING-PROJECTION — docs/architecture/runtime-responsibilities.md#resp-scenario-authoring-projection; docs/architecture/workerCapabilities.md and docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @RestController
 @RequestMapping("/api")
@@ -37,21 +31,22 @@ public class CapabilityCatalogueController {
     private final CapabilityCatalogueService catalogue;
     private final ScenarioService scenarioService;
     private final ScenarioManagerAuthorization authorization;
+    private final ScenarioAuthoringService authoring;
 
     public CapabilityCatalogueController(CapabilityCatalogueService catalogue,
                                          ScenarioService scenarioService,
-                                         ScenarioManagerAuthorization authorization) {
+                                         ScenarioManagerAuthorization authorization,
+                                         ScenarioAuthoringService authoring) {
         this.catalogue = catalogue;
         this.scenarioService = scenarioService;
         this.authorization = authorization;
+        this.authoring = authoring;
     }
 
     @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
     public List<BundleTemplateSummary> templates() {
         AuthenticatedUserDto user = currentUser();
-        return scenarioService.listBundleTemplates().stream()
-                .filter(summary -> isRunnableTemplate(user, summary))
-                .toList();
+        return authoring.templates(user);
     }
 
     @GetMapping(value = "/templates/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -59,7 +54,7 @@ public class CapabilityCatalogueController {
         AuthenticatedUserDto user = currentUser();
         BundleTemplateSummary summary = scenarioService.findBundleTemplate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (!isRunnableTemplate(user, summary)) {
+        if (!authoring.isRunnableTemplate(user, summary)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.runDeniedMessage());
         }
         return summary;
@@ -95,7 +90,7 @@ public class CapabilityCatalogueController {
 
     @GetMapping(value = "/authoring-contract", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AuthoringContractView> authoringContract() {
-        AuthoringContractView view = buildAuthoringContract();
+        AuthoringContractView view = authoring.project(currentUser());
         return ResponseEntity.ok()
                 .eTag("\"" + view.fingerprint() + "\"")
                 .body(view);
@@ -103,7 +98,7 @@ public class CapabilityCatalogueController {
 
     @GetMapping(value = "/authoring-contract/fingerprint", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<AuthoringContractFingerprintView> authoringContractFingerprint() {
-        AuthoringContractView view = buildAuthoringContract();
+        AuthoringContractView view = authoring.project(currentUser());
         return ResponseEntity.ok()
                 .eTag("\"" + view.fingerprint() + "\"")
                 .body(new AuthoringContractFingerprintView(
@@ -112,146 +107,11 @@ public class CapabilityCatalogueController {
                         view.source()));
     }
 
-    private ScenarioTemplateView buildScenarioTemplate(BundleTemplateSummary summary) {
-        return new ScenarioTemplateView(
-                summary.bundleKey(),
-                summary.bundlePath(),
-                summary.folderPath(),
-                summary.id(),
-                summary.name(),
-                summary.description(),
-                summary.controllerImage(),
-                summary.bees().stream().map(bee -> new BeeImage(bee.role(), bee.image())).toList(),
-                summary.defunct(),
-                summary.defunctReason());
-    }
-
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
 
     private AuthenticatedUserDto currentUser() {
         return ScenarioManagerCurrentUserHolder.get();
-    }
-
-    private AuthoringContractView buildAuthoringContract() {
-        List<CapabilitySummary> capabilitySummaries = catalogue.allManifests().stream()
-                .map(this::capabilitySummary)
-                .sorted(java.util.Comparator
-                        .comparing(CapabilitySummary::role, java.util.Comparator.nullsLast(String::compareTo))
-                        .thenComparing(CapabilitySummary::image, java.util.Comparator.nullsLast(String::compareTo)))
-                .toList();
-        List<ScenarioTemplateView> templates = templates().stream()
-                .map(this::buildScenarioTemplate)
-                .toList();
-        String fingerprint = fingerprint(capabilitySummaries, templates);
-        return new AuthoringContractView(
-                "scenario-authoring.v1",
-                fingerprint,
-                "scenario-manager",
-                Map.of(
-                        "templates", "/api/templates",
-                        "capabilities", "/api/capabilities",
-                        "authoringContract", "/api/authoring-contract",
-                        "authoringContractFingerprint", "/api/authoring-contract/fingerprint",
-                        "validateBundle", "/validation/scenario-bundles",
-                        "validateExistingBundle", "/validation/scenario-bundles/existing?bundleKey={bundleKey}"
-                ),
-                Map.of(
-                        "descriptorNames", List.of(ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE),
-                        "requiredTopLevelFields", List.of("id", "name", "template"),
-                        "templateField", "template",
-                        "trafficPolicyField", "trafficPolicy",
-                        "planField", "plan"
-                ),
-                Map.of(
-                        "root", ScenarioBundleLayout.TEMPLATES_ROOT,
-                        "httpRoot", ScenarioBundleLayout.HTTP_TEMPLATES_ROOT,
-                        "httpRequiredFields", List.of("protocol", "serviceId", "callId", "method", "pathTemplate")
-                ),
-                Map.of(
-                        "file", ScenarioBundleLayout.VARIABLES_FILE,
-                        "version", 1,
-                        "definitionScopes", List.of("GLOBAL", "SUT"),
-                        "definitionTypes", List.of("STRING", "INT", "FLOAT", "BOOL", "OBJECT")
-                ),
-                Map.of(
-                        "root", ScenarioBundleLayout.SUT_DESCRIPTOR_PATTERN,
-                        "idRule", "sut.yaml id must match the sut/<sutId> directory name"
-                ),
-                Map.of(
-                        "file", ScenarioBundleLayout.AUTH_PROFILES_FILE,
-                        "referenceField", "authRef",
-                        "inlineAuthBlocks", "not supported"
-                ),
-                Map.of(
-                        "supportedFields", List.of("trafficPolicy", "plan"),
-                        "notes", List.of("Use explicit bundle fields. Do not rely on implicit defaults.")
-                ),
-                new CapabilitiesContractView(
-                        capabilitySummaries.size(),
-                        capabilitySummaries.stream().map(CapabilitySummary::role).filter(this::hasText).distinct().sorted().toList(),
-                        capabilitySummaries),
-                templates,
-                Map.of(
-                        "sessionCacheable", true,
-                        "refreshWhenFingerprintChanges", true
-                ));
-    }
-
-    private CapabilitySummary capabilitySummary(CapabilityManifest manifest) {
-        String image = null;
-        if (manifest.image() != null && hasText(manifest.image().name())) {
-            image = hasText(manifest.image().tag())
-                    ? manifest.image().name() + ":" + manifest.image().tag()
-                    : manifest.image().name();
-        }
-        return new CapabilitySummary(
-                manifest.role(),
-                image,
-                manifest.schemaVersion(),
-                manifest.capabilitiesVersion(),
-                manifest.config() != null ? manifest.config().size() : 0,
-                manifest.actions() != null ? manifest.actions().size() : 0,
-                manifest.panels() != null ? manifest.panels().size() : 0);
-    }
-
-    private String fingerprint(List<CapabilitySummary> capabilities, List<ScenarioTemplateView> templates) {
-        Map<String, Object> stable = new LinkedHashMap<>();
-        stable.put("contractVersion", "scenario-authoring.v1");
-        stable.put("capabilities", capabilities);
-        stable.put("templates", templates.stream()
-                .map(template -> {
-                    Map<String, Object> item = new LinkedHashMap<>();
-                    item.put("bundleKey", template.bundleKey());
-                    item.put("id", template.id());
-                    item.put("defunct", template.defunct());
-                    item.put("defunctReason", template.defunctReason());
-                    return item;
-                })
-                .toList());
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(stable.toString().getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder(hash.length * 2);
-            for (byte b : hash) {
-                hex.append(String.format("%02x", b));
-            }
-            return "sha256:" + hex;
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 digest is unavailable", e);
-        }
-    }
-
-    private boolean isRunnableTemplate(AuthenticatedUserDto user, BundleTemplateSummary summary) {
-        if (user == null) {
-            return true;
-        }
-        if (summary.id() == null || summary.id().isBlank()) {
-            return false;
-        }
-        return scenarioService.findScenarioAccess(summary.id())
-                .map(access -> authorization.canRun(user, access))
-                .orElse(false);
     }
 }

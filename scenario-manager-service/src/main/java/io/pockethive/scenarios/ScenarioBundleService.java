@@ -5,7 +5,6 @@ import io.pockethive.scenarios.validation.BundleValidationInput;
 import io.pockethive.scenarios.validation.BundleValidationResult;
 import io.pockethive.scenarios.validation.BundleValidationSource;
 import io.pockethive.scenarios.validation.ScenarioBundleValidator;
-import io.pockethive.scenarios.validation.ValidationFinding;
 import io.pockethive.scenarios.validation.ValidationRun;
 import io.pockethive.swarm.model.SutEnvironment;
 import java.io.ByteArrayInputStream;
@@ -68,7 +67,10 @@ public class ScenarioBundleService {
                     throw new BundleValidationException(
                         validator.duplicateScenarioValidationResult(scenario.getId()));
                 }
-                writeBundle(validatedRoot(validation), organization.defaultUploadDirectory(scenario.getId()));
+                Path target = organization.defaultUploadDirectory(scenario.getId());
+                Files.createDirectories(target.getParent());
+                Files.createDirectory(target);
+                ScenarioFileTreeOperations.copy(validatedRoot(validation), target);
                 scenarios.reload();
                 return scenarios.find(scenario.getId()).orElse(scenario);
             } finally {
@@ -88,7 +90,7 @@ public class ScenarioBundleService {
                 requireSuccessful(validation);
                 Scenario scenario = validatedScenario(validation);
                 Path target = scenarios.bundleDirForExistingOrDefault(scenario.getId());
-                writeBundle(validatedRoot(validation), target);
+                replaceBundleContents(validatedRoot(validation), target);
                 scenarios.reload();
                 return scenarios.find(scenario.getId()).orElse(scenario);
             } finally {
@@ -113,26 +115,12 @@ public class ScenarioBundleService {
 
     public BundleValidationResult validateExisting(String bundleKey) throws IOException {
         ScenarioBundleValidationCandidate candidate = scenarios.validationCandidate(bundleKey);
-        if (candidate.scenario() == null) {
-            ValidationFinding finding = validator.defunctBundleFinding(
-                candidate.bundlePath(),
-                candidate.defunctReason());
-            return validator.resultOf(
-                BundleValidationSource.SCENARIO_MANAGER,
-                candidate.bundleKey(),
-                candidate.bundlePath(),
-                null,
-                null,
-                null,
-                candidate.bundleDirectory(),
-                List.of(finding));
-        }
         return validator.validate(new BundleValidationInput(
             BundleValidationSource.SCENARIO_MANAGER,
             candidate.bundleDirectory(),
             candidate.bundleKey(),
             candidate.bundlePath(),
-            candidate.scenario(),
+            null,
             candidate.seedFindings(),
             null));
     }
@@ -357,7 +345,7 @@ public class ScenarioBundleService {
         return root;
     }
 
-    private void writeBundle(Path source, Path target) throws IOException {
+    private void replaceBundleContents(Path source, Path target) throws IOException {
         if (Files.exists(target)) {
             ScenarioFileTreeOperations.clear(target);
         }
