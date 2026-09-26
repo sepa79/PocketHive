@@ -60,7 +60,7 @@ class TcpTimeoutAcceptanceIT {
   }
 
   private static JsonNode requireSlowMapping(LiveRun run, TcpTimeoutTarget target) throws Exception {
-    var mapping = run.tcpMock(target.mockUsername(), target.mockPassword()).requireMapping(target.mappingId());
+    var mapping = run.tcpMock().requireMapping(target.mappingId());
     run.evidence.record("mock-mapping", mapping);
     assertEquals(true, mapping.required("enabled").booleanValue());
     assertEquals(5000, mapping.required("fixedDelayMs").intValue());

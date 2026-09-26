@@ -249,4 +249,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
     }
     return Optional.of(mapper.writeValueAsString(bodyValue));
   }
+  // The HTTP client is a shared Spring-owned bean, not owned by this handler.
+  @Override public void close() { }
 }

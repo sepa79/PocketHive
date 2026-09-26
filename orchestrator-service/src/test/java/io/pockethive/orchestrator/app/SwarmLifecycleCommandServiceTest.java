@@ -19,6 +19,24 @@ import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 
 class SwarmLifecycleCommandServiceTest {
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.EnumSource(value = OperationType.class, names = {"START", "STOP"})
+  void acceptedCommandResolvesDiscoveredUnknownIntent(OperationType command) {
+    var store = new SwarmStore();
+    var swarm = new Swarm("alpha", "controller-1", "container-1", "run-1", NetworkMode.DIRECT, WorkloadIntent.UNKNOWN);
+    swarm.attachTemplate(new SwarmTemplateMetadata("template-1", "controller:latest", List.of()));
+    store.register(swarm);
+    var properties = new ControlPlaneProperties();
+    properties.setInstanceId("orchestrator-1");
+    var publisher = mock(ControlPlanePublisher.class);
+    var service = new SwarmLifecycleCommandService(store,
+        new OperationDispatchService(new SwarmOperationCoordinator(), mock(OperationOutcomePublisher.class), store),
+        publisher, mock(FilesystemSwarmRemoveStore.class), mock(HiveJournal.class), properties);
+    service.dispatch(command, "alpha", "command-key", Duration.ofSeconds(30));
+    assertThat(swarm.getWorkloadIntent()).isEqualTo(command == OperationType.START ? WorkloadIntent.RUNNING : WorkloadIntent.STOPPED);
+    verify(publisher).publishSignal(any());
+  }
+
   @Test
   void concurrentStopWaitsForStartPublicationAndHasIndependentOutcome() throws Exception {
     var store = new SwarmStore();

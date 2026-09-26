@@ -13,9 +13,10 @@ import org.springframework.http.ResponseEntity;
 
 class SwarmAccessControllerTest {
     @Test void exposesAnEmptyCollectionWithNoStore() throws Exception {
+        var store = new SwarmStore();
         var access = new SwarmAccessService(new OrchestratorAuthorization(),
-            new SwarmTemplateScopeResolver(mock(ScenarioClient.class)));
-        var controller = new SwarmAccessController(new SwarmAccessProjection(new SwarmStore(), access));
+            new SwarmTemplateScopeResolver(mock(ScenarioClient.class)), store);
+        var controller = new SwarmAccessController(access);
         MockMvcBuilders.standaloneSetup(controller).build().perform(get("/api/access/swarms"))
             .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
             .andExpect(jsonPath("$.swarms").isEmpty());
@@ -24,8 +25,8 @@ class SwarmAccessControllerTest {
         var store = new SwarmStore();
         store.register(new Swarm("access", "controller", "container", "run", NetworkMode.DIRECT));
         var access = new SwarmAccessService(new OrchestratorAuthorization(),
-            new SwarmTemplateScopeResolver(mock(ScenarioClient.class)));
-        var projection = new SwarmAccessController(new SwarmAccessProjection(store, access));
+            new SwarmTemplateScopeResolver(mock(ScenarioClient.class)), store);
+        var projection = new SwarmAccessController(access);
         var lifecycle = mock(SwarmController.class);
         when(lifecycle.view("access")).thenReturn(ResponseEntity.ok().build());
         var mvc = MockMvcBuilders.standaloneSetup(lifecycle, projection).build();

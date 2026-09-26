@@ -986,18 +986,13 @@ class ProcessorTest {
 
         Field runtimeField = tcpHandler.getClass().getDeclaredField("transportRuntime");
         runtimeField.setAccessible(true);
-        Object runtime = runtimeField.get(tcpHandler);
-        Field globalTransportField = runtime.getClass().getDeclaredField("globalTransport");
-        globalTransportField.setAccessible(true);
-        Object previous = globalTransportField.get(runtime);
-        if (previous instanceof TcpTransport previousTransport) {
-            previousTransport.close();
-        }
-        globalTransportField.set(runtime, transport);
-
-        Field activeConfigField = runtime.getClass().getDeclaredField("activeConfig");
-        activeConfigField.setAccessible(true);
-        activeConfigField.set(runtime, TcpTransportConfig.defaults());
+        var runtime = (io.pockethive.processor.transport.TcpTransportRuntime) runtimeField.get(tcpHandler);
+        runtime.close();
+        var constructor = io.pockethive.processor.transport.TcpTransportRuntime.class
+            .getDeclaredConstructor(java.util.function.Function.class);
+        constructor.setAccessible(true);
+        java.util.function.Function<TcpTransportConfig, TcpTransport> factory = ignored -> transport;
+        runtimeField.set(tcpHandler, constructor.newInstance(factory));
     }
 
     private static <T> T withScenarioRoot(Path scenarioRoot, ThrowingSupplier<T> action) throws Exception {

@@ -489,7 +489,8 @@ the public ingress, then verifies ordinary stop/remove:
 
 ## Independent acceptance framework
 
-The new `acceptance-tests` module is independent of the frozen `e2e-tests`.
+`acceptance-tests` is the supported framework. The legacy Cucumber module and
+`start-e2e-tests.sh` were removed; use `run-acceptance-tests.sh` below.
 Framework component tests use their own HTTP stub; deployed tests use public ingress.
 
 ```bash

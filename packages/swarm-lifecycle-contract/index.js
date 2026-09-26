@@ -7,7 +7,8 @@ export const lifecycleEnumValues = Object.freeze({
   ],
   "WorkloadIntent": [
     "RUNNING",
-    "STOPPED"
+    "STOPPED",
+    "UNKNOWN"
   ],
   "ControllerState": [
     "PROVISIONING",

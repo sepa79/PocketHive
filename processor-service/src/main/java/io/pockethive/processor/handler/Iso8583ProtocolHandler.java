@@ -122,7 +122,6 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     TcpTransportConfig desired = Objects.requireNonNull(
         config.tcpTransport(),
         "processor tcpTransport config must be provided by runtime config");
-    transportRuntime.configure(desired);
 
     long start = clock.millis();
     long pacingMillis = 0L;
@@ -130,7 +129,8 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     try {
       pacingMillis = pacer.await(config);
 
-      TcpTransportConfig transportConfig = transportRuntime.currentConfig();
+      transport = transportRuntime.acquire(desired);
+      TcpTransportConfig transportConfig = transport.config();
       byte[] framedPayload = wireProfile.frame(payloadBytes);
       Map<String, Object> options = new HashMap<>();
       options.put("connectTimeoutMs", transportConfig.connectTimeoutMs());
@@ -141,7 +141,6 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       options.putAll(authTransportOptions);
       TcpRequest tcpRequest = new TcpRequest(endpoint.host(), endpoint.port(), framedPayload, options);
 
-      transport = transportRuntime.acquire(transportConfig);
 
       TcpResponse response = null;
       Exception lastException = null;
@@ -326,4 +325,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     }
   }
 
+  @Override public void close() {
+    transportRuntime.close();
+  }
 }

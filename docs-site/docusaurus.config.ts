@@ -51,6 +51,8 @@ const config: Config = {
             "ai/RESPONSIBILITY_WORKFLOW.md",
             "ci/auth-testing.md",
             "ci/acceptance-coverage.md",
+            "ci/evidence/2026-09-26-f08-local-acceptance.md",
+            "ci/evidence/2026-09-26-f08-rabbit-acceptance.md",
             "ci/acceptance-replacement-review.md",
             "USAGE.md",
             "AUTH-USER-GUIDE.md",

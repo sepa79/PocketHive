@@ -46,10 +46,9 @@ public final class TargetLoader {
   public static WebAuthTarget loadWebAuth(Path file) throws IOException {
     Path actual = file.toRealPath();
     Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
-    keys.addAll(Set.of("redisConnectionId", "mockUsername", "mockPassword"));
+    keys.addAll(Set.of("redisConnectionId"));
     Properties values = read(actual, keys);
-    return new WebAuthTarget(lifecycle(values, actual), values.getProperty("redisConnectionId"),
-        values.getProperty("mockUsername"), values.getProperty("mockPassword"));
+    return new WebAuthTarget(lifecycle(values, actual), values.getProperty("redisConnectionId"));
   }
 
   public static TxOutcomeTarget loadTxOutcome(Path file) throws IOException {
@@ -123,7 +122,7 @@ public final class TargetLoader {
   public static TcpTimeoutTarget loadTcpTimeout(Path file) throws IOException {
     Path actual = file.toRealPath();
     Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
-    keys.addAll(Set.of("mappingId", "mockUsername", "mockPassword", "quietWindow"));
+    keys.addAll(Set.of("mappingId", "quietWindow"));
     Properties values = read(actual, keys);
     var lifecycle = lifecycle(values, actual);
     var quiet = duration(values, "quietWindow");
@@ -132,8 +131,7 @@ public final class TargetLoader {
         limits.operation().plus(limits.capture()).plus(quiet).plus(limits.request())) <= 0) {
       throw new IllegalArgumentException("tapTtlSeconds must cover START + error wait + quiet window + final read");
     }
-    return new TcpTimeoutTarget(lifecycle, values.getProperty("mappingId"), values.getProperty("mockUsername"),
-        values.getProperty("mockPassword"), quiet);
+    return new TcpTimeoutTarget(lifecycle, values.getProperty("mappingId"), quiet);
   }
 
   private static AcceptanceTarget lifecycle(Properties values, Path actual) {

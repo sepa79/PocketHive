@@ -34,7 +34,7 @@ class OperationDispatchServiceTest {
   void exactKeyReplayDoesNotDispatchAgainBeforeOrAfterCompletion() {
     var coordinator = new SwarmOperationCoordinator();
     var service = new OperationDispatchService(
-        coordinator, mock(OperationOutcomePublisher.class), new SwarmStore());
+        coordinator, mock(OperationOutcomePublisher.class), registeredStore());
     var target = new Target("swarm-controller", "controller-1");
     var runtime = new RuntimeMetadata("template-1", "run-1");
     var dispatches = new java.util.concurrent.atomic.AtomicInteger();
@@ -59,7 +59,7 @@ class OperationDispatchServiceTest {
   void resultArrivingInsideTransportDispatchCannotRaceTheDispatchedTransition() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     OperationDispatchService service = new OperationDispatchService(
-        coordinator, mock(OperationOutcomePublisher.class), new SwarmStore());
+        coordinator, mock(OperationOutcomePublisher.class), registeredStore());
     Target target = new Target("swarm-controller", "controller-1");
 
     var reservation = service.dispatch(
@@ -88,10 +88,7 @@ class OperationDispatchServiceTest {
   void failedRemoveRecordsASchemaCompleteErrorResource() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     OperationOutcomePublisher outcomes = mock(OperationOutcomePublisher.class);
-    SwarmStore swarms = new SwarmStore();
-    swarms.register(new io.pockethive.orchestrator.domain.Swarm(
-        "alpha", "controller-1", "manager-1", "run-1",
-        io.pockethive.swarm.model.NetworkMode.DIRECT));
+    SwarmStore swarms = registeredStore();
     OperationDispatchService service = new OperationDispatchService(coordinator, outcomes, swarms);
     Target target = new Target("swarm-controller", "controller-1");
 
@@ -123,10 +120,7 @@ class OperationDispatchServiceTest {
   void outcomePublicationFailureNeverMasksTheExecutionFailure() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     OperationOutcomePublisher outcomes = mock(OperationOutcomePublisher.class);
-    SwarmStore swarms = new SwarmStore();
-    swarms.register(new io.pockethive.orchestrator.domain.Swarm(
-        "alpha", "controller-1", "manager-1", "run-1",
-        io.pockethive.swarm.model.NetworkMode.DIRECT));
+    SwarmStore swarms = registeredStore();
     OperationDispatchService service = new OperationDispatchService(coordinator, outcomes, swarms);
     Target target = new Target("swarm-controller", "controller-1");
     IllegalArgumentException executionFailure = new IllegalArgumentException("request denied");
@@ -181,5 +175,14 @@ class OperationDispatchServiceTest {
         .isEqualTo(runtime);
     assertThatCode(() -> ControlPlaneCodec.create().encode(outcome, message.getValue().routingKey()))
         .doesNotThrowAnyException();
+  }
+  private static SwarmStore registeredStore() {
+    var store = new SwarmStore();
+    var swarm = new io.pockethive.orchestrator.domain.Swarm(
+        "alpha", "controller-1", "manager-1", "run-1", io.pockethive.swarm.model.NetworkMode.DIRECT);
+    swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
+        "template-1", "controller", java.util.List.of()));
+    store.register(swarm);
+    return store;
   }
 }

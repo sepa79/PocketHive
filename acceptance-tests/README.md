@@ -153,8 +153,8 @@ Network extension (NW-2/NW-3/NW-5), each on the explicitly selected WORK adapter
 Equivalent `-rabbit.properties` files select independent Rabbit fixtures. Proxy cases
 verify TLS scheme, runtime settings, real responses and binding cleanup. NW-5 requires
 both the successful delayed-response control and the shorter-timeout error case.
-The timeout targets explicitly select the existing slow-response mapping and local
-TCP mock Basic credentials. Reads use `/tcp-mock/` at ingress; mappings and journals
+The timeout targets explicitly select the existing slow-response mapping. TCP mock
+reads use the existing PocketHive Bearer session through `/tcp-mock/` at ingress; mappings and journals
 are never reset or rewritten. Errors are read from the owned swarm/run journal;
 the processor output tap stays empty for the explicit quiet window after the error.
 

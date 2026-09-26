@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
  * Responsibility: read Redis dataset entries and coordinate cursor, exhaustion and intake.
  * Must not: validate dataset source entries, own worker enablement, refresh auth tokens or declare Rabbit resources.
  * Enablement is a read-only projection of RESP-WORK-STATE snapshots, including startup.
+ * Disable/stop invalidates intake batches; pop admission is serialized with state updates; Redis IO and dispatch never hold that lock.
  * Consumes: RESP-WORK-REDIS-DATASET-SETTINGS for complete validated settings.
  * Contract: RESP-WORK-REDIS-DATASET — docs/architecture/runtime-responsibilities.md#resp-work-redis-dataset.
  */
@@ -56,13 +57,15 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private final Logger log;
 
     // Read-only resolved settings projection refreshed by validation at the start of each tick.
-    private RedisDatasetSettings datasetSettings;
+    private volatile RedisDatasetSettings datasetSettings;
     private volatile boolean running;
     private volatile boolean enabled;
     private volatile ScheduledExecutorService schedulerExecutor;
     private volatile RedisListReader redisClient;
     private volatile long tickIntervalMs;
     private double carryOver;
+    // Guarded by this monitor; invalidates a batch across disable/re-enable.
+    private long intakeGeneration;
     private volatile StatusPublisher statusPublisher;
     private final AtomicLong dispatchedCount = new AtomicLong();
     private volatile long lastPopAtMillis;
@@ -169,14 +172,19 @@ public final class RedisDataSetWorkInput implements WorkInput {
     }
 
     @Override
-    public synchronized void stop() {
-        running = false;
-        if (schedulerExecutor != null) {
-            schedulerExecutor.shutdownNow();
-            schedulerExecutor = null;
+    public void stop() {
+        final RedisListReader client;
+        synchronized (this) {
+            running = false;
+            intakeGeneration++;
+            if (schedulerExecutor != null) {
+                schedulerExecutor.shutdownNow();
+                schedulerExecutor = null;
+            }
+            client = redisClient;
+            redisClient = null;
         }
-        closeQuietly(redisClient);
-        redisClient = null;
+        closeQuietly(client);
         if (log.isInfoEnabled()) {
             log.info("{} redis dataset input stopped (instance={})", workerDefinition.beanName(), identity.instanceId());
         }
@@ -187,23 +195,27 @@ public final class RedisDataSetWorkInput implements WorkInput {
      */
     public void tick() {
         long now = System.currentTimeMillis();
-        if (!running) {
-            if (log.isDebugEnabled()) {
-                log.debug("{} redis dataset input not running; skipping tick", workerDefinition.beanName());
+        final long generation;
+        final int quota;
+        final RedisDatasetSettings settings;
+        synchronized (this) {
+            if (!running || !enabled) {
+                carryOver = 0.0;
+                return;
             }
-            return;
-        }
-        if (!enabled) {
-            if (log.isDebugEnabled()) {
-                log.debug("{} redis dataset input disabled; skipping tick", workerDefinition.beanName());
+            try {
+                settings = validateConfiguration();
+                datasetSettings = settings;
+            } catch (IllegalArgumentException | IllegalStateException ex) {
+                recordConfigError(now, ex.getMessage(), ex, false);
+                return;
             }
-            carryOver = 0.0;
+            generation = intakeGeneration;
+            quota = planInvocations(settings);
+        }
+        if (!ensureClient(now, settings, generation)) {
             return;
         }
-        if (!ensureReadyForTick(now)) {
-            return;
-        }
-        int quota = planInvocations();
         if (quota <= 0) {
             if (log.isDebugEnabled()) {
                 log.debug("{} redis dataset tick yielded no work (quota={})", workerDefinition.beanName(), quota);
@@ -213,7 +225,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         for (int i = 0; i < quota; i++) {
             PopResult popResult;
             try {
-                popResult = popNextValue();
+                popResult = popNextValue(settings, generation);
             } catch (Exception ex) {
                 log.warn("{} failed to read from Redis dataset source", workerDefinition.beanName(), ex);
                 lastErrorAtMillis = now;
@@ -222,6 +234,11 @@ public final class RedisDataSetWorkInput implements WorkInput {
                 break;
             }
             if (popResult == null || popResult.payload == null) {
+                synchronized (this) {
+                    if (!isCurrentBatch(generation)) {
+                        break;
+                    }
+                }
                 if (log.isDebugEnabled()) {
                     log.debug("{} redis dataset is empty for configured sources", workerDefinition.beanName());
                 }
@@ -256,24 +273,32 @@ public final class RedisDataSetWorkInput implements WorkInput {
         publishDiagnostics();
     }
 
-    private boolean ensureReadyForTick(long now) {
-        try {
-            datasetSettings = validateConfiguration();
-        } catch (IllegalArgumentException | IllegalStateException ex) {
-            recordConfigError(now, ex.getMessage(), ex, false);
-            return false;
+    private boolean ensureClient(long now, RedisDatasetSettings settings, long generation) {
+        synchronized (this) {
+            if (!isCurrentBatch(generation)) {
+                return false;
+            }
+            if (redisClient != null) {
+                return true;
+            }
         }
-        if (redisClient != null) {
-            return true;
-        }
+        final RedisListReader created;
         try {
-            redisClient = clientFactory.apply(datasetSettings.connection());
-            clearConfigError();
-            return true;
+            created = clientFactory.apply(settings.connection());
         } catch (Exception ex) {
             recordConfigError(now, "Failed to initialize Redis dataset client: " + ex.getMessage(), ex, true);
             return false;
         }
+        synchronized (this) {
+            if (isCurrentBatch(generation) && redisClient == null) {
+                redisClient = created;
+                clearConfigError();
+                return true;
+            }
+        }
+        // STOP may have completed while connecting. Never install its stale client.
+        closeQuietly(created);
+        return false;
     }
 
     private void safeTick() {
@@ -287,8 +312,8 @@ public final class RedisDataSetWorkInput implements WorkInput {
         }
     }
 
-    private int planInvocations() {
-        double perTickRate = datasetSettings.ratePerSec() * tickIntervalMs / 1_000.0;
+    private int planInvocations(RedisDatasetSettings settings) {
+        double perTickRate = settings.ratePerSec() * tickIntervalMs / 1_000.0;
         double planned = perTickRate + carryOver;
         int quota = (int) Math.floor(planned);
         carryOver = planned - quota;
@@ -296,29 +321,34 @@ public final class RedisDataSetWorkInput implements WorkInput {
     }
 
     private void registerStateListener() {
-        controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
-            boolean previouslyEnabled = enabled;
-            enabled = snapshot.enabled();
-            if (!enabled) {
-                carryOver = 0.0;
-            }
-            if (previouslyEnabled != enabled && log.isInfoEnabled()) {
-                log.info("{} redis dataset {}", workerDefinition.beanName(), enabled ? "enabled" : "disabled");
-            }
-            try {
-                applyRawConfigOverrides(snapshot.rawConfig());
-            } catch (IllegalArgumentException | IllegalStateException ex) {
-                recordConfigError(
-                    System.currentTimeMillis(),
-                    "Invalid Redis dataset config update: " + ex.getMessage(),
-                    ex,
-                    false
-                );
-            }
-        });
+        controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), this::applyStateSnapshot);
     }
 
-    void applyRawConfigOverrides(Map<String, Object> rawConfig) {
+    private synchronized void applyStateSnapshot(WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot) {
+        boolean previouslyEnabled = enabled;
+        enabled = snapshot.enabled();
+        if (previouslyEnabled && !enabled) {
+            intakeGeneration++;
+        }
+        if (!enabled) {
+            carryOver = 0.0;
+        }
+        if (previouslyEnabled != enabled && log.isInfoEnabled()) {
+            log.info("{} redis dataset {}", workerDefinition.beanName(), enabled ? "enabled" : "disabled");
+        }
+        try {
+            applyRawConfigOverrides(snapshot.rawConfig());
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            recordConfigError(
+                System.currentTimeMillis(),
+                "Invalid Redis dataset config update: " + ex.getMessage(),
+                ex,
+                false
+            );
+        }
+    }
+
+    synchronized void applyRawConfigOverrides(Map<String, Object> rawConfig) {
         if (rawConfig == null || rawConfig.isEmpty()) {
             return;
         }
@@ -415,17 +445,39 @@ public final class RedisDataSetWorkInput implements WorkInput {
         return properties.settings("inputs.redis");
     }
 
-    private PopResult popNextValue() {
-        List<RedisDatasetSource> sources = datasetSettings.sources();
-        if (datasetSettings.sourceMode() == RedisDatasetSourceMode.SINGLE) {
-            String listName = datasetSettings.listName();
-            String value = redisClient.pop(listName);
+    private boolean isCurrentBatch(long generation) {
+        return running && enabled && intakeGeneration == generation;
+    }
+
+    private String popIfCurrent(String listName, long generation) {
+        final RedisListReader client;
+        synchronized (this) {
+            if (!isCurrentBatch(generation)) {
+                return null;
+            }
+            client = redisClient;
+        }
+        // This one read is admitted; STOP cancels subsequent reads, not this result.
+        return client.pop(listName);
+    }
+
+    private PopResult popNextValue(RedisDatasetSettings settings, long generation) {
+        List<RedisDatasetSource> sources = settings.sources();
+        if (settings.sourceMode() == RedisDatasetSourceMode.SINGLE) {
+            String listName = settings.listName();
+            String value = popIfCurrent(listName, generation);
             return value == null ? null : new PopResult(listName, value);
         }
-        List<RedisDatasetSource> ordered = orderedSources(sources);
+        final List<RedisDatasetSource> ordered;
+        synchronized (this) {
+            if (!isCurrentBatch(generation)) {
+                return null;
+            }
+            ordered = orderedSources(sources, settings);
+        }
         for (RedisDatasetSource source : ordered) {
             String listName = source.getListName();
-            String value = redisClient.pop(listName);
+            String value = popIfCurrent(listName, generation);
             if (value != null) {
                 return new PopResult(listName, value);
             }
@@ -433,11 +485,11 @@ public final class RedisDataSetWorkInput implements WorkInput {
         return null;
     }
 
-    private List<RedisDatasetSource> orderedSources(List<RedisDatasetSource> sources) {
+    private List<RedisDatasetSource> orderedSources(List<RedisDatasetSource> sources, RedisDatasetSettings settings) {
         if (sources.size() == 1) {
             return List.of(sources.get(0));
         }
-        if (datasetSettings.pickStrategy() == io.pockethive.redis.config.RedisDatasetPickStrategy.WEIGHTED_RANDOM) {
+        if (settings.pickStrategy() == io.pockethive.redis.config.RedisDatasetPickStrategy.WEIGHTED_RANDOM) {
             int first = weightedIndex(sources);
             List<RedisDatasetSource> ordered = new ArrayList<>(sources.size());
             ordered.add(sources.get(first));

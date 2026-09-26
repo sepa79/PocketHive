@@ -85,7 +85,6 @@ public class TcpProtocolHandler implements ProtocolHandler {
     TcpTransportConfig desired = Objects.requireNonNull(
         processorConfig.tcpTransport(),
         "processor tcpTransport config must be provided by runtime config");
-    transportRuntime.configure(desired);
 
     requestMeta = requestMetadata(baseUrl, null, null, request.behavior(), null);
     if (baseUrl == null || baseUrl.isBlank()) {
@@ -141,7 +140,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
     try {
       pacingMillis = pacer.await(processorConfig);
 
-      TcpTransportConfig config = transportRuntime.currentConfig();
+      transport = transportRuntime.acquire(desired);
+      TcpTransportConfig config = transport.config();
       var options = new java.util.HashMap<String, Object>();
       if (endTag != null) {
         options.put("endTag", endTag);
@@ -153,9 +153,6 @@ public class TcpProtocolHandler implements ProtocolHandler {
       options.put("sslVerify", config.sslVerify());
       options.putAll(authTransportOptions);
       TcpRequest tcpRequest = new TcpRequest(host, port, requestBody.getBytes(StandardCharsets.UTF_8), options);
-
-      // Connection reuse strategy
-      transport = transportRuntime.acquire(config);
 
       // Retry logic
       TcpResponse response = null;
@@ -270,4 +267,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
     return Optional.of(mapper.writeValueAsString(bodyValue));
   }
 
+  @Override public void close() {
+    transportRuntime.close();
+  }
 }

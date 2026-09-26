@@ -208,14 +208,14 @@ class TargetLoaderTest {
   }
 
   @Test void timeoutTargetRequiresExplicitMockSettingsAndCoversTheEntireTapLifetime() throws Exception {
-    String config = TARGET + "mockUsername=admin\nmockPassword=test\nmappingId=slow\nquietWindow=PT2S\n";
+    String config = TARGET + "mappingId=slow\nquietWindow=PT2S\n";
     assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadTcpTimeout(file(config)));
     var target = TargetLoader.loadTcpTimeout(file(config.replace("tapTtlSeconds=5", "tapTtlSeconds=8")));
     assertEquals("slow", target.mappingId());
     assertEquals(java.time.Duration.ofSeconds(2), target.quietWindow());
     assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadTcpTimeout(file(TARGET)));
     assertThrows(IllegalArgumentException.class,
-        () -> TargetLoader.loadTcpTimeout(file(config.replace("mockPassword=test\n", ""))));
+        () -> TargetLoader.loadTcpTimeout(file(config.replace("tapTtlSeconds=5", "tapTtlSeconds=8") + "mockPassword=obsolete\n")));
   }
 
   @Test void provisionedAuthRequiresDistinctExplicitScenarioScopes() throws Exception {
@@ -268,7 +268,7 @@ class TargetLoaderTest {
   }
 
   @Test void webAuthRequiresEveryExplicitObserverSetting() throws Exception {
-    String settings = "redisConnectionId=chosen\nmockUsername=user\nmockPassword=pass\n";
+    String settings = "redisConnectionId=chosen\n";
     assertEquals("chosen", TargetLoader.loadWebAuth(file(TARGET + settings)).connectionId());
     for (String line : settings.split("\n")) {
       assertThrows(IllegalArgumentException.class,

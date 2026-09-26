@@ -661,7 +661,7 @@ The push adapter selects a payload and executes LPUSH/RPUSH/LTRIM using resolved
 **Current B02 status:** complete Redis output settings/provider composition and the runtime
 RESOLVED candidate gate are implemented. Scenario complete AUTHORING projection is implemented; Controller
 early complete RESOLVED validation remains; standard Spring flattening is the accepted runtime boundary
-and original empty-YAML shape preservation is closed. SEL-R1 stays user-deferred.
+and original empty-YAML shape preservation is closed. SEL-R1 was subsequently fixed in the input lifecycle (2026-09-26).
 **Verification:** RedisWriteSettingsTest, WorkIOConfigBinderTest, RedisWorkOutputTest,
 RedisUploaderInterceptorTest and RedisConfigurationValidationComponentTest.
 Implementation evidence: `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/redis-write-settings-transfer.md`.
@@ -760,7 +760,7 @@ Controller early complete RESOLVED validation remains; original empty-YAML shape
 RedisDataSetWorkInputTest and RedisConfigurationValidationComponentTest.
 Implementation evidence: `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/redis-sources-transfer.md`;
 the separate `redis-selection-review-2026-09-08.md` in the same evidence directory
-accepts RS-R1/RS-R2. The subsequent selection transfer has its own open SEL-R1 finding.
+accepts RS-R1/RS-R2. The subsequent SEL-R1 finding was fixed in the input lifecycle (2026-09-26).
 
 ## RESP-WORK-REDIS-SELECTION
 
@@ -796,8 +796,8 @@ flattening is accepted, so empty-YAML shape preservation is not required. This s
 record alone does not certify the complete B02 change.
 **Verification:** RedisDatasetSelectionTest, WorkPatchPolicyTest, WorkIOConfigBinderTest,
 RedisDataSetWorkInputTest and RedisConfigurationValidationComponentTest.
-**Review status:** SEL-R1 HIGH remains open and is deferred by the user; it does not
-block plan continuation. See `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/known-issues.md`.
+**Review status:** SEL-R1 is fixed: disabling invalidates the current Redis intake batch,
+including across immediate re-enable. See RESP-WORK-REDIS-DATASET below.
 
 ## RESP-WORK-REDIS-DATASET-SETTINGS
 
@@ -832,13 +832,13 @@ before connection environment freezing; it validates the complete RedisDatasetSe
 only from the final Spring-resolved snapshot and projects those accepted values into
 bootstrap. Source list entries use the same indexed Spring property form as SDK binding.
 No environment rewrite follows validation. Raw runtime updates compose a candidate from the currently accepted
-settings plus explicit patch values before mutation, preserving the existing SEL-R1
-list-switch lifecycle. Deferred startup candidate shape remains later B02 work.
+settings plus explicit patch values before mutation. The SEL-R1 correction invalidates
+old intake batches across disable/re-enable. Deferred startup candidate shape remains later B02 work.
 
 **Review status:** complete settings composition is accepted within its scoped transfer
 on 2026-09-10. The corrected Redis environment export is also accepted within scope after
 separate review closed its duplicate-connection-mapping finding. Whole Work candidate
-acceptance, deferred SEL-R1 and full B02 remain open.
+acceptance and full B02 remain outside this scoped transfer; SEL-R1 is now fixed.
 
 **Forbidden:** duplicate pick-strategy parsing, aggregate source/connection/rate/timing
 validation in SDK or Scenario Manager, or accept an incomplete/deferred settings value.
@@ -882,7 +882,7 @@ text, silent defaults or interpreting symbolic authoring as accepted runtime set
 **Verification:** InputRateParserTest, WorkPatchPolicyTest, WorkIOConfigBinderTest and
 scenario component validation plus existing input behavior tests.
 **Scope:** rate only. Timing, limits, input enablement, complete candidate acceptance and
-other B02 settings remain open. SEL-R1 stays explicitly deferred. The input-rate transfer
+other B02 settings remain open. SEL-R1 was subsequently fixed in the input lifecycle (2026-09-26). The input-rate transfer
 passed separate review on 2026-09-09 after RATE-R1 correction; see
 `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/README.md`, section
 "Separate RATE-R1 correction review — 2026-09-09".
@@ -1533,6 +1533,14 @@ validated before start registers callbacks or creates an executor.
 Enablement is a read-only projection of RESP-WORK-STATE snapshots. Listener registration
 supplies the current worker state before intake starts, including after stop/start;
 Redis input properties do not supply an independent startup flag.
+Disabling or stopping invalidates the current intake batch. State/config updates and
+admission of individual Redis pops are serialized by the input monitor. Connection,
+read and close IO run outside that monitor, so CONTROL does not wait for Redis. A read
+admitted before STOP may finish; a connection completing for an invalidated batch is
+closed instead of installed. Each tick retains its own settings snapshot. A popped item still
+dispatches once; remaining reads of an invalidated batch stop even after re-enable.
+The next tick resolves current settings. Multi-source exhaustion checks obey the same
+batch boundary. This does not drain worker execution or change ACK/redelivery.
 
 **Forbidden:** own worker enablement, refresh auth tokens, generate sequences or declare Rabbit resources.
 
@@ -1774,7 +1782,7 @@ Shared request/transport contracts and TemplateRenderer carry values; schema loa
 
 **Current module(s):** `processor-service`.
 
-ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition. TCP/ISO8583 pool replacement and selection delegate to RESP-PROCESSOR-TCP-RUNTIME with separate protocol instances.
+ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition. TCP/ISO8583 pool replacement and selection delegate to RESP-PROCESSOR-TCP-RUNTIME with separate protocol instances. Worker destruction closes its handlers; TCP/ISO handlers retire their runtimes, while Spring closes the separately owned HTTP client bean.
 
 Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket effects and produce observations consumed downstream.
 
@@ -1838,8 +1846,9 @@ and defaults remain in ProcessorWorkerConfig.
 HttpProtocolHandler retains envelope parsing, target/body/header preparation,
 response decoding, timing/metrics and result extraction. Preserve callback timing
 (before body read), response release and exception propagation by retaining Apache's
-response-handler execution API. Do not add retries, timeouts or client shutdown
-hooks in this extraction; existing client lifetime behavior remains separate debt.
+response-handler execution API. Client ownership includes closing eager and lazy per-thread clients on bean destruction;
+in-flight HTTP executions finish before closure. Partial client construction releases
+already allocated clients. Retries and timeout policy remain unchanged.
 HTTP Sequence has its own functional client and policy, outside this transfer.
 
 **Forbidden:** raw HTTP clients or pool construction in ProcessorWorkerImpl;
@@ -1858,19 +1867,14 @@ TcpTransportRuntime owns transport configuration/replacement and GLOBAL/PER_THRE
 selection for TCP and ISO8583. Each handler retains its own runtime instance; sharing
 one implementation does not merge the previously independent protocol pools.
 
-The runtime owns active configuration, the eager GLOBAL transport and lazily created
-per-thread transports. `configure` retains the current equality check, locking and
-replacement/close order. `currentConfig` supplies the existing read-only projection.
-`acquire` returns a TcpTransportLease that executes through TcpTransport and releases
-only a NONE transport when the handler finishes its complete result/error path.
-Close exceptions remain suppressed as before. Retrying remains in the handlers and
-uses the same lease; no new retries, reconnection, framing or timeout behavior.
-
-Preserve update timing: TCP configures before target/auth work; ISO8583 configures
-after its protocol/auth validation. Handlers read the active config after pacing as
-before. This extraction does not make configuration replacement atomic across
-in-flight work, roll back failed construction, or add shutdown hooks. Those existing
-lifecycle/concurrency limitations need a separate behavior decision.
+The runtime acquires a lease for the request's explicit configuration in one operation.
+Each configuration generation owns its transports; successful construction precedes
+publication. A failed replacement leaves the old generation intact and fails the request
+explicitly. Existing leases pin retired generations until their complete result/error path
+finishes. Configuration, transport selection and retry settings therefore remain coherent.
+`close` rejects new leases and retires the current generation; outstanding leases release
+its resources when they finish. TCP/ISO handlers release leases in finally and delegate
+shutdown from their owning worker. No ACK, retry or protocol result policy changes.
 
 TcpTransportFactory remains the sole concrete Socket/NIO/Netty constructor selector,
 internal to the transport package. Its active config-based behavior is unchanged.
@@ -2173,6 +2177,22 @@ and the applied configuration digest.
 
 ## RESP-ORCHESTRATOR-INGRESS
 
+ControllerStatusService owns admission/discovery and application of controller observations.
+Unknown full status discovers a swarm using its run/template/controller identity, the
+matching live compute inventory resource and the digest-verified startup artifact. Missing
+or ambiguous evidence is an operator-visible error, never guessed runtime metadata.
+Unknown delta requests a full status. Existing entries accept only matching controller,
+and run identities; conflicts preserve the entry and emit an ERROR journal record
+with expected/received identities. No lifecycle completion consumes rejected observations.
+RESET clears the local catalogue; subsequent ordinary full statuses rebuild it using this
+same path, including after Orchestrator restart. Discovery initializes workloadIntent=UNKNOWN; it does not imply START or STOP.
+SwarmStore.updateIfCurrent makes observation mutation atomic with RESET/register/remove.
+Discovery IO and journal/operation publication stay outside the catalogue monitor.
+ControllerStatusListener only decodes and delegates. FilesystemSwarmStartupArtifactStore
+owns digest-to-path resolution; SwarmStatusDiscovery reads inventory through its existing
+port and materializes metadata from the immutable startup artifact, not ownership manifests.
+
+
 **Current module(s):** `orchestrator-service`.
 
 Orchestrator SwarmSignalListener dispatches canonical signals; ControllerStatusListener consumes controller observations and delegates convergence to SwarmOperationObservationHandler.
@@ -2185,9 +2205,14 @@ ControlPlaneCodec decodes; a public Rabbit binding attaches CP error classificat
 
 **Verification entrypoints:** `ControllerStatusListenerTest`, `SwarmSignalListenerTest`.
 
-**Migration status:** Only CP factory wiring changed in B01. Existing listener observation/journal logic remains C-stage thin-listener debt.
+**Migration status:** Controller status admission/discovery and observation application now live in ControllerStatusService; the listener decodes and delegates.
 
 ## RESP-CONTROLLER-CONTROL
+
+`SwarmLifecycle` directly declares scenario-progress and buffer-guard capabilities;
+`SwarmLifecycleCore` remains the independently implemented core port. No unused
+intermediate interfaces or legacy GuardEngine/SwarmGuard adapter layer are retained.
+The active BufferGuardCoordinator continues to use manager-sdk guard implementations.
 
 **Current module(s):** `swarm-controller-service`.
 
@@ -3781,7 +3806,7 @@ cover presentation of missing, loading and failed observations.
 SwarmAccessService owns evaluation of existing per-swarm read/run/manage permissions
 through OrchestratorAuthorization. SwarmTemplateScopeResolver owns the existing
 metadata lookup/enrichment shared by those checks and template lookup at creation.
-SwarmController delegates access checks; SwarmAccessProjection enumerates visible
+SwarmController delegates access checks; SwarmAccessService also enumerates visible
 swarms and derives the caller-specific read-only response. SwarmAccessController
 maps GET /api/access/swarms with no-store. The same checks are performed again for
 commands; projections do not authorize execution or imply lifecycle eligibility.
@@ -4111,3 +4136,16 @@ UI consumer: `SwarmLifecycleButtons` renders lifecycle controls using backend ac
 projections and current request/operation feedback. Pending START leaves Stop available
 after HTTP acceptance; pending STOP and an in-flight HTTP request block repeat actions.
 UI availability does not decide backend admission or operation outcomes.
+
+## RESP-SWARM-CATALOGUE-REMOVAL
+
+`SwarmCatalogueService` owns the explicit catalogue-only removal workflow. It reads
+`ComputeRuntimeInventoryPort`, rejects any compute resource for the swarm (including
+other runs and stopped resources), and delegates exact-entry removal to `SwarmStore`.
+`SwarmOperationCoordinator` remains the operation admission owner: its monitor
+serializes the final active-operation check/removal with reservation.
+`OperationDispatchService` verifies registered runtime identity before non-CREATE
+reservation under that same monitor. External inventory and journal IO remain outside
+these monitors. `SwarmCatalogueController` maps HTTP and reuses `SwarmAccessService`.
+The authorized contract is ORCHESTRATOR-REST §3.3.1. No queues, files or network bindings
+are removed, and no successful lifecycle REMOVE outcome is emitted.

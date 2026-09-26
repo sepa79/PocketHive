@@ -10,7 +10,7 @@ export type NullableCanonicalNonEmptyString = CanonicalNonEmptyString | null
 
 export type RuntimeIntent = "PRESENT" | "ABSENT"
 
-export type WorkloadIntent = "RUNNING" | "STOPPED"
+export type WorkloadIntent = "RUNNING" | "STOPPED" | "UNKNOWN"
 
 export type ControllerState = "PROVISIONING" | "READY" | "FAILED" | "UNKNOWN"
 

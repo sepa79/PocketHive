@@ -51,6 +51,23 @@ class RuntimeAssessmentServiceTest {
             swarms, debug, reconciliation, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = Health.class, names = {"HEALTHY", "FAILED", "DEGRADED"})
+    void unknownIntentIsIncompleteWithoutHidingObservedFailure(Health health) {
+        Swarm swarm = new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT, WorkloadIntent.UNKNOWN);
+        swarm.updateObservation(ControllerState.READY, WorkloadState.RUNNING, health,
+            RuntimeResourceState.PRESENT, workerObservation("generator:latest"), NOW);
+        swarms.register(swarm);
+        stubOwnerEvidence();
+        var result = service.assess(new AssessmentRequest("sw1", "run-1"));
+        assertThat(result.checks()).filteredOn(check -> check.check() == AssessmentCheck.CONTROL_PLANE)
+            .singleElement().satisfies(check -> {
+                assertThat(check.state()).isEqualTo(health == Health.HEALTHY ? AssessmentState.INCOMPLETE : AssessmentState.DRIFTED);
+                assertThat(check.differences()).extracting("kind").containsExactly(
+                    health == Health.HEALTHY ? DifferenceKind.SOURCE_UNAVAILABLE : DifferenceKind.CONTROL_PLANE_STATE_MISMATCH);
+            });
+    }
+
     @Test
     void returnsConsistentAssessmentWithCompatibilityProjections() {
         Swarm swarm = observedSwarm();

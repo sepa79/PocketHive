@@ -175,7 +175,8 @@ raportowane bez requeue, executor rejection zachowuje dotychczasowy synchroniczn
 disabled invocation zwraca null. Publisher confirms pozostają nieaktywne. Bez nowych retry,
 shutdown/drain, DLQ, migracji, compatibility ani przywracania usuniętego legacy binding cleanup.
 
-Zachować zaakceptowany limit ochrony przed pośrednimi ENV overrides. Redis SEL-R1, naprawy
+Zachować zaakceptowany limit ochrony przed pośrednimi ENV overrides. Redis SEL-R1 naprawiono
+26.09.2026 w późniejszym zakresie lifecycle wejścia. Naprawy
 Scenario Managera S1–S10, reset/correctness Orchestratora, szerszy lifecycle Swarm Controllera,
 Docker, journal, auth/templates i pozostałe refaktory pozostają osobnymi PR-ami.
 Legacy Node debug tooling i starsze fixture naming mają wcześniejsze jawne wyłączenia;

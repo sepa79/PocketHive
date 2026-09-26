@@ -3,6 +3,8 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import java.util.Comparator;
 import org.springframework.stereotype.Service;
 
 /**
@@ -12,11 +14,20 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SwarmAccessService {
+    private final SwarmStore store;
     private final OrchestratorAuthorization authorization;
     private final SwarmTemplateScopeResolver scopes;
-    public SwarmAccessService(OrchestratorAuthorization authorization, SwarmTemplateScopeResolver scopes) {
+    public SwarmAccessService(OrchestratorAuthorization authorization, SwarmTemplateScopeResolver scopes, SwarmStore store) {
+        this.store = store;
         this.authorization = authorization;
         this.scopes = scopes;
+    }
+    public SwarmAccessResponse project(AuthenticatedUserDto user) {
+        return new SwarmAccessResponse(store.all().stream()
+            .filter(swarm -> canRead(user, swarm))
+            .sorted(Comparator.comparing(Swarm::getId))
+            .map(swarm -> new SwarmAccessView(swarm.getId(), canRun(user, swarm), canManage(user, swarm)))
+            .toList());
     }
     public boolean canRead(AuthenticatedUserDto user, Swarm swarm) {
         return user == null || authorization.canRead(user, scopes.resolve(swarm));

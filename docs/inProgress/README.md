@@ -12,13 +12,9 @@ This directory contains only work that is actively being implemented or is waiti
   found no actionable issues; 186 focused/component tests passed. No new F03
   deployment acceptance was run. Prepared for review alongside PR #520.
 
-- [Nowy framework E2E](e2e-test-system.md) — N0/N1 zakończone; macierz N2:
-  42 PASS / 0 PARTIAL po NW-4 między hostami Swarm/NFS (2026-09-22). Lokalna analiza N3 i poprawka
-  DA-3 przeszły osobny review bez uwag. Końcowy review N3 zakończony bez blokujących ustaleń (2026-09-22).
-  Decyzja użytkownika 2026-09-18: wracamy do A5 Artemis/3DS; usunięcie starego
-  frameworka N4 odkładamy do jego ręcznych testów i potwierdzenia.
-  Bieżące wyniki posiada [macierz pokrycia](../ci/acceptance-coverage.md);
-  [plan E2E](e2e-test-system.md) określa warunki N3/N4.
+- [Acceptance framework replacement](e2e-test-system.md) — N0–N3 completed; N4 legacy
+  deletion authorized and implemented on2026-09-26. Use `acceptance-tests` and its runner.
+  Dated coverage and environment limitations remain in the linked reports.
 
 The preceding [Rabbit SSOT/WorkPlane](work-plane-module-boundaries.md) and
 [Artemis/delayed-delivery](work-plane-artemis-3ds.md) implementation and technical
@@ -28,23 +24,23 @@ this index does not infer its current merge/publication state. Evidence remains 
 [the full Swarm run](artemis-swarm-full-acceptance.md) and
 [the coverage matrix](../ci/acceptance-coverage.md).
 Native ownership manifests/orphan cleanup, full 3DS/APATA/App mock,
-selector/splitter and CloseLook remain deferred. Legacy E2E removal still requires
-manual confirmation. The Dev stack was removed after verification on 2026-09-22.
+selector/splitter and CloseLook remain deferred. Legacy E2E removal was authorized and implemented on2026-09-26. The Dev stack was removed after verification on 2026-09-22.
 The serial CONTROL admission model remains documented in
 [the admission review](../architecture/work-admission-review-2026-09-15.md).
 
 - [Orchestrator correctness](orchestrator-correctness.md) — separate behavior fixes: O1/O2 evidence
-  identity acceptance implemented (74 tests), awaiting review; reset/registry/lifecycle design remains pending.
+  identity acceptance, RESET/full-status catalogue discovery, UNKNOWN workload intent and
+  guarded catalogue-only deletion are implemented and reviewed. General recovery and
+  disk/queue/network cleanup remain deferred.
   Does not expand the behavior-preserving SSOT extraction scope.
 
-- [Functional module boundaries](functional-module-boundaries.md) — F01 Redis and
-  F03 Docker and F04 journal/filesystem are implemented and reviewed.
-  F05 ClickHouse is implemented, verified (full affected reactor and local Artemis
-  DA-3) and reviewed. F06 auth and F09 MCP from Tim are integrated; selected F07 UI
-  and F09 Scenario Manager repairs are implemented. F08 observation/freshness ownership
-  and the separately approved degraded-control behavior passed review, including the
-  UI STOP correction. Final verification is recorded in the plan; deployment/browser
-  acceptance is not claimed. Reset/recovery and transport lifecycle remain deferred.
+- [Functional module boundaries](functional-module-boundaries.md) — selected F01–F09
+  implemented, including integrated Tim work and final consolidation. Current plan lists
+  only delivery gates and separate reset/recovery and TCP follow-ups; Processor transport lifecycle is fixed.
+  Latest rebuilt local Rabbit acceptance:65/65 PASS, including fresh deployment.
+  Remaining delivery work: browser checks and publication; local clock repair remains
+  an environment follow-up. Historical inventories are archived; use dated reports
+  for verification scope.
 - [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) — historical
   Rabbit-only closure evidence, before the completed Artemis extension; technology transfer exists;
   R1–R6 close selected Work configuration/topology/resources/transport/observations/cleanup across
@@ -63,7 +59,7 @@ The serial CONTROL admission model remains documented in
   [Boundary design](../architecture/work-plane-boundaries.md) defines ownership. Delayed-publish API
   design and Artemis were subsequently delivered in the linked Artemis plan; retired
   B02–B07 instructions are not prerequisites.
-  Existing legacy-tool/test-fixture exclusions and deferred Redis SEL-R1 remain explicit in the plan.
+  Existing legacy-tool/test-fixture exclusions remain explicit; Redis SEL-R1 was fixed on 2026-09-26.
 
 - `docs/inProgress/processor-iso8583-v1-v2-plan.md` — active ISO8583 processor delivery and remaining V2 work.
 - [Runtime debug and cleanup](runtime-debug-mcp-cleanup-spec.md) — implementation exists;

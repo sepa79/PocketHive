@@ -53,7 +53,7 @@ import org.springframework.stereotype.Component;
  * <p>
  * Configuration is supplied by the control plane on the {@code processor.control.*} routing keys.
  * <p>
- * Responsibility: dispatch a request to its selected protocol handler and return the resulting Work item.
+ * Responsibility: dispatch requests to owned protocol handlers, return Work results and release handlers on shutdown.
  * Must not: construct HTTP clients, implement pacing policy, provision topology or reinterpret a protocol result.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
  */
@@ -186,4 +186,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             .data("avgLatencyMs", metricsRecorder.averageLatencyMs()));
   }
 
+  @jakarta.annotation.PreDestroy
+  public void close() {
+    protocolHandlers.values().forEach(ProtocolHandler::close);
+  }
 }

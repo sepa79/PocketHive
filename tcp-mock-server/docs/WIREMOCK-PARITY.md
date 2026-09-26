@@ -133,12 +133,11 @@ Required protocol safety must not introduce unrelated configuration strictness.
    bounded memory, no leaked connections, correct counts and declared budgets.
 
 At audit, [UiAuthHeaderTest](../src/test/java/io/pockethive/tcpmock/ui/UiAuthHeaderTest.java)
-contains two static JavaScript checks. Existing
-[E2E features](../../e2e-tests/src/test/resources/features/swarm-lifecycle.feature)
-exercise delayed-response failure and journal presence, not equivalence. Their
-[TCP URL default](../../e2e-tests/src/main/java/io/pockethive/e2e/config/EnvironmentConfig.java)
-uses a direct service port and must not become the new suite's entrypoint.
-These sources establish neither “85% coverage” nor “100% parity”.
+contains two static JavaScript checks. The former Cucumber tests are available in
+Git at `61887845`; they tested delayed-response failure and journal presence, not
+equivalence. Current [acceptance tests](../../acceptance-tests/README.md) use public
+ingress for mock administration and observation. Neither historical nor current
+selected TCP cases establish “85% coverage” or “100% parity”.
 
 Release requires passing evidence for **T1–T12** against the implemented
 contracts. Capability advertising and README claims must reflect that evidence;

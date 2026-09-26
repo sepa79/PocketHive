@@ -1,13 +1,20 @@
 # Acceptance replacement coverage
 
-Latest environment evidence (2026-09-22): large Swarm, Artemis WORK, **57/57 PASS**
+N4: legacy framework removal authorized and implemented on 2026-09-26.
+Recent integrated local runs and their clock-related limitations are recorded in
+[Artemis evidence](evidence/2026-09-26-f08-local-acceptance.md) and
+[Rabbit evidence](evidence/2026-09-26-f08-rabbit-acceptance.md). They do not replace
+the historical cross-host qualification below.
+
+Large-Swarm baseline evidence (2026-09-22): large Swarm, Artemis WORK, **57/57 PASS**
 across the full run (55 PASS) and two targeted WK-4/WK-5 reruns after fixing the
 image comparison oracle. The full suite was not repeated after the test-only fix.
 See repository report `docs/inProgress/artemis-swarm-full-acceptance.md`.
 
 N0 inventory and N1–N3 evidence; A5 transport extension added 2026-09-21. This ledger is a requirements checklist, not executable
 routing/configuration and not an assertion of equivalence. Sources: the six frozen
-feature files under `e2e-tests/src/test/resources/features`, current REST/lifecycle,
+feature files formerly under `e2e-tests/src/test/resources/features` (available in
+Git at `61887845`, before user-approved N4 removal on 2026-09-26), current REST/lifecycle,
 worker, auth and networking contracts. No legacy implementation is reused.
 
 Each row must receive concrete assertion/test and execution evidence before N3.

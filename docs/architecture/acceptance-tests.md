@@ -1,9 +1,9 @@
 # Independent acceptance framework
 
 User-approved direction: a new `acceptance-tests` Maven module, Java 21 and JUnit 5.
-It is independent of the frozen `e2e-tests`; temporary coexistence ends only after
-replacement acceptance. These are the current implementation responsibility records.
-They do not claim complete replacement or a passing deployment run.
+It is the sole acceptance framework after user-approved legacy removal on 2026-09-26.
+These are the current implementation responsibility records. Dated execution evidence
+and environment limitations remain in docs/ci/acceptance-coverage.md and its linked reports.
 
 ## Boundaries and composition
 
@@ -27,7 +27,7 @@ projection. `AcceptanceTarget` adds lifecycle limits and WorkFixture; `ScenarioT
 adds only the authored scenario id. ViewerTarget adds the explicit cleanup actor,
 scenario/SUT and operation limits. RunnerTarget adds explicit folder and denied fixture.
 ProxyTarget adds an explicit network profile and endpoint to the shared lifecycle target.
-TcpTimeoutTarget adds explicit mock credentials/mapping and a quiet window.
+TcpTimeoutTarget adds explicit mock mapping and a quiet window.
 NetworkAccessTarget holds only API and viewer/runner identity settings.
 ProvisionedAuthTarget adds explicit fixture/scope and actor provisioning settings;
 SwarmAuthorizationTarget adds a logical TapSelection to that same auth projection.
@@ -364,15 +364,15 @@ canonical binding404 verifies its removal at the supported API boundary.
 
 WorkFixture replaces the HTTP-only name for the same immutable scenario/SUT/tap/expected
 response projection, now consumed by HTTP and TCP suites. TargetLoader remains the only
-parser; ProxyTarget selects profile/endpoint, TcpTimeoutTarget adds explicit mock
-credentials, mapping id and quiet window. No legacy alias is retained.
+parser; ProxyTarget selects profile/endpoint, TcpTimeoutTarget adds an explicit mock
+mapping id and quiet window. No legacy alias is retained.
 ProxyAssertions owns read-only source/binding comparisons extracted from NW-1 and shared
 by HTTP/HTTPS/TCPS. It does not resolve endpoints. HTTPS and TCPS verify the TLS scheme,
 authored/runtime TLS configuration and actual protocol-specific result DTOs.
 
 TcpMockApi reads the selected existing mapping through `/tcp-mock/api/mappings` at the
-same ingress, with explicit Basic credentials (no authentication fallback). PocketHiveHttp
-still owns all network IO, complete-body deadlines and same-origin checks. No mock mapping
+same ingress, using the existing PocketHive Bearer session (no authentication fallback).
+PocketHiveHttp still owns all network IO, complete-body deadlines and same-origin checks. No mock mapping
 or shared request journal is mutated. The slow-response fixture has a paired successful
 request with a longer read timeout and a timeout case with a shorter read timeout.
 
@@ -579,8 +579,10 @@ RedisDatasetResources accepts a list of handles and retains every dependency unt
 SwarmResource permits cleanup; it adds no lifecycle authority. All cleanup failures
 remain visible and all independent handles are closed.
 
-WebAuthTarget composes explicit lifecycle, Redis connection and TCP mock credentials;
-TargetLoader remains their sole resolver. TcpMockApi extends its read-only scope to
+WebAuthTarget composes explicit lifecycle and Redis connection settings;
+TargetLoader remains their sole resolver. LiveRun supplies its existing PocketHive
+session to TcpMockApi, just as it does for the other authenticated APIs.
+TcpMockApi extends its read-only scope to
 the public request journal with a bounded request budget. No shared journal clear or
 mapping mutation is permitted. The suite matches exact authored XML requests with a
 fresh nonce, customer/account/amount and RED/BAL/TOP stage, requires successful TCP

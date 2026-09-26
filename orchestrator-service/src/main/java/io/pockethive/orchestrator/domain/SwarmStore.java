@@ -14,6 +14,11 @@ import java.util.Iterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Responsibility: own the local swarm catalogue and cached status projections.
+ * Must not: discover infrastructure, parse transport messages or decide lifecycle outcomes.
+ * Contract: RESP-ORCHESTRATOR-INGRESS; explicit RESET clears the catalogue for status discovery.
+ */
 public class SwarmStore {
 
     private static final Logger log = LoggerFactory.getLogger(SwarmStore.class);
@@ -28,18 +33,36 @@ public class SwarmStore {
         SWARM_NOT_FOUND
     }
 
-    public void clear() {
+    public synchronized void clear() {
         swarms.clear();
         log.info("SwarmStore: cleared");
     }
 
-    public Swarm register(Swarm swarm) {
+    public synchronized Swarm register(Swarm swarm) {
         Objects.requireNonNull(swarm, "swarm");
         String swarmId = requireSwarmId(swarm.getId());
         swarms.put(swarmId, swarm);
         log.info("SwarmStore: registered swarm id={} instance={} container={}",
             swarm.getId(), swarm.getInstanceId(), swarm.getContainerId());
         return swarm;
+    }
+
+    /** Register discovered metadata without replacing a concurrently registered runtime. */
+    public synchronized Swarm registerIfAbsent(Swarm swarm) {
+        Objects.requireNonNull(swarm, "swarm");
+        Swarm existing = swarms.putIfAbsent(requireSwarmId(swarm.getId()), swarm);
+        return existing == null ? swarm : existing;
+    }
+
+    /** Apply local observation changes only while the exact admitted entry is current. No IO in update. */
+    public synchronized boolean updateIfCurrent(Swarm expected, Runnable update) {
+        Objects.requireNonNull(expected, "expected");
+        Objects.requireNonNull(update, "update");
+        if (swarms.get(expected.getId()) != expected) {
+            return false;
+        }
+        update.run();
+        return true;
     }
 
     public Optional<Swarm> find(String id) {
@@ -50,7 +73,7 @@ public class SwarmStore {
         return Collections.unmodifiableCollection(swarms.values());
     }
 
-    public void remove(String id) {
+    public synchronized void remove(String id) {
         String swarmId = requireSwarmId(id);
         Swarm removed = swarms.remove(swarmId);
         if (removed != null) {
@@ -61,7 +84,7 @@ public class SwarmStore {
         }
     }
 
-    /** Marks stale observation unknown; status traffic never creates or deletes registry entries. */
+    /** Marks stale observation unknown; discovery and explicit removal own catalogue membership. */
     public void pruneStaleControllers(Duration failedAfter) {
         pruneStaleControllers(failedAfter, Instant.now());
     }
@@ -90,7 +113,7 @@ public class SwarmStore {
         return swarms.size();
     }
 
-    public void cacheControllerStatusFull(String swarmId, JsonNode envelope, Instant receivedAt) {
+    public synchronized void cacheControllerStatusFull(String swarmId, JsonNode envelope, Instant receivedAt) {
         String canonicalSwarmId = requireSwarmId(swarmId);
         Objects.requireNonNull(envelope, "envelope");
         Objects.requireNonNull(receivedAt, "receivedAt");
@@ -101,7 +124,7 @@ public class SwarmStore {
         swarm.updateControllerStatusFull(envelope, receivedAt);
     }
 
-    public DeltaApplyResult applyControllerStatusDelta(String swarmId, JsonNode deltaEnvelope, Instant receivedAt) {
+    public synchronized DeltaApplyResult applyControllerStatusDelta(String swarmId, JsonNode deltaEnvelope, Instant receivedAt) {
         String canonicalSwarmId = requireSwarmId(swarmId);
         Objects.requireNonNull(deltaEnvelope, "deltaEnvelope");
         Objects.requireNonNull(receivedAt, "receivedAt");

@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Fix Processor TCP/ISO transport replacement: requests retain one configuration generation, failed construction does not publish a broken configuration, and retired transports close after their last request. Close HTTP eager/per-thread clients and TCP runtimes on owner shutdown without interrupting admitted exchanges.
+
+- Orchestrator: explicit catalogue-entry deletion now verifies compute absence and refuses active lifecycle operations or a replaced entry. Files, queues and network bindings remain untouched; normal REMOVE retains its verified cleanup contract.
+
+- Apply controller observations atomically against the admitted catalogue entry; recovered
+  swarms expose UNKNOWN workload intent until a START/STOP command instead of a false STOPPED intent.
+
+- Restore swarm catalogue discovery from controller full status after RESET/restart;
+  verify runtime identity and startup data, request full status for unknown deltas,
+  and report conflicting controller/run identities as journal errors without overwriting entries.
+
+- Fixed Redis dataset intake continuing an old batch after STOP/update/START; already popped items still dispatch, while subsequent reads use the next tick’s current settings. Redis connection/read IO no longer blocks control updates; late stale connections are closed.
+
+- Remove the legacy Cucumber E2E module, runner and deployment target files after
+  replacement acceptance; use the independent acceptance-tests framework.
+
+- Consolidate swarm access checks and their UI projection in one service; remove unused
+  Swarm Controller guard wrappers and lifecycle subinterfaces without changing behavior.
+
 - Allow initialized swarms to attempt STOP despite stale worker telemetry or pending
   bootstrap acknowledgements; STOP may supersede an awaiting START and requires fresh
   disabled evidence from every expected worker. Controller config updates no longer

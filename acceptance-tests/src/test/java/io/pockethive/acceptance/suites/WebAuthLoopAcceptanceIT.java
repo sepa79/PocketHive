@@ -48,7 +48,7 @@ class WebAuthLoopAcceptanceIT {
         assertEquals(sut, run.scenarios.readSutRaw(scenario.id(), run.target.fixture().sutId()));
         lists.get(5).reserveForProducer();
         lists.get(6).reserveForProducer();
-        var mock = run.tcpMock(target.mockUsername(), target.mockPassword());
+        var mock = run.tcpMock();
         var before = mock.requests(run.target.limits().request());
         run.evidence.record("tcp-before", before);
         assertFalse(StreamSupport.stream(before.spliterator(), false)

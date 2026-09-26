@@ -898,6 +898,38 @@ The Orchestrator first creates the immutable filesystem request under `<runtime-
 }
 ```
 
+### 3.3.1 Catalogue-only removal
+
+`DELETE /api/swarms/{swarmId}/catalogue-entry`
+
+This operation forgets a registered swarm whose compute resources were
+removed manually. It is not `REMOVE` and does not claim that queues, network
+bindings or runtime files have been deleted.
+
+- Requires the same canonical swarm-management permission as REMOVE.
+- Requires an existing catalogue entry and no active lifecycle operation.
+- Reads the canonical compute inventory successfully and rejects the request if
+  any resource belongs to this swarm, regardless of its runId or running state;
+  the registered Controller runtime ID also blocks removal when present.
+  STALE telemetry is not evidence of infrastructure absence.
+- Removes only the exact catalogue entry inspected for this request. A concurrent
+  replacement or newly admitted lifecycle operation rejects the operation;
+  inventory IO must not run under the catalogue monitor.
+- Returns `204 No Content` after successful catalogue removal, `404` for an absent
+  entry, `409` for remaining compute resources, active operation or changed entry,
+  and `503` when inventory absence cannot be established. Authorization errors
+  retain the existing API policy.
+- Records the forgotten swarm/run/controller identity in the existing journal using
+  the captured runId after deletion. Journal failure is logged and does not turn
+  the completed catalogue mutation into an HTTP failure.
+  It does not emit a successful `swarm-remove` outcome.
+- Runtime files and messaging resources remain intact in this slice. Their
+  cleanup, and coordination with externally started compute resources, remain
+  separate work. This is an operator action after manual infrastructure deletion,
+  not automatic pruning or a distributed lock against external infrastructure changes.
+
+Approved explicitly by the user on 2026-09-26 under AGENTS.md §3.
+
 ## 4. Components
 
 ### 4.1 Update config
@@ -1001,6 +1033,19 @@ no credentials and does not change the STOMP URL, broker authentication or event
 
 ### 5.2 Reset control-plane state (debug-only)
 `POST /api/control-plane/reset`
+
+Recovered entries expose `workloadIntent=UNKNOWN` until an accepted START/STOP command.
+This is missing command history, not a STOP request; diagnostics report INCOMPLETE
+without masking observed failures. UNKNOWN is never a requested START/STOP terminal state.
+
+RESET clears only the local swarm catalogue. Ordinary controller full statuses rebuild
+missing entries using verified runtime identity and the immutable startup artifact;
+unknown deltas request a full status. A controller-instance or runId conflict with an
+existing entry is an ERROR in the journal (including expected and received identities),
+and does not overwrite the entry or advance lifecycle operations. Missing discovery
+metadata is reported as an error rather than replaced with guessed defaults. RESET does
+not stop/delete runtimes or recover operations lost across an Orchestrator process restart.
+
 
 **Behavior**
 - Clears the orchestrator registry before issuing the same sync flow as refresh.

@@ -4,26 +4,27 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
 
 /**
- * Responsibility: read TCP mock mappings and request journal through the public ingress.
+ * Responsibility: read TCP mock mappings and request journal through the public ingress using the existing PocketHive Bearer session.
  * Must not: mutate mappings/journals, duplicate the mock DTO or fall back to direct ports.
  * Contract: RESP-ACCEPTANCE-API — docs/architecture/acceptance-tests.md#resp-acceptance-api.
  */
 public final class TcpMockApi {
   private final PocketHiveHttp http;
-  private final String username;
-  private final String password;
-  public TcpMockApi(PocketHiveHttp http, String username, String password) {
-    this.http = http; this.username = username; this.password = password;
+  private final String token;
+  public TcpMockApi(PocketHiveHttp http, String token) {
+    this.http = java.util.Objects.requireNonNull(http);
+    if (token == null || token.isBlank()) throw new IllegalArgumentException("PocketHive token is required");
+    this.token = token;
   }
   public JsonNode requests(java.time.Duration budget) throws IOException, InterruptedException {
-    var response = http.requestWithBasicAuth("GET", ApiSurface.TCP_MOCK.publicPath("/api/requests"),
-        null, username, password, budget);
+    var response = http.request("GET", ApiSurface.TCP_MOCK.publicPath("/api/requests"),
+        null, token, budget);
     var requests = http.tree(response.expect(200));
     if (!requests.isArray()) throw new AssertionError("TCP request journal must be an array");
     return requests;
   }
   public JsonNode requireMapping(String id) throws IOException, InterruptedException {
-    var response = http.getWithBasicAuth(ApiSurface.TCP_MOCK.publicPath("/api/mappings"), username, password);
+    var response = http.request("GET", ApiSurface.TCP_MOCK.publicPath("/api/mappings"), null, token);
     var mappings = http.tree(response.expect(200));
     if (!mappings.isArray()) throw new AssertionError("TCP mapping list must be an array");
     var matching = java.util.stream.StreamSupport.stream(mappings.spliterator(), false)

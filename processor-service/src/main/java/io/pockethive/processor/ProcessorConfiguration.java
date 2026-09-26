@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ProcessorConfiguration {
 
-    @Bean
+    @Bean(destroyMethod = "close")
     public ProcessorHttpClient processorHttpClient() {
         return new ApacheProcessorHttpClient();
     }

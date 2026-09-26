@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 public class SwarmAccessController {
-    private final SwarmAccessProjection projection;
-    public SwarmAccessController(SwarmAccessProjection projection) { this.projection = projection; }
+    private final SwarmAccessService access;
+    public SwarmAccessController(SwarmAccessService access) { this.access = access; }
     @GetMapping("/api/access/swarms")
     public ResponseEntity<SwarmAccessResponse> get() {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-            .body(projection.project(OrchestratorCurrentUserHolder.get()));
+            .body(access.project(OrchestratorCurrentUserHolder.get()));
     }
 }
