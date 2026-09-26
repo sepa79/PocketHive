@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Allow initialized swarms to attempt STOP despite stale worker telemetry or pending
+  bootstrap acknowledgements; STOP may supersede an awaiting START and requires fresh
+  disabled evidence from every expected worker. Controller config updates no longer
+  require fresh heartbeats; their other admission checks remain in force. The UI keeps
+  Stop available while an accepted START is awaiting completion.
+
+- Swarm Controller: derive worker-list freshness and enablement from the readiness
+  owner, removing duplicate heartbeat timestamps and stale thresholds while preserving
+  command gates, timing and full-status convergence evidence.
+
 - Worker auth: separate profile discovery/preparation, credential application and ordinary
   OAuth token acquisition; reuse the canonical Scenario Bundle layout after integration.
 - MCP: keep caller/client interaction behind application ports and knowledge projection

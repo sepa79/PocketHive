@@ -268,12 +268,17 @@ public final class SwarmRuntimeCore implements SwarmLifecycleCore {
   @Override
   public List<Target> nonConvergedWorkersAfter(
       long observationRevision, boolean expectedEnabled) {
-    return readinessTracker.nonConvergedWorkersAfter(observationRevision, expectedEnabled);
+    return readinessTracker.nonConvergedWorkersAfter(observationRevision, expectedEnabled, expectedWorkers());
   }
 
   @Override
   public void updateEnabled(String role, String instance, boolean flag) {
     readinessTracker.recordEnabled(role, instance, flag);
+  }
+
+  @Override
+  public Map<Target, io.pockethive.swarmcontroller.WorkerObservation> workerObservations() {
+    return readinessTracker.workerObservations();
   }
 
   @Override
@@ -339,10 +344,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycleCore {
   @Override
   public synchronized Optional<String> handleConfigUpdateError(String role, String instance, String error) {
     Optional<String> message = configFanout.handleConfigUpdateError(instance, error);
-    message.ifPresent(msg -> {
-      log.warn(msg);
-      workloadState = WorkloadState.UNKNOWN;
-    });
+    message.ifPresent(log::warn);
+    // The command owner decides whether config failure affects the current lifecycle operation.
     return message;
   }
 

@@ -759,8 +759,10 @@ There is no automatic retry. Scheduled expiry retains its existing best-effort c
 
 ### Lifecycle operation conflicts
 
-Only one non-terminal lifecycle operation may exist for a swarm. A `create`, `start`, `stop`, or
-`remove` request that conflicts with a different active lifecycle operation returns `409 Conflict`.
+Lifecycle operations are exclusive, except that STOP may follow an awaiting START
+for the same controller and run. The Controller settles the superseded START as FAILED.
+Other overlapping `create`, `start`, `stop`, or `remove` requests return `409 Conflict`,
+including a second distinct STOP while STOP is pending.
 The response body is the canonical active `SwarmOperation`, allowing the caller to follow its
 `correlationId` instead of retrying or replacing it implicitly.
 
@@ -858,7 +860,11 @@ When the Controller is ready and the workload is already `RUNNING`, a new `START
 
 Completion requires fresh post-dispatch status from every expected worker with `enabled=false`. Dispatch acceptance is not completion.
 
-When the Controller is ready and the workload is already `STOPPED`, a new `STOP` request succeeds as an idempotent no-op. It creates its own operation for a new `idempotencyKey`, but does not broadcast disablement again. The lifecycle-operation conflict rule still applies while another lifecycle operation is non-terminal.
+A new STOP request broadcasts disablement and requires fresh disabled evidence from
+all expected runtime workers, even when cached workload intent is already STOPPED.
+An exact retry with the same idempotency key reuses the original operation.
+STOP requires Controller initialization, but does not require fresh heartbeats or
+completed bootstrap acknowledgements. See [Control during missing worker telemetry](#control-during-missing-worker-telemetry).
 
 **Response (202)**
 ```json
@@ -1051,3 +1057,20 @@ returns a caller-specific, read-only projection of existing swarm authorization:
 Approved F07 addition. It removes per-swarm UI permission
 inference; global navigation, scenario/bundle/folder and auth-admin projections
 remain subsequent scopes and must not be claimed completed by this endpoint.
+
+
+### Control during missing worker telemetry
+
+STOP remains admissible after Controller initialization even if some worker heartbeats
+are stale or bootstrap configuration acknowledgements are pending. STOP is an attempt:
+it succeeds only with new disabled status evidence from all expected workers; missing
+workers produce a bounded failure with non-converged targets. Repeating STOP with a
+new request identity resends disable, including when cached workload intent is STOPPED.
+
+A STOP targeting the same controller/run may be accepted while START awaits convergence.
+The Controller reports that START as FAILED (superseded by STOP). STOP has its own
+correlation and convergence evidence. Other overlapping lifecycle operations remain
+conflicts, including a second distinct STOP. In-flight config operations keep their
+own outcome; STOP does not fabricate configuration success or cancel bootstrap state.
+Controller config updates no longer require fresh heartbeat telemetry, but retain
+initialization, pending-bootstrap and workload-state restrictions. START remains strict.

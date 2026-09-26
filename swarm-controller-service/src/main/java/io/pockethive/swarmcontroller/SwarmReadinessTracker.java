@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.swarm.model.lifecycle.Target;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -15,7 +17,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: Own swarm readiness, worker heartbeat, enablement, and status observation ordering.
  * Must not: Decode messages, publish lifecycle outcomes, or infer observation order from wall-clock timestamps.
- * Contract: Each accepted status-full advances one monotonic revision used by convergence checks.
+ * Contract: RESP-SWARM-OBSERVATION — docs/architecture/runtime-responsibilities.md#resp-swarm-observation.
  */
 public final class SwarmReadinessTracker {
 
@@ -24,16 +26,22 @@ public final class SwarmReadinessTracker {
   private static final long STATUS_TTL_MS = 15_000L;
 
   private final WorkerStatusRequestCallback statusRequestCallback;
+  private final Clock clock;
 
   private final Map<String, Integer> expectedReady = new HashMap<>();
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
-  private final ConcurrentMap<String, Long> lastSeen = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Target, Long> lastSeen = new ConcurrentHashMap<>();
   private final AtomicLong statusObservationRevision = new AtomicLong();
-  private final ConcurrentMap<String, WorkerSnapshotObservation> lastSnapshot = new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, Boolean> enabled = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Target, WorkerSnapshotObservation> lastSnapshot = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Target, Boolean> enabled = new ConcurrentHashMap<>();
 
   public SwarmReadinessTracker(WorkerStatusRequestCallback statusRequestCallback) {
+    this(statusRequestCallback, Clock.systemUTC());
+  }
+
+  SwarmReadinessTracker(WorkerStatusRequestCallback statusRequestCallback, Clock clock) {
     this.statusRequestCallback = Objects.requireNonNull(statusRequestCallback, "statusRequestCallback");
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   public synchronized void reset() {
@@ -51,14 +59,14 @@ public final class SwarmReadinessTracker {
     expectedReady.merge(role, 1, Integer::sum);
   }
 
-  public void recordHeartbeat(String role, String instance, long timestamp) {
+  public synchronized void recordHeartbeat(String role, String instance, long timestamp) {
     if (!hasText(role) || !hasText(instance)) {
       return;
     }
     lastSeen.put(key(role, instance), timestamp);
   }
 
-  public void recordStatusSnapshot(String role, String instance, boolean enabledFlag) {
+  public synchronized void recordStatusSnapshot(String role, String instance, boolean enabledFlag) {
     if (!hasText(role) || !hasText(instance)) {
       return;
     }
@@ -71,7 +79,7 @@ public final class SwarmReadinessTracker {
     return statusObservationRevision.get();
   }
 
-  public void recordEnabled(String role, String instance, boolean flag) {
+  public synchronized void recordEnabled(String role, String instance, boolean flag) {
     if (!hasText(role) || !hasText(instance)) {
       return;
     }
@@ -106,7 +114,7 @@ public final class SwarmReadinessTracker {
     for (Map.Entry<String, List<String>> entry : snapshot.entrySet()) {
       String role = entry.getKey();
       for (String instance : entry.getValue()) {
-        String key = key(role, instance);
+        Target key = key(role, instance);
         WorkerSnapshotObservation observation = lastSnapshot.get(key);
         if (observation == null || observation.revision() <= observationRevision) {
           return false;
@@ -117,60 +125,58 @@ public final class SwarmReadinessTracker {
   }
 
   /** Returns every expected worker lacking post-dispatch evidence for the requested enablement. */
-  public List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersAfter(
-      long observationRevision, boolean expectedEnabled) {
-    Map<String, List<String>> snapshot = instancesSnapshot();
-    List<io.pockethive.swarm.model.lifecycle.Target> result = new ArrayList<>();
-    snapshot.forEach((role, instances) -> instances.forEach(instance -> {
-      String workerKey = key(role, instance);
+  public List<Target> nonConvergedWorkersAfter(
+      long observationRevision, boolean expectedEnabled, List<Target> expectedWorkers) {
+    List<Target> result = new ArrayList<>();
+    expectedWorkers.forEach(workerKey -> {
       WorkerSnapshotObservation observation = lastSnapshot.get(workerKey);
       if (observation == null || observation.revision() <= observationRevision
           || observation.enabled() != expectedEnabled) {
-        result.add(new io.pockethive.swarm.model.lifecycle.Target(role, instance));
+        result.add(workerKey);
       }
-    }));
-    result.sort(java.util.Comparator.comparing(io.pockethive.swarm.model.lifecycle.Target::role)
-        .thenComparing(io.pockethive.swarm.model.lifecycle.Target::instance));
+    });
+    result.sort(java.util.Comparator.comparing(Target::role)
+        .thenComparing(Target::instance));
     return List.copyOf(result);
   }
 
-  public SwarmMetrics metrics() {
-    int desired;
-    Map<String, Integer> expectedSnapshot;
-    synchronized (this) {
-      desired = expectedReady.values().stream().mapToInt(Integer::intValue).sum();
-      expectedSnapshot = new HashMap<>(expectedReady);
-    }
-    long now = System.currentTimeMillis();
+  public synchronized Map<Target, WorkerObservation> workerObservations() {
+    long now = clock.millis();
+    Map<Target, WorkerObservation> observations = new HashMap<>();
+    lastSeen.forEach((target, timestamp) -> observations.put(target,
+        new WorkerObservation(Instant.ofEpochMilli(timestamp),
+            enabled.getOrDefault(target, false), isStale(timestamp, now))));
+    return Map.copyOf(observations);
+  }
+
+  public synchronized SwarmMetrics metrics() {
+    int desired = expectedReady.values().stream().mapToInt(Integer::intValue).sum();
+    var observations = workerObservations().values();
     int healthy = 0;
     int running = 0;
     int enabledCount = 0;
-    long watermark = Long.MAX_VALUE;
-    for (Map.Entry<String, Long> e : lastSeen.entrySet()) {
-      long ts = e.getValue();
-      if (ts < watermark) {
-        watermark = ts;
+    Instant watermark = Instant.ofEpochMilli(clock.millis());
+    boolean first = true;
+    for (WorkerObservation observation : observations) {
+      if (first || observation.lastSeenAt().isBefore(watermark)) {
+        watermark = observation.lastSeenAt();
+        first = false;
       }
-      boolean isHealthy = now - ts <= STATUS_TTL_MS;
-      if (isHealthy) {
-        healthy++;
-      }
-      boolean en = enabled.getOrDefault(e.getKey(), false);
-      if (en) {
+      if (!observation.stale()) healthy++;
+      if (observation.enabled()) {
         enabledCount++;
-        if (isHealthy) {
-          running++;
-        }
+        if (!observation.stale()) running++;
       }
     }
-    if (watermark == Long.MAX_VALUE) {
-      watermark = now;
-    }
-    return new SwarmMetrics(desired, healthy, running, enabledCount, Instant.ofEpochMilli(watermark));
+    return new SwarmMetrics(desired, healthy, running, enabledCount, watermark);
+  }
+
+  private static boolean isStale(long timestamp, long now) {
+    return now - timestamp > STATUS_TTL_MS;
   }
 
   private synchronized boolean isFullyReady() {
-    long now = System.currentTimeMillis();
+    long now = clock.millis();
     for (Map.Entry<String, Integer> e : expectedReady.entrySet()) {
       String role = e.getKey();
       List<String> ready = instancesByRole.getOrDefault(role, List.of());
@@ -185,7 +191,7 @@ public final class SwarmReadinessTracker {
           return false;
         }
         long age = now - ts;
-        if (age > STATUS_TTL_MS) {
+        if (isStale(ts, now)) {
           log.info(
               "Requesting status for {}.{} because heartbeat is stale (age={}ms, ttl={}ms)",
               role,
@@ -210,8 +216,8 @@ public final class SwarmReadinessTracker {
     return value != null && !value.isBlank();
   }
 
-  private static String key(String role, String instance) {
-    return role + "." + instance;
+  private static Target key(String role, String instance) {
+    return new Target(role, instance);
   }
 
   private record WorkerSnapshotObservation(long revision, boolean enabled) {

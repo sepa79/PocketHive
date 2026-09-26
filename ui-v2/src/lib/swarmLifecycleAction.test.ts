@@ -11,6 +11,15 @@ import {
 const ACCEPTED_AT = Date.parse('2026-07-13T12:00:00Z')
 
 describe('swarm lifecycle action feedback', () => {
+  it('ignores a superseded START outcome while STOP is pending', () => {
+    const feedback = { ...pending('stop'), correlationId: 'stop-correlation' }
+    const lateStart = entry(envelope('outcome', 'swarm-start', { status: 'Failed' }))
+    expect(resolveSwarmLifecycleFeedback(feedback, [lateStart], ACCEPTED_AT + 1000)).toBe(feedback)
+    expect(() => resolveSwarmLifecycleOperationFeedback(feedback, {
+      correlationId: 'corr-1', state: 'FAILED',
+    })).toThrow('correlationId')
+  })
+
   it('completes from the authoritative operation resource', () => {
     const feedback = pending('start')
     const resolved = resolveSwarmLifecycleOperationFeedback(feedback, {

@@ -12,7 +12,8 @@ import java.util.Optional;
 /**
  * Responsibility: Define the required command, observation, and configuration capabilities of the Controller core.
  * Must not: Provide fallback behavior or expose transport-specific operations.
- * Contract: Every implementation supplies one authoritative lifecycle and worker-observation state owner.
+ * Contract: RESP-SWARM-OBSERVATION — docs/architecture/runtime-responsibilities.md#resp-swarm-observation;
+ * lifecycle implementations retain their existing command contracts.
  */
 public interface SwarmLifecycleCore {
 
@@ -43,6 +44,8 @@ public interface SwarmLifecycleCore {
   void updateEnabled(String role, String instance, boolean enabled);
 
   SwarmMetrics getMetrics();
+
+  Map<Target, WorkerObservation> workerObservations();
 
   List<Target> expectedWorkers();
 

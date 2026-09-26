@@ -242,6 +242,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public Map<io.pockethive.swarm.model.lifecycle.Target, WorkerObservation> workerObservations() {
+    return core.workerObservations();
+  }
+
+  @Override
   public SwarmMetrics getMetrics() {
     return core.getMetrics();
   }

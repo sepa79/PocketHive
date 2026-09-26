@@ -17,10 +17,14 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Journal actionable transitions in the controller's derived swarm health state.
  * Must not: Publish status envelopes, mutate lifecycle state, or decide lifecycle command outcomes.
- * Contract: Preserve startup suppression and emit at most one entry for each degraded/recovered edge.
+ * Contract: RESP-SWARM-OBSERVATION — docs/architecture/runtime-responsibilities.md#resp-swarm-observation;
+ * preserve startup suppression and emit at most one entry for each degraded/recovered edge.
  */
 @Component
 public class SwarmHealthJournal {
+
+  // Journal startup grace is independent of worker heartbeat freshness.
+  private static final java.time.Duration STARTUP_HEALTH_SUPPRESSION = java.time.Duration.ofSeconds(15);
 
   private static final String DEGRADED_STATE = "Degraded";
   private static final String UNKNOWN_STATE = "Unknown";
@@ -105,7 +109,7 @@ public class SwarmHealthJournal {
 
   private void suppressStartupTransitions() {
     suppressUntil = clock.instant()
-        .plusMillis(SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS);
+        .plus(STARTUP_HEALTH_SUPPRESSION);
     lastHealthState = null;
   }
 

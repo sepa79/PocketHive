@@ -37,7 +37,8 @@ restart fix are implemented, tested and accepted in separate review.
 
 Tim’s F06/F07-TCP/F09-MCP delivery (`ed9ceacf`) is now integrated into
 `codex/f07-ph-ui`. The current table includes our subsequent PH UI and Scenario
-Manager repairs. F08, lifecycle correctness and promotion of TCP runtime mappings
+Manager repairs. F08 observation/freshness ownership and the separately approved degraded-control
+behavior are implemented and reviewed (2026-09-26; verification below). Remaining lifecycle correctness and promotion of TCP runtime mappings
 into PocketHive scenarios remain separate follow-ups. Historical
 baseline analysis and intermediate verification remain below and in Git history.
 
@@ -45,7 +46,9 @@ baseline analysis and intermediate verification remain below and in Git history.
 
 This is the current backlog on `codex/f07-ph-ui`, based on PR #520 and integrated
 with Tim’s release branch. Completed slice sections
-below retain implementation evidence; their older test counts are not current gates.
+below retain implementation evidence; their older test counts and intermediate
+"remaining" statements are historical, not current gates. This table and the latest
+closeout below define the remaining scope.
 
 | ID / area | Current status and next action |
 | --- | --- |
@@ -54,8 +57,8 @@ below retain implementation evidence; their older test counts are not current ga
 | F07 — completed contracts | Scenario Manager producer contracts closed; do not repeat this extraction. Remaining work is split into F07-TCP and F07-UI below. |
 | F07-TCP — Tim | Implemented and integrated: server-owned workspace policy, durable catalogue, confirmed UI mutations and explicit NATIVE/POCKETHIVE administration. Workspace selection does not isolate mappings or traffic. Tim’s acceptance evidence is linked below; it is not a deployment check of this integrated tree. |
 | F07-UI — Zbigniew | Implemented: main PH UI uses backend access projections and explicit network modes; approved endpoints and UI consumers are complete. Browser/deployed acceptance remains unperformed. Broader model sharing requires evidence. Excludes TCP mock UI. |
-| F08 | Open: establish observation/freshness ownership and distinguish readiness, health and stale semantics before changing writers or thresholds. |
-| F09 | Processor/TCP extraction closed. MCP caller/client-interaction and knowledge projection boundaries integrated from Tim. SM bundle/access/authoring APIs, shared layout and S1–S3/S9–S10 repairs implemented; final integrated review remains before PR. |
+| F08 | Implemented and reviewed, including the journal-failure correction. SwarmReadinessTracker owns heartbeat time, observed enablement and freshness; metrics and worker-list projections consume it. Separately approved degraded-control behavior and its UI fix are also reviewed; verification below. |
+| F09 | Processor/TCP extraction closed. MCP caller/client-interaction and knowledge projection boundaries integrated from Tim. SM bundle/access/authoring APIs, shared layout and S1–S3/S9–S10 repairs implemented; integrated review findings are disposed below: TCP permission duplication fixed; large-file fingerprint memory explicitly accepted as a limitation. No outstanding implementation finding in this slice. |
 | Separate correctness | Orchestrator reset/registry/recovery and orphan-removal outcomes follow `orchestrator-correctness.md`. Processor transport replacement/failure/shutdown lifecycle is also deferred; extraction did not repair it. |
 | Separate TCP debt/features | Mock scenario-state reset/persistence/null semantics, public nested DTOs and promotion of runtime mappings into PH scenarios are outside the closed TCP slice. Workspace UI work belongs to F07-TCP (Tim). |
 
@@ -135,10 +138,10 @@ MCP/auth inventories or test counts as current evidence.
 
 ## Delivery order and stable task IDs
 
-Keep F identifiers for existing references. F01–F05 and selected F07/F09 slices
-are completed. The proposed next sequence is F06, remaining Scenario Manager F09,
-remaining F07 projections and MCP F09. F08 and separate correctness work need
-behavior decisions first. This sequence does not authorize changes in deferred scope.
+Keep F identifiers for existing references. The selected F01–F09 slices are now
+implemented; do not restart the historical delivery sequence below. The latest
+review and verification closeout governs the current delivery gate. Deferred reset,
+recovery, transport lifecycle and TCP features remain separate work.
 
 ### F01 — Redis, one PR closing the shared technology responsibility
 
@@ -573,11 +576,50 @@ changing them. Do not equate thresholds or merge state machines by convenience.
 its historical O1/O2 review status must be checked against current code/evidence
 before selecting further fixes. This refresh does not accept or reopen that work.
 
-Startup audit follow-up for F08: worker status observations write timestamps in both
-SwarmReadinessTracker and SwarmWorkersAggregator, then independently calculate health
-and stale with separate 15s thresholds. Establish one observation/freshness owner
-and derived metrics/worker-list projections in the dedicated state refactor; do not
-change lifecycle timing during F03.
+F08 implementation (2026-09-25, after `7f9a0271`): `SwarmReadinessTracker`
+owns heartbeat time, observed enablement and the single freshness rule. Its immutable
+`WorkerObservation` projection passes through the existing lifecycle API to the
+worker-list aggregator. The aggregator retains only reported presentation data;
+its second timestamp, enabled copy and freshness threshold are removed. Readiness,
+healthy/running metrics and worker-list stale use the same owner's freshness rule.
+The handler serializes worker-list reads against applying accepted status events.
+A reset observation owner no longer exposes orphaned presentation entries.
+
+The contract is [RESP-SWARM-OBSERVATION](../architecture/runtime-responsibilities.md#resp-swarm-observation).
+Ready still means the expected ready instances have fresh heartbeats; healthy
+means fresh heartbeat; running metrics mean healthy plus enabled. Full-status
+revisions remain the separate evidence required for post-command convergence.
+The journal's 15-second startup warning grace is separately named, not treated as
+heartbeat freshness. Controller wire Health and journal degraded/recovered labels
+retain their current, distinct projection semantics; they consume canonical counts.
+This extraction alone did not change START/STOP/config acceptance, timeout policy,
+reset/recovery or envelopes. The separately approved command-admission change below
+supersedes the earlier admission behavior.
+
+Verification: Controller suite discovered 226 tests, 224 passed and two existing
+`@RabbitAvailable` integration cases skipped because Rabbit was unavailable;
+`/tmp/ph-f08-controller.log`. One additional handler flow test then passed with the
+three existing handler tests (`/tmp/ph-f08-handler.log`): 225 distinct tests executed.
+Coverage includes exact 15-second boundary, expiry/recovery, missing heartbeat,
+reset projection, enabled delta versus full-status command evidence, and actual
+handler full/delta flow retaining config. `git diff --check` passes. No deployment
+or load test was performed in that run; the subsequent review and correction are recorded below.
+
+Plan/style/conciseness/security/library/readability implementation checks: reuse
+one existing owner and lifecycle port, one immutable projection type, no dependencies,
+no security/wire changes. Repository searches for heartbeat timestamps, stale TTLs,
+worker aggregators and their callers confirm the worker-list copy is removed.
+Orchestrator controller-status receive time observes a different hop and stays separate.
+Its reset/recovery track and Processor transport lifetime repairs remain deferred.
+
+F08 review correction (2026-09-26): commit the reported enabled/full-status
+observation before appending the worker-error journal entry. Journal failure still
+propagates, but can no longer expose a fresh heartbeat with the previous enabled
+value. Four regression cases cover full/delta and both enablement transitions;
+full-status revision semantics are preserved. Focused owner, projection, handler,
+listener, error-journal and lifecycle-command tests: 46 passed, none skipped
+(`/tmp/ph-f08-journal-fix-tests.log`). Full deployment was not repeated.
+
 
 ## Required completion evidence for every PR
 
@@ -803,7 +845,7 @@ tests (including three import-boundary tests) and 14 focused UI tests successful
 Logs: /tmp/ph-scenario-review-java.log and /tmp/ph-scenario-review-ui.log.
 Known S9 duplicate-scenario-ID catalogue behavior remains deferred.
 
-### F07-UI — remaining navigation and toolbar decisions (implemented, awaiting review)
+### F07-UI — navigation and toolbar decisions (implemented; review fixes completed)
 
 Base 60467c4a. User authorized continuing this slice. Source audit confirmed:
 Auth /me exposes identity/grants but no decisions; UI repeats PH-any VIEW/RUN/ALL,
@@ -926,7 +968,7 @@ Manager tests plus 3 import-boundary tests; log /tmp/ph-bundle-access-review.log
 Checked endpoint-to-owner call paths, former-owner removal, preserved locks/error
 mapping and canonical permission decisions. No deployed/browser E2E claimed.
 
-### F09-SM — S7 layout and S5 authoring metadata (implemented; awaiting review)
+### F09-SM — S7 layout and S5 authoring metadata (implemented; reviewed in integrated delivery)
 
 Base 33626518. User authorized S7 followed by S5. Reuse ScenarioBundleLayout for
 resolved bundle directories and the default worker mount; wire existing callers
@@ -983,7 +1025,7 @@ Verification: 148 tests passed (145 Scenario Manager tests plus 3 repository imp
 boundary tests), zero failures/errors/skips. Log: /tmp/ph-s9-s10-tests.log. No deployed
 E2E or UI rerun. git diff --check passed. No commit created.
 
-### F09-SM — S1/S2/S3 (implemented; awaiting review)
+### F09-SM — S1/S2/S3 (implemented; review corrections completed)
 
 Implement CREATE target collision rejection without replacement; validate-existing
 reads current files; reload derives defunct from complete canonical validation.
@@ -1015,7 +1057,8 @@ IO suppression was introduced. Regression RED: three encoding cases errored befo
 the fix (/tmp/ph-encoding-red.log). GREEN: 246 selected reactor tests passed with
 zero failures/errors/skips (/tmp/ph-encoding-tests.log). Tests exercise validation,
 reload, new ScenarioService initialization and preservation of existing runtime
-contents when materialization rejects the broken bundle. Review pending; no commit.
+contents when materialization rejects the broken bundle. Subsequently reviewed in the
+integrated delivery and committed in `7f9a0271`.
 
 
 ### Integrated verification — 2026-09-25
@@ -1062,3 +1105,70 @@ focused completions resolve them without rerunning already-passing suites.
   Five AdministrationAuthenticationTest/WorkspaceControllerTest cases pass, with no
   failures/errors/skips. Repository search finds these combinations only in the
   shared owner; git diff --check passes. The large-file limitation above stays deferred.
+
+
+### Approved degraded-control behavior (2026-09-26)
+
+Implemented after F08 review. Separate review found the UI STOP availability gap;
+the correction passed follow-up review on 2026-09-26. The user separately approved the
+behavior change discussed in [command admission](../architecture/runtime-responsibilities.md#resp-swarm-command-admission).
+STOP ignores stale telemetry and pending bootstrap acknowledgements after initialization;
+new STOP requests resend disable and require new evidence even with STOPPED cached intent.
+STOP supersedes pending START through both Orchestrator reservation and Controller handling.
+START is settled as FAILED; STOP has its own identity and disabled-evidence check.
+Missing/never-ready expected runtime workers remain in the non-converged list.
+Controller config admission drops only the heartbeat-readiness requirement, retaining
+initialization, pending-bootstrap and workload-state rules. Worker-targeted speed changes
+already use the separate worker config path. In-flight config operations retain their
+own results/timeouts. A config error cannot cancel pending STOP; lifecycle failure is
+now decided by the command owner instead of also being written during config-error parsing.
+
+Validation: 275 Orchestrator tests and 232 Controller tests passed, two existing
+RabbitAvailable Controller integration tests skipped (509 discovered).
+`/tmp/ph-control-full-tests.log`; no deployment/load qualification performed.
+Tests cover ordered concurrent lifecycle dispatch, exact request replay, START supersession,
+late START result rejection after termination, stale/pending-bootstrap STOP, missing worker
+timeout, preserved strict START and config state gates. `git diff --check` passes.
+
+Scope/ownership checks: existing operation/readiness owners and lifecycle service reused;
+no new dependency, wire field, terminal enum or endpoint. Canonical REST/architecture
+no-op and lifecycle-conflict rules updated to the approved behavior. Reset/recovery,
+transport lifecycle and cross-restart operation persistence remain separate work.
+
+
+### Final F08 / degraded-control review — 2026-09-26
+
+No outstanding finding after review of the UI correction. `SwarmLifecycleButtons`
+is the sole owner of the extracted lifecycle button presentation; HivePage supplies
+backend access projections and existing operation feedback. Pending START permits
+Stop after HTTP acceptance, while pending STOP and HTTP dispatch block repeat actions.
+Existing permission checks remain. Outcome correlation and the polling callback's
+current-correlation check keep superseded START responses from overwriting STOP.
+
+Review passes: requested behavior is available through the UI; the component has a
+bounded rendering responsibility and a contract header; extraction replaces the old
+inline controls; no new authorization policy, network surface or library; existing
+feedback and backend operation owners are reused. F08 observation and command-admission
+owners were traced in the preceding review; no new duplicate owner was found.
+
+Deployment/browser/load qualification is not implied by component tests or builds.
+No deployment was performed for this closeout. Reset/recovery, orphan cleanup and
+Processor transport replacement/shutdown remain deferred, as does the accepted
+large-file fingerprint memory limitation.
+
+Final verification of this integrated worktree (2026-09-26): full affected reactor
+`AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl ./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am test`
+passed: 1,954 discovered, 1,948 passed, zero failures/errors, six skipped. This includes
+Scenario Manager and reactor dependencies, Worker SDK, import boundaries and real
+Testcontainers-backed Orchestrator tests. Four Redis-fixture cases were skipped
+(RedisListIntegrationTest, RedisSequenceConfigurationTest, OAuth2HttpSignatureRedisTest,
+OAuth2SecondPassWireTest), plus the two existing RabbitAvailable Controller cases.
+Log: `/tmp/ph-f08-final-reactor.log`. No claim that skipped cases were executed.
+
+All 106 PH UI tests passed. Normal and VS Code plugin production builds passed;
+ESLint passed for the new lifecycle component, its tests and the feedback regression.
+The build reports the existing large-bundle warning. `git diff --check` is clean.
+This completes source/component/build verification for the current patch; it does
+not replace deployment/browser/load acceptance. Prior integrated MCP/TCP/Processor
+verification remains the dated evidence above; these services were not changed by
+this F08/control/UI patch and were not rerun here.

@@ -4041,3 +4041,73 @@ destinations to 409. User authorized these behavior corrections together.
 S3 review correction: malformed UTF-8 in bundle text is a canonical validation ERROR
 (BUNDLE_INVALID), with the relative file path in its message. It must not abort global
 catalogue reload/startup; genuine infrastructure IO failures are not reclassified.
+
+## RESP-SWARM-OBSERVATION
+
+**Module:** `swarm-controller-service`.
+
+F08 centralizes worker freshness and observed enablement to the existing
+`SwarmReadinessTracker`. It owns heartbeat receipt time, the 15-second freshness
+rule, enabled observations and full-status revisions. `WorkerObservation` is an
+immutable read projection exposed through `SwarmLifecycleCore`; runtime core and
+lifecycle manager only delegate. `SwarmWorkersAggregator` retains reported
+presentation data (TPS, IO, runtime and configuration), but obtains enablement,
+last-seen time and stale state from that projection, never a second clock or TTL.
+Workers absent from the owner's observation snapshot are absent from the list.
+The status handler records observed enablement/full-status evidence before error
+journal IO; a journal failure propagates without leaving stale enablement paired
+with a new heartbeat in the worker projection.
+
+Readiness still requires the expected ready instances and fresh heartbeats.
+Healthy means a fresh heartbeat; running metrics mean healthy and enabled, not
+proof of completed work. Full-status revisions independently prove post-command
+observation of the requested enablement. This extraction preserves 15-second timing,
+reset/recovery policy and status wire fields. START/STOP/config command admission is
+owned separately by RESP-SWARM-COMMAND-ADMISSION below.
+The health journal owns a distinct 15-second startup warning-suppression interval;
+this is not heartbeat freshness and must not be coupled to its threshold.
+Controller wire Health and journal transition labels remain distinct projections
+of canonical counts with their existing semantics. Orchestrator controller-status
+receipt time observes a different hop; it is not a duplicate worker heartbeat owner.
+No new service, dependency, public endpoint or wire contract is introduced.
+
+**Forbidden:** calculate freshness or maintain observed enablement in projections;
+infer command completion from a heartbeat alone.
+
+**Verification:** `SwarmReadinessTrackerTest`, `SwarmWorkersAggregatorTest`,
+`SwarmWorkerStatusHandlerTest`, lifecycle and Controller component tests.
+
+
+## RESP-SWARM-COMMAND-ADMISSION
+
+User-approved behavior change, 2026-09-26. START requires initialization, readiness
+and no pending bootstrap acknowledgements. STOP requires initialization only; stale
+heartbeats and bootstrap acknowledgements do not prevent attempted shutdown. STOP
+always sends disable and requires new disabled observations of every expected runtime
+worker, including workers that never became ready. Cached STOPPED intent is not proof.
+
+STOP can supersede an awaiting START for the same controller/run. The Controller
+settles the old START as FAILED and waits separately for STOP evidence; enabled
+observations cannot complete STOP. A second pending STOP or another START remains
+conflicting. Orchestrator reservation admits only this START-to-STOP exception;
+its lifecycle dispatch service serializes reservation and publication so concurrent
+REST calls cannot publish STOP ahead of its already reserved START.
+
+Controller config admission ignores heartbeat freshness, but retains initialization,
+no pending bootstrap acknowledgements and existing RUNNING/network-only restrictions.
+Worker-targeted config uses its existing direct worker path. An in-flight config
+operation retains its own result/timeout; STOP neither cancels nor declares it successful.
+Bootstrap config errors must not terminate a pending STOP. Bootstrap acknowledgements
+remain pending until actually observed; STOP does not pretend configuration was applied.
+
+Owners: `SwarmCommandReadinessSnapshot` admission predicates,
+`SwarmLifecycleCommandHandler` Controller pending lifecycle command,
+`SwarmOperationCoordinator` Orchestrator operation identities/reservations,
+`SwarmLifecycleCommandService` ordered lifecycle publication. Runtime core supplies
+expected worker identities; the readiness owner evaluates their post-command evidence.
+No new terminal enum, endpoint, routing key, retry or envelope is introduced.
+
+UI consumer: `SwarmLifecycleButtons` renders lifecycle controls using backend access
+projections and current request/operation feedback. Pending START leaves Stop available
+after HTTP acceptance; pending STOP and an in-flight HTTP request block repeat actions.
+UI availability does not decide backend admission or operation outcomes.

@@ -27,7 +27,11 @@ import java.util.LinkedHashMap;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
-/** Canonical START/STOP/REMOVE command path shared by REST and governed cleanup. */
+/**
+ * Responsibility: Reserve and publish ordered START/STOP/REMOVE operations for registered swarms.
+ * Must not: Decide worker convergence, terminal outcomes or runtime registration.
+ * Contract: RESP-SWARM-COMMAND-ADMISSION — docs/architecture/runtime-responsibilities.md#resp-swarm-command-admission.
+ */
 @Component
 public final class SwarmLifecycleCommandService {
 
@@ -53,7 +57,7 @@ public final class SwarmLifecycleCommandService {
     this.originInstanceId = requireText("control-plane instanceId", properties.getInstanceId());
   }
 
-  public SwarmOperationCoordinator.Reservation dispatch(
+  public synchronized SwarmOperationCoordinator.Reservation dispatch(
       OperationType operationType,
       String swarmId,
       String idempotencyKey,

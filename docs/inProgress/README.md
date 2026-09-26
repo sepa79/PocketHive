@@ -40,9 +40,11 @@ The serial CONTROL admission model remains documented in
 - [Functional module boundaries](functional-module-boundaries.md) — F01 Redis and
   F03 Docker and F04 journal/filesystem are implemented and reviewed.
   F05 ClickHouse is implemented, verified (full affected reactor and local Artemis
-  DA-3) and reviewed. F08 freshness/lifecycle needs a
-  separate behavior decision. Existing Work API, history-policy fixes and exporter
-  paths are not reopened; remaining auth/MCP/service leads require revalidation.
+  DA-3) and reviewed. F06 auth and F09 MCP from Tim are integrated; selected F07 UI
+  and F09 Scenario Manager repairs are implemented. F08 observation/freshness ownership
+  and the separately approved degraded-control behavior passed review, including the
+  UI STOP correction. Final verification is recorded in the plan; deployment/browser
+  acceptance is not claimed. Reset/recovery and transport lifecycle remain deferred.
 - [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) — historical
   Rabbit-only closure evidence, before the completed Artemis extension; technology transfer exists;
   R1–R6 close selected Work configuration/topology/resources/transport/observations/cleanup across

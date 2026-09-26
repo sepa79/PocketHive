@@ -946,7 +946,7 @@ class SwarmLifecycleManagerTest {
     assertThat(manager.getWorkloadState()).isEqualTo(WorkloadState.UNKNOWN);
     assertThat(manager.snapshotQueueStats()).containsOnlyKeys(bound.getFirst());
     var readiness = new SwarmCommandReadiness(manager, initializer::isInitialized);
-    assertThat(readiness.snapshot().accepts(false)).isFalse();
+    assertThat(readiness.snapshot().acceptsStart()).isFalse();
     verify(amqp, never()).deleteQueue(anyString());
     var store = new io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore(mapper,
         io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout.of(runtimeRoot.toString(), "/runtime"));

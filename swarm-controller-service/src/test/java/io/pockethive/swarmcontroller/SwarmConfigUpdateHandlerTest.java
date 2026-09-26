@@ -76,6 +76,15 @@ class SwarmConfigUpdateHandlerTest {
   }
 
   @Test
+  void staleHeartbeatDoesNotRejectOtherwiseAdmissibleConfig() {
+    when(readiness.snapshot()).thenReturn(new SwarmCommandReadinessSnapshot(true, false, false, WorkloadState.RUNNING));
+    ControlSignal signal = signal("swarm-controller", "controller-1", "orchestrator-1", Map.of("enabled", false));
+    handler.handle(signal, TEST_SWARM_ID);
+    verify(lifecycle).setSwarmEnabled(false);
+    verify(results).publishConfig(signal, TerminalStatus.SUCCEEDED);
+  }
+
+  @Test
   void rejectsOrdinaryConfigWhenWorkloadIsNotRunning() {
     ControlSignal signal = signal("swarm-controller", "controller-1", "orchestrator-1", Map.of("enabled", true));
     when(readiness.snapshot()).thenReturn(

@@ -733,7 +733,7 @@ A slice that requires two active owners is not partially complete; it has not pa
 - `runtimeIntent=ABSENT` requires `workloadIntent=STOPPED`.
 - Only the Orchestrator changes intent or operation state.
 - Controller and worker status updates only their observed projections.
-- Only one non-terminal lifecycle operation (`CREATE`, `START`, `STOP`, `REMOVE`) may exist for a swarm. A conflicting command is rejected explicitly; it does not replace the active operation.
+- Lifecycle operations are exclusive except for STOP superseding an awaiting START for the same controller/run. Orchestrator admits and publishes that STOP after START; the Controller terminates the prior START as FAILED. Other conflicts, including a second pending STOP, remain rejected. See [command admission](architecture/runtime-responsibilities.md#resp-swarm-command-admission).
 - An executor result may complete only the operation with the same `swarmId`, type, concrete target, `correlationId` and `idempotencyKey`. A late result after timeout is journaled but never changes the terminal operation or emits another outcome.
 - A duplicate request with the same `(swarmId, type, target, idempotencyKey)` returns the existing operation and replays its terminal outcome when available. It is never silently discarded. Reusing an idempotency key for another target is a distinct operation rather than an accidental replay.
 - A new execution after a terminal retryable failure uses a new `idempotencyKey`.
@@ -755,7 +755,7 @@ Controller readiness is satisfied when:
 Start and stop use broadcast enablement. PocketHive does not promise dependency-ordered activation because workers are independently connected to durable queues and the current contract does not define a safe per-edge activation handshake.
 
 - A `START` request received while the Controller is `READY` and the current workload observation is already `RUNNING` succeeds as an idempotent no-op. It does not broadcast enablement again or require a newer worker status.
-- A `STOP` request received while the Controller is `READY` and the current workload observation is already `STOPPED` succeeds as an idempotent no-op. It does not broadcast disablement again or require a newer worker status.
+- A new `STOP` request requires initialization, but not fresh heartbeat telemetry or completed bootstrap acknowledgements. It broadcasts disablement even with cached `STOPPED` intent and requires newer disabled observations from every expected runtime worker. An exact idempotency-key replay still reuses its original operation.
 - Otherwise, `START` succeeds only when every expected worker has published a status newer than the operation dispatch timestamp with `enabled=true`.
 - Otherwise, `STOP` succeeds only when every expected worker has published a status newer than the operation dispatch timestamp with `enabled=false`.
 - An empty expected-worker set converges immediately once the Controller is `READY`.

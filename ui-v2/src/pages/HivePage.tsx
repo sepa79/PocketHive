@@ -1,3 +1,4 @@
+import { SwarmLifecycleButtons } from './hive/SwarmLifecycleButtons'
 import { useSwarmCatalogue } from './hive/useSwarmCatalogue'
 import type { SwarmSummary } from '../lib/SwarmSummary'
 import type { NetworkMode } from '../lib/NetworkMode'
@@ -1127,7 +1128,6 @@ export function HivePage() {
                 ? swarm.bees.map((bee) => bee.role).filter(Boolean).join(', ')
                 : '—'
             const actionFeedback = lifecycleFeedback[swarm.id]
-            const isBusy = busySwarm === swarm.id || actionFeedback?.status === 'pending'
             return (
               <div key={swarm.id} className="swarmCard">
                 <div className="swarmRow">
@@ -1185,36 +1185,15 @@ export function HivePage() {
 	                        Refresh details
 	                      </button>
 	                    ) : null}
-	                    <button
-	                      type="button"
-	                      className="actionButton"
-	                      disabled={isBusy || !canRunSwarm}
-                      onClick={() => runSwarmAction(swarm, 'start')}
-                    >
-                      <span className="actionButtonContent">
-                        <span>Start</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="actionButton actionButtonGhost"
-                      disabled={isBusy || !canManageSwarm}
-                      onClick={() => runSwarmAction(swarm, 'stop')}
-                    >
-                      <span className="actionButtonContent">
-                        <span>Stop</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="actionButton actionButtonDanger"
-                      disabled={isBusy || !canManageSwarm}
-                      onClick={() => setRemoveTarget(swarm)}
-                    >
-                      <span className="actionButtonContent">
-                        <span>Remove</span>
-                      </span>
-                    </button>
+                    <SwarmLifecycleButtons
+                      requestPending={busySwarm === swarm.id}
+                      feedback={actionFeedback}
+                      canRun={canRunSwarm}
+                      canManage={canManageSwarm}
+                      onStart={() => void runSwarmAction(swarm, 'start')}
+                      onStop={() => void runSwarmAction(swarm, 'stop')}
+                      onRemove={() => setRemoveTarget(swarm)}
+                    />
                   </div>
                 </div>
 	                {actionFeedback ? (

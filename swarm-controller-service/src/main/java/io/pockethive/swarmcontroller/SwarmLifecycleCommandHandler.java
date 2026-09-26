@@ -17,8 +17,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: Execute START/STOP commands and publish their result after canonical worker convergence.
  * Must not: Decode transport messages, apply config updates, or own lifecycle/readiness domain state.
- * Contract: Admit one command before mutation; success requires fresh matching worker observations and bounded
- * timeout reports exact non-convergence.
+ * Contract: RESP-SWARM-COMMAND-ADMISSION — docs/architecture/runtime-responsibilities.md#resp-swarm-command-admission.
  */
 final class SwarmLifecycleCommandHandler {
 
@@ -60,7 +59,9 @@ final class SwarmLifecycleCommandHandler {
   synchronized void handle(ControlSignal signal, String operation, String swarmId) {
     Objects.requireNonNull(signal, "signal");
     WorkloadState requestedState = requestedState(operation);
-    if (pendingLifecycle != null) {
+    boolean stopping = requestedState == WorkloadState.STOPPED;
+    boolean supersedingStart = stopping && pendingLifecycle != null && pendingLifecycle.expectedEnabled();
+    if (pendingLifecycle != null && !supersedingStart) {
       IllegalStateException failure =
           new IllegalStateException("Another lifecycle command is awaiting convergence");
       log.warn(phase(operation), failure);
@@ -68,7 +69,7 @@ final class SwarmLifecycleCommandHandler {
       return;
     }
     SwarmCommandReadinessSnapshot readinessSnapshot = readiness.snapshot();
-    if (!readinessSnapshot.accepts(false)) {
+    if (!(stopping ? readinessSnapshot.acceptsStop() : readinessSnapshot.acceptsStart())) {
       log.warn(
           "[CTRL] command rejected operation={} phase={} code={} message={} swarmId={} correlationId={} "
               + "idempotencyKey={} retryable={} initialized={} ready={} pendingConfigUpdates={} status={}",
@@ -87,7 +88,8 @@ final class SwarmLifecycleCommandHandler {
       results.publishLifecycle(signal, operation, TerminalStatus.REJECTED, List.of());
       return;
     }
-    if (lifecycle.getWorkloadState() == requestedState) {
+    PendingLifecycle interrupted = supersedingStart ? pendingLifecycle : null;
+    if (!stopping && lifecycle.getWorkloadState() == requestedState) {
       log.info(
           "Lifecycle command already achieved operation={} swarmId={} workloadState={} correlationId={} "
               + "idempotencyKey={}",
@@ -119,7 +121,15 @@ final class SwarmLifecycleCommandHandler {
       results.publishFailure(signal, operation, failure);
       return;
     }
-    tryComplete();
+    try {
+      if (interrupted != null) {
+        results.publishFailure(interrupted.signal(), interrupted.operation(),
+            new IllegalStateException("START superseded by STOP"));
+      }
+    } finally {
+      // Failure to report the superseded START must not prevent STOP convergence.
+      tryComplete();
+    }
   }
 
   synchronized void tryComplete() {
@@ -145,6 +155,10 @@ final class SwarmLifecycleCommandHandler {
 
   synchronized void failPending(String reason) {
     PendingLifecycle pending = pendingLifecycle;
+    if (pending != null && !pending.expectedEnabled()) {
+      log.warn("Config-update error does not cancel pending STOP: {}", reason);
+      return;
+    }
     pendingLifecycle = null;
     lifecycle.fail(reason);
     if (pending == null) {

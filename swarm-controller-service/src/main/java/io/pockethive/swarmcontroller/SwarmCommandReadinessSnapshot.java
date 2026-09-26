@@ -5,7 +5,7 @@ import io.pockethive.swarm.model.lifecycle.WorkloadState;
 /**
  * Responsibility: Represent one immutable observation of Swarm Controller command readiness.
  * Must not: Query lifecycle state, publish results, or mutate readiness.
- * Contract: Command gates evaluate one captured readiness observation.
+ * Contract: RESP-SWARM-COMMAND-ADMISSION — docs/architecture/runtime-responsibilities.md#resp-swarm-command-admission.
  */
 record SwarmCommandReadinessSnapshot(
     boolean initialized,
@@ -13,10 +13,16 @@ record SwarmCommandReadinessSnapshot(
     boolean pendingConfigUpdates,
     WorkloadState workloadState) {
 
-  boolean accepts(boolean requireRunning) {
-    return initialized
-        && ready
-        && !pendingConfigUpdates
+  boolean acceptsStart() {
+    return initialized && ready && !pendingConfigUpdates;
+  }
+
+  boolean acceptsStop() {
+    return initialized;
+  }
+
+  boolean acceptsConfig(boolean requireRunning) {
+    return initialized && !pendingConfigUpdates
         && (!requireRunning || workloadState == WorkloadState.RUNNING);
   }
 }

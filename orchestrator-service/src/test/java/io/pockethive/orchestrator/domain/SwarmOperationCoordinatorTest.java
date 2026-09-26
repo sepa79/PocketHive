@@ -55,20 +55,30 @@ class SwarmOperationCoordinatorTest {
   }
 
   @Test
-  void differentLifecycleCommandCannotOverwriteAnActiveOperation() {
+  void stopMayFollowStartButCannotOverlapAnotherStop() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
-    coordinator.reserve(
-        "alpha", OperationType.START, CONTROLLER, RUNTIME, "correlation-1", "idempotency-1", NOW, DEADLINE);
+    coordinator.reserve("alpha", OperationType.START, CONTROLLER, RUNTIME, "start", "start-key", NOW, DEADLINE);
+    var stop = coordinator.reserve("alpha", OperationType.STOP, CONTROLLER, RUNTIME, "stop", "stop-key", NOW, DEADLINE);
+    assertThat(stop.reused()).isFalse();
+    assertThat(coordinator.reserve("alpha", OperationType.STOP, CONTROLLER, RUNTIME, "retry", "stop-key", NOW, DEADLINE).reused()).isTrue();
+    assertThatThrownBy(() -> coordinator.reserve("alpha", OperationType.STOP, CONTROLLER, RUNTIME, "other", "other-key", NOW, DEADLINE))
+        .isInstanceOf(OperationConflictException.class);
+    assertThatThrownBy(() -> coordinator.reserve("alpha", OperationType.START, CONTROLLER, RUNTIME, "other", "other-key", NOW, DEADLINE))
+        .isInstanceOf(OperationConflictException.class);
+    assertThatThrownBy(() -> coordinator.reserve("alpha", OperationType.REMOVE, CONTROLLER, RUNTIME, "other", "other-key", NOW, DEADLINE))
+        .isInstanceOf(OperationConflictException.class);
+    assertThat(coordinator.operations()).hasSize(2);
+  }
 
-    assertThatThrownBy(() -> coordinator.reserve(
-        "alpha", OperationType.STOP, CONTROLLER, RUNTIME, "correlation-2", "idempotency-2", NOW, DEADLINE))
-        .isInstanceOf(OperationConflictException.class)
-        .satisfies(error -> assertThat(((OperationConflictException) error).activeOperation().correlationId())
-            .isEqualTo("correlation-1"));
-
-    assertThat(coordinator.activeLifecycle("alpha"))
-        .map(SwarmOperation::correlationId)
-        .contains("correlation-1");
+  @Test
+  void stopCannotBypassCreateOrDifferentControllerIdentity() {
+    SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
+    coordinator.reserve("alpha", OperationType.CREATE, CONTROLLER, RUNTIME, "create", "create-key", NOW, DEADLINE);
+    assertThatThrownBy(() -> coordinator.reserve("alpha", OperationType.STOP, CONTROLLER, RUNTIME, "stop", "stop-key", NOW, DEADLINE))
+        .isInstanceOf(OperationConflictException.class);
+    coordinator.reserve("beta", OperationType.START, CONTROLLER, RUNTIME, "start", "start-key", NOW, DEADLINE);
+    assertThatThrownBy(() -> coordinator.reserve("beta", OperationType.STOP, new Target("swarm-controller", "other"), RUNTIME, "stop", "stop-key", NOW, DEADLINE))
+        .isInstanceOf(OperationConflictException.class);
   }
 
   @Test

@@ -15,7 +15,11 @@ import java.util.Optional;
 import java.util.List;
 import java.util.function.Function;
 
-/** In-process operation authority. Cross-restart recovery is intentionally outside this version. */
+/**
+ * Responsibility: Own in-process operation reservation, identity and terminal transitions.
+ * Must not: Dispatch signals, infer worker convergence or recover cross-restart state.
+ * Contract: RESP-SWARM-COMMAND-ADMISSION — docs/architecture/runtime-responsibilities.md#resp-swarm-command-admission.
+ */
 public final class SwarmOperationCoordinator {
 
   private final Map<OperationKey, String> correlationByRequest = new LinkedHashMap<>();
@@ -37,7 +41,11 @@ public final class SwarmOperationCoordinator {
       return new Reservation(operationsByCorrelation.get(existingCorrelation), true);
     }
     if (type.lifecycle()) {
-      activeLifecycle(swarmId).ifPresent(active -> {
+      operationsByCorrelation.values().stream()
+          .filter(active -> active.swarmId().equals(swarmId) && active.type().lifecycle() && !active.terminal())
+          .filter(active -> !(type == OperationType.STOP && active.type() == OperationType.START
+              && active.target().equals(target) && active.runtime().equals(runtime)))
+          .findFirst().ifPresent(active -> {
         throw new OperationConflictException(active);
       });
     }
