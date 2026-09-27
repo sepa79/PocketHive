@@ -110,6 +110,10 @@ final class OAuth2TokenProvider {
         String clientId = optional(profile, "clientId");
         if (clientId != null) {
           form.put("client_id", clientId);
+          String clientSecret = optional(profile, "clientSecret");
+          if (clientSecret != null) {
+            form.put("client_secret", clientSecret);
+          }
         }
       } else {
         throw new IllegalArgumentException("Auth type is not refreshable: " + profile.getType());

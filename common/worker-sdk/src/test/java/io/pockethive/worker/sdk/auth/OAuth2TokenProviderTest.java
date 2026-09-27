@@ -16,15 +16,19 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 class OAuth2TokenProviderTest {
   @ParameterizedTest
-  @EnumSource(
-      value = AuthType.class,
-      names = {"OAUTH2_CLIENT_CREDENTIALS", "OAUTH2_PASSWORD_GRANT"})
-  void ordinaryGrantUsesItsWireContractAndPublishesOnlyAfterAcquisition(AuthType type)
+  @CsvSource({
+      "OAUTH2_CLIENT_CREDENTIALS,true,true",
+      "OAUTH2_PASSWORD_GRANT,true,true",
+      "OAUTH2_PASSWORD_GRANT,true,false",
+      "OAUTH2_PASSWORD_GRANT,false,false"
+  })
+  void ordinaryGrantUsesItsWireContractAndPublishesOnlyAfterAcquisition(
+      AuthType type, boolean hasClientId, boolean hasClientSecret)
       throws Exception {
     var request = new CompletableFuture<Map<String, String>>();
     var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -47,6 +51,8 @@ class OAuth2TokenProviderTest {
     server.start();
     try (var http = HttpClient.newHttpClient()) {
       var profile = profile(type);
+      if (!hasClientId) profile.putProperty("clientId", "");
+      if (!hasClientSecret) profile.putProperty("clientSecret", "");
       profile.putProperty(
           "tokenUrl", "http://127.0.0.1:" + server.getAddress().getPort() + "/token");
       var store = claimedStore();
@@ -59,7 +65,10 @@ class OAuth2TokenProviderTest {
           .isEqualTo(
               type == AuthType.OAUTH2_CLIENT_CREDENTIALS
                   ? "grant_type=client_credentials&client_id=client%2B&client_secret=secret%26&scope=read+write"
-                  : "grant_type=password&username=user%2B&password=password%26&client_id=client%2B&scope=read+write");
+                  : "grant_type=password&username=user%2B&password=password%26"
+                      + (hasClientId ? "&client_id=client%2B" : "")
+                      + (hasClientSecret ? "&client_secret=secret%26" : "")
+                      + "&scope=read+write");
       var record = ArgumentCaptor.forClass(TokenRecord.class);
       verify(store).store(record.capture(), any(), any());
       assertThat(record.getValue().accessToken()).isEqualTo(material.value());

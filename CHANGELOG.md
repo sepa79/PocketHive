@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Use the existing PocketHive Bearer session for TCP mock acceptance diagnostics; remove obsolete Basic-auth target settings.
+
+- Include configured clientSecret in OAuth password-grant token requests and reject secrets without clientId during profile preparation (PR #512).
+
 - Fix Processor TCP/ISO transport replacement: requests retain one configuration generation, failed construction does not publish a broken configuration, and retired transports close after their last request. Close HTTP eager/per-thread clients and TCP runtimes on owner shutdown without interrupting admitted exchanges.
 
 - Orchestrator: explicit catalogue-entry deletion now verifies compute absence and refuses active lifecycle operations or a replaced entry. Files, queues and network bindings remain untouched; normal REMOVE retains its verified cleanup contract.

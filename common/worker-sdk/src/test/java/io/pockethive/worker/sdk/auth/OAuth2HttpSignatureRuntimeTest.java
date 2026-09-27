@@ -264,7 +264,7 @@ class OAuth2HttpSignatureRuntimeTest {
 
     @ParameterizedTest
     @CsvSource({"OAUTH2_CLIENT_CREDENTIALS,grant_type=client_credentials&client_id=client&client_secret=secret&scope=read",
-        "OAUTH2_PASSWORD_GRANT,grant_type=password&username=user&password=password&client_id=client&scope=read"})
+        "OAUTH2_PASSWORD_GRANT,grant_type=password&username=user&password=password&client_id=client&client_secret=secret&scope=read"})
     void existingOAuthProfilesKeepUnsignedTokenRequestsAndBearerApplication(AuthType type, String expectedBody) throws Exception {
         profile.setType(type);
         profile.putProperty("clientId", "client");

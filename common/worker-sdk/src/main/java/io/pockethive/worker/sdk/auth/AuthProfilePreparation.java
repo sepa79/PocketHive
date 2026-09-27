@@ -98,6 +98,12 @@ final class AuthProfilePreparation {
         if (profile.getStorage().getMode() == AuthStorageMode.REDIS) {
             AuthTokenKeys.validateTokenKey(profile.getStorage().getTokenKey());
         }
+        if (profile.getType() == AuthType.OAUTH2_PASSWORD_GRANT
+            && AuthProfileFields.optional(profile, "clientSecret") != null
+            && AuthProfileFields.optional(profile, "clientId") == null) {
+            throw new IllegalArgumentException(
+                "Auth profile '" + profileId + "' (OAUTH2_PASSWORD_GRANT) declares clientSecret without clientId");
+        }
     }
 
     static String fingerprint(AuthProfile profile) {
