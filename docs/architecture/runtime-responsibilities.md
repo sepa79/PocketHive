@@ -9,7 +9,7 @@
 
 Status: current ownership records, aligned with the Rabbit aggregate review corrections on
 2026-09-14. B01/B02 review reports remain historical evidence in
-`docs/archive/module-boundaries-before-rabbit-2026-09-11/`; they do not define current execution order.
+Git history; they do not define current execution order.
 `docs/inProgress/work-plane-module-boundaries.md` records Rabbit implementation, verification
 and explicit exclusions. `docs/inProgress/functional-module-boundaries.md` owns the proposed
 repair order for the remaining functionalities. The [boundary design](work-plane-boundaries.md)
@@ -247,7 +247,7 @@ Controller RabbitConfig exposes ControlPlaneJson.mapper() as its ObjectMapper be
 
 **Required effect:** Non-wire consumers receive the shared projection mapper; control wire acceptance and serialization remain exclusively in ControlPlaneCodec.
 
-**Verification entrypoints:** `ControlPlaneCodecTest` covers the separate wire boundary; it does not verify the projection helper. Helper consumers are traced in the RV2 correction evidence in `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b01/review-responsibilities.md`.
+**Verification entrypoints:** `ControlPlaneCodecTest` covers the separate wire boundary; it does not verify the projection helper. Helper consumers are traced in the RV2 correction evidence in Git history.
 
 **Migration status:** Current helper extraction. Review callers separately; presence of this helper does not authorize direct envelope serialization.
 
@@ -585,7 +585,7 @@ resolved validation. No network/filesystem effects occur in the parser.
 WorkIOConfigBinderTest, RedisWorkOutputTest, RedisUploaderInterceptorTest and ScenarioControllerTest.
 
 **Migration status:** Route responsibility is the first implemented RedisConfigurationParser transfer;
-`docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/redis-routes-transfer.md` records behavior tests and limits.
+Git history records behavior tests and limits.
 IO/connection/execution records, output target/connection constraints,
 full candidate validation and all producer migration remain required before full B02
 acceptance. This sub-transfer does not certify the whole configuration contract.
@@ -664,7 +664,6 @@ early complete RESOLVED validation remains; standard Spring flattening is the ac
 and original empty-YAML shape preservation is closed. SEL-R1 was subsequently fixed in the input lifecycle (2026-09-26).
 **Verification:** RedisWriteSettingsTest, WorkIOConfigBinderTest, RedisWorkOutputTest,
 RedisUploaderInterceptorTest and RedisConfigurationValidationComponentTest.
-Implementation evidence: `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/redis-write-settings-transfer.md`.
 Separate `redis-write-settings-review-2026-09-08.md` in that directory supports this
 scoped transfer; full B02 remains open.
 
@@ -758,9 +757,8 @@ Controller early complete RESOLVED validation remains; original empty-YAML shape
 
 **Verification:** RedisSourcesParsingTest, WorkIOConfigBinderTest,
 RedisDataSetWorkInputTest and RedisConfigurationValidationComponentTest.
-Implementation evidence: `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/redis-sources-transfer.md`;
-the separate `redis-selection-review-2026-09-08.md` in the same evidence directory
-accepts RS-R1/RS-R2. The subsequent SEL-R1 finding was fixed in the input lifecycle (2026-09-26).
+RS-R1/RS-R2 and the subsequent SEL-R1 finding were fixed; historical review evidence
+is retained in Git.
 
 ## RESP-WORK-REDIS-SELECTION
 
@@ -883,9 +881,7 @@ text, silent defaults or interpreting symbolic authoring as accepted runtime set
 scenario component validation plus existing input behavior tests.
 **Scope:** rate only. Timing, limits, input enablement, complete candidate acceptance and
 other B02 settings remain open. SEL-R1 was subsequently fixed in the input lifecycle (2026-09-26). The input-rate transfer
-passed separate review on 2026-09-09 after RATE-R1 correction; see
-`docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/README.md`, section
-"Separate RATE-R1 correction review — 2026-09-09".
+passed separate review on 2026-09-09 after RATE-R1 correction.
 
 ## RESP-WORK-INPUT-SCHEDULE
 
@@ -3276,50 +3272,6 @@ The transport selector presents explicit choices; it does not grant permission.
 **Forbidden:** authentication, network probes or inferred environment settings.
 **Contract:** [companion](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
 **Verification:** companion UI checks. Existing presentation responsibility.
-
-## RESP-INTAKE-RUNTIME-VOCABULARY
-
-**Canonical value owners:** `AuthType` under `RESP-AUTH-VALUES` and
-`RequestTemplateProtocol` under `RESP-REQUEST-TEMPLATE-PARSE`.
-
-**Projection owner:** `tools/intake-contracts/ExportRuntimeVocabulary.java`
-exports those compiled types into the intake package's local
-`contract/schemas/runtime-vocabulary.schema.json`. The schema validator and
-bundle inspector consume that sealed read-only projection. The dedicated intake
-workflow compares its exact bytes with output from the compiled owners through
-`generate.sh --check`; package integrity checks protect the delivered snapshot.
-Normal Maven tests and product image publication do not depend on intake package
-files. These checks do not prove deployed worker capabilities.
-
-**Intake consumers:** [schema validation](intake-runtime.md#resp-intake-schema),
-[reference rules](intake-runtime.md#resp-intake-references),
-[readiness rules](intake-runtime.md#resp-intake-readiness) and
-[bundle inspection](intake-runtime.md#resp-intake-inspection) retain their own
-document responsibilities and consume the vocabulary projection.
-They do not validate runtime auth profiles or decide endpoint transport support.
-An accepted type without a complete intake representation remains a handoff gap.
-
-**Forbidden:** hand-maintained runtime value lists, Java source parsing, runtime
-schema downloads, implicit aliases/migrations, or inferring readiness from a type.
-
-**Contract:** [intake vocabulary ownership](https://github.com/sepa79/PocketHive/blob/main/.agents/skills/pockethive-intake/contract/intake-contract.md#runtime-vocabulary-ownership).
-**Verification:** `tools/intake-contracts/generate.sh --check` in the dedicated
-[intake workflow](https://github.com/sepa79/PocketHive/blob/main/.github/workflows/intake-skill.yml), public-CLI
-auth/protocol regressions, and the relocated offline package suite.
-
-## RESP-INTAKE-RESULT-EVIDENCE
-
-**Owner:** `measurement_rules.py` in the intake skill checks recorded outcome
-evidence and run identity. The lifecycle contract's `RuntimeMetadata.runId` is
-the canonical runtime identity; intake records it alongside `swarmId`, which
-may be reused. Executed reports require both through the existing result checks.
-
-**Forbidden:** deriving a run ID from another identifier, querying a live run,
-calculating a pass, or inferring execution from an allocated run ID.
-
-**Contract:** [recorded results](https://github.com/sepa79/PocketHive/blob/main/.agents/skills/pockethive-intake/contract/intake-contract.md#measurement-mappings-and-recorded-results)
-and [lifecycle schema](../spec/swarm-lifecycle.schema.json).
-**Verification:** public-CLI result identity and measurement tests.
 
 ## RESP-OAUTH-CLIENT-REGISTRY
 

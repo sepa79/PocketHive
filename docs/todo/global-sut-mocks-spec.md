@@ -367,7 +367,7 @@ Update the shared SUT/swarm-create schemas, REST contracts and generated clients
 together.
 
 This proposal replaces the permanent dual-source direction in the older
-[SUT/dataset/simulation proposal](../archive/pre-boundary-reset/architecture/sut-dataset-simulation-model.md)
+historical design (retained in Git)
 with import-only migration. It also replaces the unimplemented swarm
 `network-profile` timeline extension with a SUT Plan. Neither older proposal is
 an implicit compatibility requirement; datasets and Simulation Programs remain

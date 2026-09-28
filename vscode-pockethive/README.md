@@ -230,8 +230,7 @@ Interface icons use the official VS Code Codicon font from the exact pinned
 and attribution into `resources/`; the webview loads those local packaged files
 under its Content Security Policy, and `npm run assets:check` detects drift.
 
-For the server and agent contract, see `docs/mcp/README.md` and
-`docs/archive/pre-boundary-reset/todo/pockethive-mcp-java-migration.md`.
+For the server and agent contract, see `docs/mcp/README.md`.
 
 ## Explicit remote HTTP
 

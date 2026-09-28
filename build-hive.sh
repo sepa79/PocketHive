@@ -264,7 +264,11 @@ run_maven_package() {
   fi
 
   echo "Packaging modules (${csv}) via local Maven"
-  "${mvn_cmd[@]}"
+  if $SKIP_TESTS; then
+    "${mvn_cmd[@]}"
+  else
+    tools/test/with-infrastructure.sh "${mvn_cmd[@]}"
+  fi
 }
 
 reset_local_build_state() {

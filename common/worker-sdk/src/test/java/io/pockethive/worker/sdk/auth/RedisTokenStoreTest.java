@@ -12,11 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.utility.DockerImageName;
 
 class RedisTokenStoreTest {
 
@@ -24,12 +21,9 @@ class RedisTokenStoreTest {
     private static final String FINGERPRINT = "sha256:config";
     private static final String REDIS_HOST_ENV = System.getenv("AUTH_REDIS_TEST_HOST");
     private static final String REDIS_PORT_ENV = System.getenv("AUTH_REDIS_TEST_PORT");
-    private static final int REDIS_PORT = 6379;
-    private static GenericContainer<?> redisContainer;
 
     @BeforeEach
     void cleanRedisKeys() {
-        assumeRedisAvailable();
         try (RedisAccess redis = redis()) {
             redis.commands().del(
                 recordKey("shared-token"),
@@ -212,54 +206,10 @@ class RedisTokenStoreTest {
         return new RedisAccess(client, client.connect());
     }
 
-    private static void assumeRedisAvailable() {
-        try (RedisAccess redis = redis()) {
-            redis.commands().ping();
-        } catch (RuntimeException ex) {
-            Assumptions.assumeTrue(false, "Redis integration test requires local Redis or Docker/Testcontainers");
-        }
-    }
-
     private static RedisEndpoint redisEndpoint() {
-        if (REDIS_HOST_ENV != null && !REDIS_HOST_ENV.isBlank()) {
-            return new RedisEndpoint(REDIS_HOST_ENV.trim(), redisPortFromEnv());
-        }
-        RedisEndpoint local = new RedisEndpoint("127.0.0.1", redisPortFromEnv());
-        if (canPing(local)) {
-            return local;
-        }
-        return testcontainerRedis();
-    }
-
-    private static int redisPortFromEnv() {
-        if (REDIS_PORT_ENV == null || REDIS_PORT_ENV.isBlank()) {
-            return REDIS_PORT;
-        }
-        return Integer.parseInt(REDIS_PORT_ENV.trim());
-    }
-
-    private static boolean canPing(RedisEndpoint endpoint) {
-        try (RedisClient client = RedisClient.create("redis://" + endpoint.host() + ":" + endpoint.port());
-             StatefulRedisConnection<String, String> connection = client.connect()) {
-            connection.sync().ping();
-            return true;
-        } catch (RuntimeException ex) {
-            return false;
-        }
-    }
-
-    private static synchronized RedisEndpoint testcontainerRedis() {
-        if (redisContainer == null) {
-            GenericContainer<?> container = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-                .withExposedPorts(REDIS_PORT);
-            try {
-                container.start();
-            } catch (RuntimeException ex) {
-                Assumptions.assumeTrue(false, "Redis integration test requires Docker/Testcontainers when local Redis is unavailable");
-            }
-            redisContainer = container;
-        }
-        return new RedisEndpoint(redisContainer.getHost(), redisContainer.getMappedPort(REDIS_PORT));
+        assertThat(REDIS_HOST_ENV).as("AUTH_REDIS_TEST_HOST: run tools/test/with-infrastructure.sh").isNotBlank();
+        assertThat(REDIS_PORT_ENV).as("AUTH_REDIS_TEST_PORT: explicit Redis fixture required").isNotBlank();
+        return new RedisEndpoint(REDIS_HOST_ENV, Integer.parseInt(REDIS_PORT_ENV));
     }
 
     private static String recordKey(String tokenKey) {

@@ -305,7 +305,7 @@ Odbiór wstrzymany: AR-REV-1 (stop zamyka sesję przed ACK długiego callbacku,
 wiadomość wraca po starcie) i AR-REV-2 (martwa subskrypcja nadal zgłasza RUNNING).
 Oba przypadki odtworzono na rzeczywistym brokerze osadzonym; ponowne 309 testów
 reactora przeszło. Nie wykryto konkurencyjnego właściciela konfiguracji/nazw Artemis.
-Raport i dowody: [review A1/A2](../architecture/artemis-a1-a2-review-2026-09-15.md).
+Raport i dowody: review A1/A2 (history retained in Git).
 W zadaniu review nie poprawiano kodu produkcyjnego; przed odbiorem potrzebne są
 poprawki tych przypadków i osobny review. A3–A6 nadal pozostają do wykonania.
 
@@ -363,7 +363,7 @@ adaptera pamięciowego; WA-REV-3 — wygaszanie wątków cached pool zmienia reu
 połączeń PER_THREAD. Trzy regresje odtworzone; istniejące 705 testów przechodzi.
 AR-REV-2 (martwa subskrypcja raportująca RUNNING) ponownie sprawdzony — poprawka
 potwierdzona. Review nie zmienia kodu produkcyjnego. A3–A6 nadal odłożone do
-zakończenia bieżącego etapu. [Raport i dowody](../architecture/work-admission-review-2026-09-15.md).
+zakończenia bieżącego etapu. Raport i dowody (history retained in Git).
 
 
 ### Poprawki WA-REV-1/2/3 — 2026-09-15

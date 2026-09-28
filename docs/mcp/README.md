@@ -359,8 +359,6 @@ Node wizard/import/clone/enrich APIs are not supported authoring paths.
 
 ## Owning documents
 
-- Java migration, tool, workflow, security, and acceptance specification:
-  `docs/archive/pre-boundary-reset/todo/pockethive-mcp-java-migration.md`
 - Node tool disposition ledger: `docs/mcp/NODE_TOOL_MIGRATION_LEDGER.md`
 - Auth and OAuth contract: `docs/architecture/AUTH_SERVICE_API_SPEC.md`
 - Scenario Manager bundle contract:

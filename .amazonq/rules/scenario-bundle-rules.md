@@ -1,15 +1,12 @@
 # PocketHive Scenario Bundle Rules
 
-Scope: legacy scenario-bundle implementation guidance. This workflow does not
-apply to requirements intake, template population or intake-document review;
-use `.agents/skills/pockethive-intake/SKILL.md` for those tasks. The repository's
+Scope: legacy scenario-bundle implementation guidance. The repository's
 `AGENTS.md` and current `docs/mcp/README.md` take precedence over legacy tool names
 and operational instructions below.
 
 ## Repository purpose
 
-This is the PocketHive service repository. Scenario bundles are one artifact
-family within it; client intake documents are a separate authoring input.
+This is the PocketHive service repository. Scenario bundles describe test configurations.
 
 ## Remote stacks
 

@@ -40,7 +40,7 @@ class RedisSequenceConfigurationTest {
     @Test
     void instancesKeepIndependentSelectionAndInvalidFormatDoesNotConsumeCounter() {
         String host = System.getenv("AUTH_REDIS_TEST_HOST");
-        org.junit.jupiter.api.Assumptions.assumeTrue(host != null, "explicit Redis fixture required");
+        org.junit.jupiter.api.Assertions.assertNotNull(host, "explicit Redis fixture required");
         var properties = new RedisSequenceProperties();
         properties.setHost(host);
         properties.setPort(Integer.parseInt(System.getenv("AUTH_REDIS_TEST_PORT")));

@@ -32,12 +32,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 
 /** Uses only explicitly supplied disposable Redis plus a test-owned, certificate-verified HTTPS endpoint. */
-@EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_HOST", matches = ".+")
-@EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_PORT", matches = "[0-9]+")
 class OAuth2HttpSignatureRedisTest {
     private static final String RAW_TARGET = "/oauth/%74oken?tenant=a%2Fb&mode=one+two";
     private static final Pattern SIGNATURE_HEADER = Pattern.compile(

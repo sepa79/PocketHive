@@ -224,6 +224,7 @@
 	        <artifactId>maven-surefire-plugin</artifactId>
 	        <configuration>
 	          <environmentVariables>
+	            <RABBITMQ_SERVER_REQUIRED>true</RABBITMQ_SERVER_REQUIRED>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
 	            <POCKETHIVE_NETWORK_MODE>DIRECT</POCKETHIVE_NETWORK_MODE>
 	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
@@ -235,6 +236,7 @@
 	        <artifactId>maven-failsafe-plugin</artifactId>
 	        <configuration>
 	          <environmentVariables>
+	            <RABBITMQ_SERVER_REQUIRED>true</RABBITMQ_SERVER_REQUIRED>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
 	            <POCKETHIVE_NETWORK_MODE>DIRECT</POCKETHIVE_NETWORK_MODE>
 	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>

@@ -4,11 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Remove obsolete boundary scan snapshots, superseded design packs and closed
+  review reports; simplify the delivery index and retain current acceptance evidence.
+
+- Run mandatory Redis/Rabbit integration tests during full local builds and Java CI
+  with shared disposable fixtures; missing infrastructure fails instead of silently skipping.
+  Cancellation stops the test process group before cleaning up fixtures.
+
+- Remove the requirements-intake package, including its CLI, templates, tests,
+  vendored dependencies, runtime vocabulary exporter, dedicated CI workflow and
+  agent/documentation references. PocketHive runtime and scenario APIs are unchanged.
+- Remove the slow VS Code Stryker mutation step from CI; retain extension tests,
+  VSIX checks and minimum-runtime checks on the existing platform matrix.
+
 - Scheduler and CSV intake stop admitting the rest of a tick after STOP, including immediate STOP→START, while already admitted work finishes.
 
 - Preserve execution and failure reporting for already-admitted WorkItems after STOP; input admission remains the sole gate and ACK-on-admission is unchanged.
-- Bind intake review digests to JSON container types and empty containers, preventing structural edits from retaining confirmed review.
-
 - Use the existing PocketHive Bearer session for TCP mock acceptance diagnostics; remove obsolete Basic-auth target settings.
 
 - Include configured clientSecret in OAuth password-grant token requests and reject secrets without clientId during profile preparation (PR #512).
@@ -96,8 +107,6 @@ All notable changes to this project will be documented in this file.
 ## [0.15.36]
 Timestamp: 2026-09-22T00:00:00Z
 
-- Portable intake 1.9.1: withhold potentially credential-bearing string
-  observations and retain value-free source pointers and limitations.
 - OAuth ingress: preserve the public host/port and discard competing forwarded
   headers when constructing browser login redirects.
 - Deployment packaging: include required ClickHouse bootstrap scripts and TCP mock
@@ -195,10 +204,6 @@ Timestamp: 2026-09-22T00:00:00Z
 - OAuth registry persistence: reject trailing content and non-integer schema
   versions in dynamic-client state; fail startup on malformed state without
   changing the file or the shared JSON mapper.
-- Portable intake 1.9.0: document existing CLI ownership and link runtime headers
-  to canonical responsibility records; keep installed packages independent of
-  repository documentation. Remove resolved branch review/handoff clutter and
-  retain open qualification work with its owning feature.
 - Release metadata: align the Maven reactor and root npm package/lockfile at
   0.15.36. The VS Code companion remains independently versioned at 1.0.6.
 
@@ -244,19 +249,6 @@ Timestamp: 2026-09-22T00:00:00Z
   broker state, cross-host proxy placement, and writable MCP temporary storage
   within the read-only container deployment. Include public Dev TLS/auth fixtures.
 
-- Intake skill CI: reject stale generated schemas or package manifests, run the
-  public CLI suite, and upload a verified portable ZIP with its checksum as a
-  commit-labelled build artifact. Allow 45 minutes for qualification and publication.
-  Projection drift is checked only by the
-  dedicated intake workflow; default Maven tests do not depend on skill files.
-  Generated files are never rewritten by CI.
-- Intake schema ownership: derive auth and request-protocol vocabulary from the
-  canonical Java contracts, accept every auth type in drafts, and retain explicit
-  handoff gaps for unmodeled auth requirements. Requirements v3 uses
-  `bearer-token`; add file-based secret injection and preserve HTTPS endpoint
-  references without equating endpoint kind to request protocol. Consolidate
-  repeated intake vocabularies and runtime-field constraints; retain canonical
-  run identity separately from reusable swarm identity in executed reports.
 - VS Code tooling security: update pinned `fast-uri`, `js-yaml`, and `qs`
   development dependencies to patched releases; retain Stryker 10 and the
   existing mutation scope and thresholds.
@@ -368,7 +360,7 @@ Timestamp: 2026-09-22T00:00:00Z
 - CI regression gates: provision test-owned Redis and RabbitMQ fixtures, require
   the RabbitMQ integration tests and independent OpenSSL verifier, and enforce
   the scoped Java MCP, Auth Service, and HTTP Sequence mutation gates alongside
-  Windows/Linux extension tests, package checks, and Linux Stryker coverage.
+  Windows/Linux extension tests and package checks.
 - Restart integration verification: [PR #517's hosted run](https://github.com/sepa79/PocketHive/actions/runs/35435999539)
   passed all four jobs for restart head `2103a93a`: 2,247 Java cases and 187
   extension tests on each platform, with no failures or skips; all three scoped

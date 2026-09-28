@@ -50,7 +50,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -217,8 +216,6 @@ class OAuth2SecondPassWireTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_HOST", matches = ".+")
-    @EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_PORT", matches = "[0-9]+")
     void realRedisSynchronizedColdWarmAndForcedExpiredCallersShareValidatingEndpoint() throws Exception {
         String swarm = "second-pass-wire-" + java.util.UUID.randomUUID();
         try (Endpoint endpoint = new Endpoint(); RedisTokenStore redis = new RedisTokenStore(swarm,

@@ -5,13 +5,13 @@ import io.pockethive.redis.config.RedisPushDirection;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class RedisListIntegrationTest {
     @Test
     void producerAndConsumerPreserveOrderAndBoundedListContents() {
         String host = System.getenv("AUTH_REDIS_TEST_HOST");
-        assumeTrue(host != null, "explicit Redis fixture required");
+        assertNotNull(host, "explicit Redis fixture required");
         var settings = new RedisConfigurationParser().parseRedisConnection(host,
             Integer.parseInt(System.getenv("AUTH_REDIS_TEST_PORT")), null, null, false, "redis");
         String list = "extraction-" + UUID.randomUUID();

@@ -63,12 +63,9 @@ by the UI under `/docs/...` as part of the runtime image.
 
 ## Plans and history
 
-- `docs/inProgress/work-plane-module-boundaries.md` — the active Work Plane-first
-  architecture execution plan; old IO/broker/sink sequences do not run in parallel.
-- `docs/archive/pre-boundary-reset/README.md` — why conflicting or completed
-  plans were archived and where their unfinished concerns are tracked.
+- `docs/inProgress/work-plane-module-boundaries.md` — delivered Work Plane isolation and explicit exclusions.
 
-- `docs/inProgress/README.md` – actively delivered work only.
+- `docs/inProgress/README.md` – delivery status and follow-up owners.
 - `docs/toBeReviewed/README.md` – bounded review queue.
 - `docs/todo/README.md` – future work and follow-ups.
 - `docs/archive/readme.md` – historical and completed plans; do not use archived

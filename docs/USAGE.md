@@ -40,13 +40,13 @@ VS Code's **Extensions: Install from VSIX...** command.
 From the repository root, run:
 
 ```bash
-export AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl
 ./build-hive.sh
 ```
 
-Set `AUTH_OPENSSL_TEST_EXECUTABLE` to the absolute executable path on your machine
-(the example matches Linux/WSL and CI). The full test run requires it; an unset
-value fails the OAuth signature test setup.
+The full build starts isolated Redis and Rabbit integration fixtures on random
+loopback ports and removes them when tests finish. It resolves OpenSSL from PATH;
+set `AUTH_OPENSSL_TEST_EXECUTABLE` to an explicit absolute path to override it.
+Missing prerequisites or unavailable fixtures fail the build instead of skipping tests.
 
 This full build includes `auth-service` and the Java `pockethive-mcp` service.
 It builds their JARs with the repository-pinned Maven wrapper, builds images and

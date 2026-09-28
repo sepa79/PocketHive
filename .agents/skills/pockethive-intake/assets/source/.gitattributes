@@ -1,2 +1,0 @@
-# Preserve the supplied source bytes and their recorded SHA-256 checksums.
-*.yaml -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

@@ -1,6 +1,0 @@
-protocolVersion: "2.0.0"
-id: synthetic-http-population
-name: Source observations for intake population qualification
-template:
-  image: swarm-controller:fixture
-  bees: []

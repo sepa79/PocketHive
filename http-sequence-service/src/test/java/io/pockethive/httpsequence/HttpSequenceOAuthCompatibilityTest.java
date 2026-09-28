@@ -52,7 +52,6 @@ import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -65,8 +64,6 @@ import org.slf4j.LoggerFactory;
  * Reuses the prior audit's test-owned TLS and independent JCA verification approach. Existing audit regressions
  * remain untouched; this class intentionally makes no resource-lifecycle or debug-redaction acceptance claim.
  */
-@EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_HOST", matches = ".+")
-@EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_PORT", matches = "[0-9]+")
 @ResourceLock("default-ssl-context-and-root-log-level")
 @Timeout(60)
 class HttpSequenceOAuthCompatibilityTest {

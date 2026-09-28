@@ -20,19 +20,15 @@ fixture and explicit connection settings:
 | `AUTH_REDIS_TEST_PORT` | TCP port of that fixture. |
 | `AUTH_OPENSSL_TEST_EXECUTABLE` | Absolute path to the OpenSSL executable used by the independent signed-request verifier. |
 
-The CI test and scoped Java mutation jobs each start their own Redis service and
-supply these values. Both jobs check the explicit OpenSSL executable before
-running the relevant gates. The OpenSSL verifier fails explicitly if its executable
-is missing or invalid; it
-does not switch verification implementations. Redis-gated tests are skipped when
-their connection settings are absent, so a passing run with those skips does not
-establish Redis integration coverage.
-
-With these prerequisites configured, run the same Java command as CI from the
-repository root:
+Full local builds and Java CI use `tools/test/with-infrastructure.sh` to start
+isolated Redis/Rabbit fixtures and supply their connection settings. The wrapper
+resolves OpenSSL from PATH unless an absolute executable path is explicitly set.
+Missing prerequisites fail the run. Integration tests no longer skip when Redis
+settings or the Rabbit broker are unavailable. Raw Maven invocations must supply
+these prerequisites themselves; the canonical standalone command is:
 
 ```bash
-./mvnw -B -ntp test
+tools/test/with-infrastructure.sh ./mvnw -B -ntp test
 ```
 
 The relevant coverage includes signed-request construction and independent
@@ -67,9 +63,9 @@ dependencies, the commands are:
 
 ```bash
 ./mvnw -B -ntp -DskipTests install
-./mvnw -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
-./mvnw -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
-./mvnw -B -ntp -f http-sequence-service/pom.xml -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
+tools/test/with-infrastructure.sh ./mvnw -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+tools/test/with-infrastructure.sh ./mvnw -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+tools/test/with-infrastructure.sh ./mvnw -B -ntp -f http-sequence-service/pom.xml -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
 ```
 
 The HTTP Sequence profile retains its configured target classes and thresholds

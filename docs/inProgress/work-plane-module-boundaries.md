@@ -261,13 +261,13 @@ się sukcesem. Regresja ujawniła jeszcze niezgodną nazwę mocka CONTROL w teś
 i serviceId w fixture HTTP Sequence; skorygowano wyłącznie te dane testowe, zachowując asercje.
 Jedyny wcześniej pomijany przypadek był pustym placeholderem Redis; usunięto go na polecenie użytkownika.
 Stackowe E2E nie były ponawiane po tej naprawie. Szczegóły i granice dowodów:
-[raport naprawy](../architecture/scenario-controller-test-failures-2026-09-14.md).
+raport naprawy (history retained in Git).
 
 ### Pozostałe kroki i odroczenia — potwierdzenie 2026-09-14
 
 - Bieżący PR: R6-REV-1 poprawione — aktywacja połączenia i obu transportów Rabbit deleguje
   do WorkIoTypeParser. Regresje obejmują selektory ENV ze spacjami, wymagane ustawienia WORK
-  i działający CONTROL bez WORK. [Raport](../architecture/rabbit-workplane-r6-review-2026-09-14.md)
+  i działający CONTROL bez WORK. Raport (history retained in Git)
   zawiera dowody przed/po oraz odróżnia poprawkę od pierwotnego review. Starsze warunki
   innych adapterów I/O pozostają osobnym długiem, opisanym w raporcie.
   Odbiór poprawki i pełne E2E zakończone pozytywnie; nie ma otwartego blokera uzgodnionego zakresu Rabbit.

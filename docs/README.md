@@ -4,12 +4,9 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## Architecture
 
-Current refactor status: [functional module boundaries](inProgress/functional-module-boundaries.md).
-Rabbit/Artemis WorkPlane isolation is the baseline; Redis (F01) and Docker (F03)
-are implemented. Journal/filesystem, ClickHouse and remaining responsibilities are
-separate follow-ups. Redis/Docker integration is coordinated with PR #520.
-Older sequencing/design proposals are indexed in `docs/archive/pre-boundary-reset/README.md`;
-living contracts below continue to describe the supported system.
+Current delivery status and separate follow-ups: [functional module boundaries](inProgress/functional-module-boundaries.md).
+Selected F01–F09 implementation is complete. Use the living contracts below for
+supported behavior and [the delivery index](inProgress/README.md) for remaining work.
 
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
@@ -67,7 +64,6 @@ living contracts below continue to describe the supported system.
 - [Review Rules](REVIEW_RULES.md)
 - [Responsibility and SSOT Workflow](ai/RESPONSIBILITY_WORKFLOW.md)
 - [Runtime Responsibility Records](architecture/runtime-responsibilities.md)
-- [Intake Runtime Ownership](architecture/intake-runtime.md)
 - [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
 - [Independent Acceptance Framework](architecture/acceptance-tests.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)

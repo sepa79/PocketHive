@@ -5,13 +5,12 @@ This directory contains work that is not yet delivered. Completed baselines live
 The active architecture stream follows `docs/inProgress/work-plane-module-boundaries.md`:
 enforce Work Plane boundaries first, then Control Plane and remaining sinks. The backlog
 below is independent future work, not an alternative execution order. Superseded IO,
-transport, plugin, and CP repair plans are indexed in `docs/archive/pre-boundary-reset/README.md`.
+transport, plugin, and CP repair plans are indexed in Git history.
 
 ## Architecture and runtime
 
 - `auth-service-followups.md`
 - [Global SUTs, shared mocks and continuous plans (proposed)](global-sut-mocks-spec.md)
-- [Self-contained requirement intake skill and template review (proposed)](pockethive-intake-skills-proposal.md)
 - `network-proxy-followups.md`
 - `scenario-plan-followups.md`
 - `sut-environments-followups.md`

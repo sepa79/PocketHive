@@ -93,8 +93,7 @@ B01 establishes the first implemented module boundaries: `work-api`, `observabil
 `auth-contracts` and `templating-api` own shared contracts; `control-plane-core` has no
 Spring AMQP implementation. CP listeners use a dedicated factory and CP worker topology
 no longer reads Work settings. See the [SDK composition rules](sdk/worker-sdk-quickstart.md)
-and the execution record at `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b01/README.md`. The full Work/Control
-migration remains governed by the [boundary design](architecture/work-plane-boundaries.md).
+and the [boundary design](architecture/work-plane-boundaries.md).
 
 ### 2.2 Workers (Bees)
 - Declare their own control queues on startup using the `ph.control.<swarmId>.<role>.<instance>` naming pattern (instance ids embed the swarm prefix) and bind to `signal.config-update.{swarmId}.{role}.ALL`, `signal.config-update.{swarmId}.{role}.{instance}`, `signal.config-update.{swarmId}.ALL.ALL`, plus the corresponding status-request bindings (`signal.status-request.{swarmId}.{role}.ALL`, `signal.status-request.{swarmId}.{role}.{instance}`, `signal.status-request.{swarmId}.ALL.ALL`).
