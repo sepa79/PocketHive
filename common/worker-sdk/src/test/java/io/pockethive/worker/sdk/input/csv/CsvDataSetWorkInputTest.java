@@ -140,6 +140,57 @@ class CsvDataSetWorkInputTest {
             .hasMessageContaining(">= 100");
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void stopPreservesUnadmittedRowsEvenWhenImmediatelyRestarted(boolean restart) throws Exception {
+        var file = directory.resolve("batch.csv");
+        java.nio.file.Files.writeString(file, "name\nfirst\nsecond\nthird\n");
+        var properties = baseProperties();
+        properties.setFilePath(file.toString());
+        properties.setRatePerSec(5);
+        properties.setStartupDelaySeconds(600);
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(true);
+        when(state.rawConfig()).thenReturn(java.util.Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1)); listener.get().accept(state); return null;
+        }).when(control).registerStateListener(any(), any());
+        var items = new java.util.ArrayList<io.pockethive.work.api.WorkItem>();
+        var input = new CsvDataSetWorkInput(definition(), control, (name, item) -> {
+            items.add(item);
+            if (items.size() == 1) {
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    when(state.enabled()).thenReturn(false);
+                    listener.get().accept(state);
+                    if (restart) {
+                        when(state.enabled()).thenReturn(true);
+                        listener.get().accept(state);
+                    }
+                }).get(5, java.util.concurrent.TimeUnit.SECONDS);
+            }
+            return item;
+        }, new ControlPlaneIdentity("swarm-1", "role", "instance-1"), properties);
+        try {
+            input.start();
+            input.tick();
+            assertThat(items).hasSize(1);
+            if (!restart) {
+                input.tick();
+                assertThat(items).hasSize(1);
+                when(state.enabled()).thenReturn(true);
+                listener.get().accept(state);
+            }
+            input.tick();
+            assertThat(items).extracting(item -> item.headers().get("x-ph-csv-row"))
+                .containsExactly("1", "2", "3");
+            assertThat(items).extracting(item -> item.headers().get("x-ph-csv-remaining"))
+                .containsExactly(2L, 1L, 0L);
+        } finally { input.stop(); }
+    }
+
     private static CsvDataSetInputProperties baseProperties() {
         CsvDataSetInputProperties properties = new CsvDataSetInputProperties();
         properties.setFilePath("/app/scenario/users.csv");

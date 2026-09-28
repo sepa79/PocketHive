@@ -63,7 +63,10 @@ validation, repair inputs or turn a failed command into success.
   independently observed run identity. Old plan-only identities require explicit
   relocation with their evidence before finalisation; conflicting identities fail.
 - `traceability.instance` owns source references, proposals, questions and review
-  records. `requirements.openQuestions` is generated from unresolved questions.
+  records. Review content binds scalar values and JSON structure, including empty
+  containers and array/object types, except policy-excluded subtrees. A changed
+  digest requires renewed review; finalise never reconfirms it.
+  `requirements.openQuestions` is generated from unresolved questions.
 - Results own recorded observations and the existing overall decision rule.
   Unexecuted results never become measured outcomes during intake.
 - One YAML codec owns safe round-trip parsing, serialization and reload checks.

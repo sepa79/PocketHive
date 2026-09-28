@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Scheduler and CSV intake stop admitting the rest of a tick after STOP, including immediate STOP→START, while already admitted work finishes.
+
+- Preserve execution and failure reporting for already-admitted WorkItems after STOP; input admission remains the sole gate and ACK-on-admission is unchanged.
+- Bind intake review digests to JSON container types and empty containers, preventing structural edits from retaining confirmed review.
+
 - Use the existing PocketHive Bearer session for TCP mock acceptance diagnostics; remove obsolete Basic-auth target settings.
 
 - Include configured clientSecret in OAuth password-grant token requests and reject secrets without clientId during profile preparation (PR #512).

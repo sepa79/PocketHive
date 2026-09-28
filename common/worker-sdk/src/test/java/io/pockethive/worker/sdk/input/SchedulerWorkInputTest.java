@@ -180,6 +180,53 @@ class SchedulerWorkInputTest {
         }
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void stopDiscardsRemainingBatchEvenWhenImmediatelyRestarted(boolean restart) throws Exception {
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var listener = new AtomicReference<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> { listener.set(call.getArgument(1)); return null; })
+            .when(control).registerStateListener(anyString(), any());
+        var definition = new WorkerDefinition("generator", Object.class, WorkerInputType.SCHEDULER,
+            "generator", WorkIoBindings.none(), Object.class, SchedulerInputProperties.class,
+            WorkOutputConfig.class, WorkerOutputType.NONE, null, Set.of());
+        var settings = new SchedulerInputProperties();
+        settings.setRatePerSec(5);
+        settings.setMaxMessages(3);
+        settings.setInitialDelayMs(600_000);
+        var items = new ArrayList<WorkItem>();
+        var input = SchedulerWorkInput.builder().workerDefinition(definition).controlPlaneRuntime(control)
+            .identity(new ControlPlaneIdentity("swarm", "generator", "instance"))
+            .schedulerState(new RateSchedulePolicy()).scheduling(settings)
+            .workerRuntime((name, item) -> {
+                items.add(item);
+                if (items.size() == 1) {
+                    java.util.concurrent.CompletableFuture.runAsync(() -> {
+                        var disabled = snapshot(Map.of());
+                        when(disabled.enabled()).thenReturn(false);
+                        listener.get().accept(disabled);
+                        if (restart) listener.get().accept(snapshot(Map.of()));
+                    }).get(5, java.util.concurrent.TimeUnit.SECONDS);
+                }
+                return item;
+            }).build();
+        input.start();
+        try {
+            listener.get().accept(snapshot(Map.of()));
+            input.tick(0);
+            assertThat(items).hasSize(1);
+            if (!restart) {
+                input.tick(500);
+                assertThat(items).hasSize(1);
+                listener.get().accept(snapshot(Map.of()));
+            }
+            input.tick(1_000);
+            input.tick(2_000);
+            assertThat(items).extracting(item -> item.headers().get("x-ph-scheduler-remaining"))
+                .containsExactly(2L, 1L, 0L);
+        } finally { input.stop(); }
+    }
+
     private WorkerControlPlaneRuntime.WorkerStateSnapshot snapshot(Map<String, Object> settings) {
         var snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
         when(snapshot.enabled()).thenReturn(true);

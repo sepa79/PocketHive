@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
  *
  * @param <C> configuration type managed by the associated scheduler state
  * <p>
- * Responsibility: coordinate scheduled intake, worker-state projection and dispatch.
+ * Responsibility: coordinate per-item scheduled admission, worker-state projection and dispatch.
  * Must not: own run counters, parse scheduler controls or implement rate/trigger policies.
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
@@ -62,6 +62,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private SchedulingState<C> schedulingState;
     private final Object projectionLock = new Object();
     private long projectionRevision;
+    private long intakeGeneration;
     private volatile boolean running;
     private volatile boolean listenersRegistered;
     private volatile StatusPublisher statusPublisher;
@@ -92,13 +93,13 @@ public final class SchedulerWorkInput<C> implements WorkInput {
      * @param nowMillis monotonic time in milliseconds
      */
     public void tick(long nowMillis) {
-        if (!running) {
-            if (log.isDebugEnabled()) {
-                log.debug("{} scheduler input not running; skipping tick {}", workerDefinition.beanName(), nowMillis);
-            }
-            return;
+        final long generation;
+        int quota;
+        synchronized (projectionLock) {
+            if (!running || !schedulingState.enabled()) return;
+            generation = intakeGeneration;
+            quota = schedulerState.plan(nowMillis);
         }
-        int quota = schedulerState.plan(nowMillis);
         if (quota <= 0) {
             if (log.isDebugEnabled()) {
                 log.debug("{} scheduler tick {} yielded no work (quota={})", workerDefinition.beanName(), nowMillis, quota);
@@ -120,6 +121,10 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             log.debug("{} scheduler dispatching {} invocation(s) at tick {}", workerDefinition.beanName(), quota, nowMillis);
         }
         for (int i = 0; i < quota; i++) {
+            synchronized (projectionLock) {
+                if (!running || !schedulingState.enabled() || generation != intakeGeneration) break;
+                // Admission precedes seed creation; accepted work may finish after STOP.
+            }
             WorkItem seed = seedFactory.apply(workerDefinition, identity);
             long remainingAfter = runState.recordDispatch();
             if (remainingAfter >= 0L) {
@@ -178,7 +183,10 @@ public final class SchedulerWorkInput<C> implements WorkInput {
 
     @Override
     public synchronized void stop() {
-        running = false;
+        synchronized (projectionLock) {
+            running = false;
+            intakeGeneration++;
+        }
         if (schedulerExecutor != null) {
             schedulerExecutor.shutdownNow();
             schedulerExecutor = null;
@@ -203,6 +211,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             schedulerState.update(next);
             schedulingState = next;
             boolean currentlyEnabled = next.enabled();
+            if (previouslyEnabled && !currentlyEnabled) intakeGeneration++;
             if (previouslyEnabled != currentlyEnabled && log.isInfoEnabled()) {
                 log.info(
                     "{} work lifecycle {} (instance={})",

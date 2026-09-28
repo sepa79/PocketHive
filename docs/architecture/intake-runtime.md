@@ -126,7 +126,9 @@ material-fact coverage against `provenance-policy.json`; `evidence_references`
 enumerates only declared evidence links for evidence/portability workflows;
 `review_digest.review_digest` binds recorded review to material content and ledger.
 **Effect:** `Validation` exposes missing/stale evidence; changed content cannot
-silently retain a current review digest. Recorded review is not authenticated approval.
+silently retain a current review digest. The digest records container types (including empty
+objects and arrays), escaped member paths and scalar values; policy-excluded subtrees
+remain excluded. Recorded review is not authenticated approval.
 **Must not:** interpret source meaning, fetch remote evidence or grant approval.
 **Verification:** `test_evidence.py`, `test_qa_existing_gates.py`, `test_portability.py`.
 

@@ -34,3 +34,20 @@ class HandoffTests(CliTestCase):
         self.assertNotEqual("ok", output["status"])
         self.assertTrue(any("review" in issue["pointer"].lower() for issue in output["errors"] + output["gaps"]),
                         output["errors"] + output["gaps"])
+
+    def test_empty_container_change_invalidates_confirmed_review_after_finalise(self):
+        prepare_complete_intake(self)
+        requirements = self.read_document("requirements.yaml")
+        requirements["templates"][0]["requestSample"] = {"items": []}
+        self.write_document("requirements.yaml", requirements)
+        _, prepared = self.invoke("finalise", "--documents", self.documents, expected_exit=0)
+        trace = self.read_document("traceability.yaml")
+        trace["instance"]["review"]["contentSha256"] = prepared["reviewContentSha256"]
+        self.write_document("traceability.yaml", trace)
+        self.invoke("finalise", "--documents", self.documents, expected_exit=0)
+        self.invoke("validate", "--documents", self.documents, "--stage", "handoff", expected_exit=0)
+        requirements["templates"][0]["requestSample"] = {"items": {}}
+        self.write_document("requirements.yaml", requirements)
+        self.invoke("finalise", "--documents", self.documents, expected_exit=0)
+        _, result = self.invoke("validate", "--documents", self.documents, "--stage", "handoff", expected_exit=2)
+        self.assertIn("STALE_REVIEW", {issue["code"] for issue in result["errors"]})

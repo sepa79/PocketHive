@@ -26,7 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Responsibility: coordinate CSV intake enablement, timing and worker dispatch.
+ * Responsibility: coordinate per-row CSV admission, timing and worker dispatch.
  * Must not: read/format CSV files, own the dataset cursor or accepted worker configuration.
  * Consumes: RESP-WORK-CSV-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-work-csv-settings.
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
@@ -49,6 +49,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
     private volatile ScheduledExecutorService schedulerExecutor;
     private volatile long tickIntervalMs;
     private double carryOver;
+    private long intakeGeneration;
     private volatile StatusPublisher statusPublisher;
     private final AtomicLong dispatchedCount = new AtomicLong();
     private volatile long lastDispatchAtMillis;
@@ -100,6 +101,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
     @Override
     public synchronized void stop() {
         running = false;
+        intakeGeneration++;
         if (schedulerExecutor != null) {
             schedulerExecutor.shutdownNow();
             schedulerExecutor = null;
@@ -108,17 +110,25 @@ public final class CsvDataSetWorkInput implements WorkInput {
     }
 
     public void tick() {
-        if (!running || !enabled) {
-            carryOver = 0.0;
-            return;
+        final long generation;
+        final int quota;
+        synchronized (this) {
+            if (!running || !enabled) {
+                carryOver = 0.0;
+                return;
+            }
+            generation = intakeGeneration;
+            quota = planInvocations();
         }
-
-        int quota = planInvocations();
         if (quota <= 0) return;
 
         long now = System.currentTimeMillis();
         for (int i = 0; i < quota; i++) {
-            int rowIdx = dataset.nextRowIndex(settings.rotate());
+            final int rowIdx;
+            synchronized (this) {
+                if (!running || !enabled || generation != intakeGeneration) break;
+                rowIdx = dataset.nextRowIndex(settings.rotate());
+            }
             if (rowIdx < 0) {
                 log.info("{} csv exhausted (rotate=false)", workerDefinition.beanName());
                 break;
@@ -178,6 +188,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
 
     private void registerStateListener() {
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
+          synchronized (this) {
             boolean previouslyEnabled = enabled;
             boolean newEnabled = snapshot.enabled();
 
@@ -189,10 +200,12 @@ public final class CsvDataSetWorkInput implements WorkInput {
             } else if (!newEnabled && previouslyEnabled) {
                 log.info("{} csv dataset disabled by control plane", workerDefinition.beanName());
                 enabled = false;
+                intakeGeneration++;
                 carryOver = 0.0;
             } else {
                 enabled = newEnabled;
             }
+          }
         });
     }
 

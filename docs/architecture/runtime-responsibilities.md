@@ -1113,7 +1113,7 @@ second effective-policy value or default outside accepted configuration.
 
 DefaultWorkerRuntime selects WorkerInvocation and routes its non-null result to WorkOutputRegistry; WorkerInvocation executes the function/interceptor chain. WorkMessageDispatcher is the transport-independent dispatch hook.
 
-Input adapters dispatch through WorkerRuntime; invocation context carries values, not control authority.
+Input adapters own admission and dispatch accepted work through WorkerRuntime; invocation context carries values, not control authority. STOP closes input admission. WorkerInvocation must execute already-admitted work even if enabled becomes false before invocation; it must not silently discard it or create a second admission gate.
 
 **Forbidden:** reimplement service business logic or introduce a second output publication for the same result.
 
@@ -1211,6 +1211,11 @@ selected `ScheduledInvocationPolicy` and callbacks. It projects worker snapshots
 into ordered `SchedulingState` revisions and invokes the policy's update/plan port.
 Runtime controls and finite-run accounting delegate to RESP-WORK-SCHEDULER-RUN.
 Its builder consumes validated timing without local defaults or clamping.
+
+Admission is checked for each item before seed creation. STOP invalidates the
+remaining tick quota, including when START immediately follows; an admitted item
+finishes without a second enablement check in WorkerRuntime. Control updates do
+not wait for worker execution.
 
 A tick obtains policy quota before applying the current run limit. Seed creation
 precedes counting; counting precedes dispatch. Worker/result-handler failures
@@ -1479,6 +1484,11 @@ RESP-WORK-CSV-SETTINGS for its read-only resolved settings projection; bootstrap
 and raw updates delegate parsing before replacement. Accepted configuration stays
 with WorkerState. Timing/rate validation and seconds-to-milliseconds conversion
 remain with RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE.
+
+Each row is admitted under the input lifecycle lock before advancing the cursor;
+worker execution runs outside that lock. STOP invalidates the rest of the tick,
+even across immediate re-enable, without consuming unadmitted rows. An already
+admitted row may finish after STOP.
 
 Dataset loading, formatting and cursor operations delegate to
 RESP-WORK-CSV-DATASET. Loading remains lazy on enablement. Disable/re-enable does

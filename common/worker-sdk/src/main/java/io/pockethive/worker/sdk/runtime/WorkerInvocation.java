@@ -13,7 +13,7 @@ import java.util.Objects;
  * Encapsulates invocation of the worker implementation.
  * <p>
  * Responsibility: execute one worker function through the configured interceptor chain.
- * Must not: reimplement service business logic or introduce a second output publication for the same result.
+ * Must not: recheck input admission, reimplement service logic or publish results independently.
  * Contract: RESP-WORK-INVOCATION — docs/architecture/runtime-responsibilities.md#resp-work-invocation.
  */
 final class WorkerInvocation {
@@ -39,11 +39,7 @@ final class WorkerInvocation {
     }
 
     WorkItem invoke(WorkItem message) throws Exception {
-        if (!workerState.enabled()) {
-            // A disabled worker is a normal control-plane state (e.g., swarm stop / pause).
-            // Do not treat this as a runtime failure and do not emit runtime.exception alerts.
-            return null;
-        }
+        // Input owns admission. STOP must not discard work already accepted for execution.
         WorkerContext context = contextFactory.createContext(workerDefinition, workerState, message);
         WorkerInvocationContext invocationContext = new WorkerInvocationContext(workerDefinition, workerState, context, message);
         var statusPublisher = context.statusPublisher();
