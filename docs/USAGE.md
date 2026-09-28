@@ -27,6 +27,7 @@ Install:
 
 - Docker with Docker Compose;
 - Java 21;
+- OpenSSL for the independent OAuth signature tests;
 - `curl` and a Bash-compatible shell; and
 - VS Code 1.85 or later, Node.js, and npm when building the companion from
   source.
@@ -39,8 +40,13 @@ VS Code's **Extensions: Install from VSIX...** command.
 From the repository root, run:
 
 ```bash
+export AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl
 ./build-hive.sh
 ```
+
+Set `AUTH_OPENSSL_TEST_EXECUTABLE` to the absolute executable path on your machine
+(the example matches Linux/WSL and CI). The full test run requires it; an unset
+value fails the OAuth signature test setup.
 
 This full build includes `auth-service` and the Java `pockethive-mcp` service.
 It builds their JARs with the repository-pinned Maven wrapper, builds images and

@@ -91,7 +91,10 @@ class WorkerHistoryPolicyTest {
         update(Map.of("enabled", true, "historyPolicy", HistoryPolicy.LATEST_ONLY.name()));
         update(Map.of("probe", "changed"));
         update(Map.of("enabled", false));
-        assertThat(invocation().invoke(input())).isNull();
+        assertThat(runtime.workerEnabled(definition.beanName())).isFalse();
+        // Invocation handles already-admitted work, including after input admission closes.
+        assertThat(invocation().invoke(input()).steps()).extracting(WorkStep::payload)
+            .containsExactly("processed");
         update(Map.of("enabled", true));
         assertThat(invocation().invoke(input()).steps()).hasSize(1);
         update(Map.of("workers", Map.of(definition.beanName(), Map.of())));
