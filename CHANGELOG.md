@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.36] - 2026-09-29
+
 - Remove obsolete boundary scan snapshots, superseded design packs and closed
   review reports; simplify the delivery index and retain current acceptance evidence.
 
@@ -104,7 +106,6 @@ All notable changes to this project will be documented in this file.
 - PH UI: reject unknown network binding modes instead of assuming DIRECT; display
   unavailable, loading and missing binding observations explicitly.
 
-## [0.15.36]
 Timestamp: 2026-09-22T00:00:00Z
 
 - OAuth ingress: preserve the public host/port and discard competing forwarded

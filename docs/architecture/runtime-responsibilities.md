@@ -1386,8 +1386,9 @@ For the application callers and ordering of enable/disable callbacks, see
 inline worker dispatch, retry of accepted work, completion-based ACK or a drain policy.
 
 **Required effect:** the same SDK execution path accepts input from Rabbit, Artemis or a test-only stateful
-in-memory channel; disabled workers return null, worker/decode failures are reported and swallowed,
-and successful admission returns without waiting for task completion, even at maxInFlight=1.
+in-memory channel; disabled inputs reject new admission; already-admitted work continues.
+Worker/decode failures are reported and swallowed, and successful admission returns without
+waiting for task completion, even at maxInFlight=1.
 WorkNotAcceptedException is the neutral not-submitted outcome, not a worker failure.
 MessageWorkExecutor owns capacity, pause/resume and executor lifetime. Pausing wakes
 capacity waiters before channel stop; accepted tasks are not cancelled. Core executor
