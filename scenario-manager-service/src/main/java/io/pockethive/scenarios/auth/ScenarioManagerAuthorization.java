@@ -2,25 +2,19 @@ package io.pockethive.scenarios.auth;
 
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHiveGrantChecks;
-import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHivePermissionSets;
 import io.pockethive.scenarios.ScenarioAccessDescriptor;
 import java.util.Set;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: apply existing service request and resource authorization through shared grant checks.
+ * Must not: own grant storage or duplicate shared permission combinations.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access.
+ */
 @Component
 public class ScenarioManagerAuthorization {
-    private static final Set<String> READ_PERMISSIONS = Set.of(
-        PocketHivePermissionIds.VIEW,
-        PocketHivePermissionIds.RUN,
-        PocketHivePermissionIds.ALL
-    );
-    private static final Set<String> RUN_PERMISSIONS = Set.of(
-        PocketHivePermissionIds.RUN,
-        PocketHivePermissionIds.ALL
-    );
-    private static final Set<String> MANAGE_PERMISSIONS = Set.of(PocketHivePermissionIds.ALL);
-
     public boolean isAllowed(AuthenticatedUserDto user, String method, String path) {
         if (user == null) {
             return true;
@@ -29,52 +23,52 @@ public class ScenarioManagerAuthorization {
             return true;
         }
         if (HttpMethod.GET.matches(method)) {
-            return hasAnyPermission(user, READ_PERMISSIONS);
+            return hasAnyPermission(user, PocketHivePermissionSets.READ);
         }
         if (requiresRunPermission(method, path)) {
-            return hasAnyPermission(user, RUN_PERMISSIONS);
+            return hasAnyPermission(user, PocketHivePermissionSets.RUN);
         }
-        return hasAnyPermission(user, MANAGE_PERMISSIONS);
+        return hasAnyPermission(user, PocketHivePermissionSets.MANAGE);
     }
 
     public boolean canRead(AuthenticatedUserDto user, ScenarioAccessDescriptor access) {
-        return hasPermissionInScope(user, READ_PERMISSIONS, access);
+        return hasPermissionInScope(user, PocketHivePermissionSets.READ, access);
     }
 
     public boolean canRun(AuthenticatedUserDto user, ScenarioAccessDescriptor access) {
-        return hasPermissionInScope(user, RUN_PERMISSIONS, access);
+        return hasPermissionInScope(user, PocketHivePermissionSets.RUN, access);
     }
 
     public boolean canManage(AuthenticatedUserDto user, ScenarioAccessDescriptor access) {
-        return hasPermissionInScope(user, MANAGE_PERMISSIONS, access);
+        return hasPermissionInScope(user, PocketHivePermissionSets.MANAGE, access);
     }
 
     public boolean canManageDeployment(AuthenticatedUserDto user) {
         if (user == null) {
             return true;
         }
-        return PocketHiveGrantChecks.hasPermissionInScope(user, MANAGE_PERMISSIONS, null, null);
+        return PocketHiveGrantChecks.hasPermissionInScope(user, PocketHivePermissionSets.MANAGE, null, null);
     }
 
     public boolean canManagePocketHive(AuthenticatedUserDto user) {
         if (user == null) {
             return true;
         }
-        return hasAnyPermission(user, MANAGE_PERMISSIONS);
+        return hasAnyPermission(user, PocketHivePermissionSets.MANAGE);
     }
 
     public boolean canReadPocketHive(AuthenticatedUserDto user) {
         if (user == null) {
             return true;
         }
-        return hasAnyPermission(user, READ_PERMISSIONS);
+        return hasAnyPermission(user, PocketHivePermissionSets.READ);
     }
 
     public boolean canManageFolder(AuthenticatedUserDto user, String folderPath) {
         if (user == null) {
             return true;
         }
-        return PocketHiveGrantChecks.hasPermissionInScope(user, MANAGE_PERMISSIONS, null, folderPath);
+        return PocketHiveGrantChecks.hasPermissionInScope(user, PocketHivePermissionSets.MANAGE, null, folderPath);
     }
 
     public String denialMessage(String method, String path) {

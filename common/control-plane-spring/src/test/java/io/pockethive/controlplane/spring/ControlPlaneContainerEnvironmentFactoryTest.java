@@ -26,8 +26,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         io.pockethive.controlplane.spring.ControllerSettings settings =
             new io.pockethive.controlplane.spring.ControllerSettings(
                 metrics,
-                "run-1",
-                "/var/run/docker.sock");
+                "run-1");
         RabbitConnectionSettings rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
@@ -60,7 +59,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         assertThat(env).containsEntry("POCKETHIVE_METRICS_ROLE", "swarm-controller");
         assertThat(env).containsEntry("POCKETHIVE_METRICS_INSTANCE", "controller-a");
         assertThat(env).containsEntry("SPRING_RABBITMQ_HOST", "rabbitmq");
-        assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH", "/var/run/docker.sock");
     }
 
     @Test
@@ -115,8 +113,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             controlPlaneProperties,
             new io.pockethive.controlplane.spring.ControllerSettings(
                 metrics,
-                "run-1",
-                "/var/run/docker.sock"),
+                "run-1"),
             rabbitConnection);
 
         assertThat(controllerEnv).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
@@ -159,7 +156,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         var control = new ControlPlaneProperties();
         control.setExchange("ph.control");
         control.setControlQueuePrefix("ph.control");
-        var settings = new ControllerSettings(disabledMetrics(Duration.ofSeconds(30)), "run", "/var/run/docker.sock");
+        var settings = new ControllerSettings(disabledMetrics(Duration.ofSeconds(30)), "run");
         var environment = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
             "swarm", "controller", "swarm-controller", control, settings, rabbitConnection());
         assertThat(environment).containsEntry("SPRING_RABBITMQ_HOST", "rabbitmq");

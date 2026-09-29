@@ -31,3 +31,12 @@ Concrete, step-by-step usage instructions for AI contributors:
 - `docs/ai/CLEARING_EXPORT_WORKER_PLAYBOOK.md`
 
 See the historical implementation plan in `docs/archive/clearing-export-worker-v1.md` and the canonical structured schema contract in `docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md`.
+
+### Runtime-owned output directory
+
+All exports are written under the existing shared runtime mount, scoped to swarm,
+run and worker instance by `RuntimeFilesystemLayout`. The directory is not a scenario
+setting: `localTargetDir` has been removed, including from live configuration updates.
+File names and `localManifestPath` must be relative and remain inside this directory.
+Normal swarm REMOVE deletes the output with the rest of the swarm runtime tree;
+collect any needed file contents before removing the swarm.

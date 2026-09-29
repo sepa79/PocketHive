@@ -1,6 +1,7 @@
 package io.pockethive.work.config.composition;
 
 import io.pockethive.rabbit.api.RabbitConfiguration;
+import io.pockethive.artemis.api.ArtemisConfiguration;
 import io.pockethive.redis.config.RedisConfigurationParser;
 import io.pockethive.redis.config.RedisWorkInputMutationPolicy;
 import io.pockethive.redis.config.RedisWorkInputSettingsParser;
@@ -40,22 +41,26 @@ public final class CurrentWorkConfigurationProviders {
 
         inputSettingsParsers = List.of(
             RabbitConfiguration.inputParser(),
+            ArtemisConfiguration.inputParser(),
             new RedisWorkInputSettingsParser(redis),
             new CsvWorkInputSettingsParser(csv),
             new SchedulerWorkInputSettingsParser(scheduler)
         );
         outputSettingsParsers = List.of(
             RabbitConfiguration.outputParser(),
+            ArtemisConfiguration.outputParser(),
             new RedisWorkOutputSettingsParser(redis)
         );
         inputMutationPolicies = List.of(
             RabbitConfiguration.inputMutationPolicy(),
+            ArtemisConfiguration.inputMutationPolicy(),
             new RedisWorkInputMutationPolicy(redis),
             new CsvWorkInputMutationPolicy(csv),
             new SchedulerWorkInputMutationPolicy()
         );
         outputMutationPolicies = List.of(
             RabbitConfiguration.outputMutationPolicy(),
+            ArtemisConfiguration.outputMutationPolicy(),
             new RedisWorkOutputMutationPolicy(),
             new NoOutputMutationPolicy()
         );

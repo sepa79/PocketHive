@@ -20,7 +20,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-/** Single application service for reserving and dispatching Orchestrator-owned operations. */
+/**
+ * Responsibility: reserve and dispatch Orchestrator-owned operations through the canonical coordinator.
+ * Must not: execute resource cleanup or decide convergence postconditions.
+ * Contract: RESP-SWARM-COMMAND-ADMISSION — docs/architecture/runtime-responsibilities.md#resp-swarm-command-admission.
+ */
 @Component
 public final class OperationDispatchService {
 
@@ -79,8 +83,18 @@ public final class OperationDispatchService {
     Objects.requireNonNull(execution, "execution");
     Objects.requireNonNull(runtime, "runtime");
     Instant now = Instant.now();
-    var reservation = operations.reserve(
-        swarmId, type, target, runtime, correlationId, idempotencyKey, now, now.plus(timeout));
+    SwarmOperationCoordinator.Reservation reservation;
+    synchronized (operations) {
+      if (type != OperationType.CREATE) {
+        Swarm current = swarms.find(swarmId)
+            .orElseThrow(() -> new IllegalStateException("Swarm is not registered: " + swarmId));
+        if (!current.runtimeMetadata().equals(runtime)) {
+          throw new IllegalStateException("Swarm identity changed before operation admission: " + swarmId);
+        }
+      }
+      reservation = operations.reserve(
+          swarmId, type, target, runtime, correlationId, idempotencyKey, now, now.plus(timeout));
+    }
     if (reservation.reused()) {
       return reservation;
     }

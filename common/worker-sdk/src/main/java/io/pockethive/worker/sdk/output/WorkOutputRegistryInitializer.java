@@ -52,6 +52,7 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
             throw new IllegalStateException("Multiple WorkOutputFactory matches for worker " + definition.beanName()
                 + ": " + matches.stream().map(factory -> factory.getClass().getName()).toList());
         }
+        definition.outputType().requireDelivery(definition.io().outputDelivery());
         WorkOutputConfig config = configBinder.bind(definition.outputType(), definition.outputConfigType());
         WorkOutput output = matches.getFirst().create(definition, config);
         outputRegistry.register(definition, output);

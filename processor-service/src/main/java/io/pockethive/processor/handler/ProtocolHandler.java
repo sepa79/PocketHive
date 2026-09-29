@@ -6,10 +6,11 @@ import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 
 /**
- * Responsibility: define one protocol-specific request execution contract.
+ * Responsibility: define protocol-specific request execution and owned-resource release.
  * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
  */
-public interface ProtocolHandler {
+public interface ProtocolHandler extends AutoCloseable {
+  @Override void close();
   WorkItem invoke(WorkItem message, JsonNode envelope, ProcessorWorkerConfig config, WorkerContext context) throws Exception;
 }

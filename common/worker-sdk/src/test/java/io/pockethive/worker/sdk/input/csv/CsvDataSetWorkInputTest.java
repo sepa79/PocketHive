@@ -66,6 +66,50 @@ class CsvDataSetWorkInputTest {
     }
 
     @Test
+    void reloadsOnRestartWithoutResettingCursorOrRetryingFailedDispatch() throws Exception {
+        var file = directory.resolve("restart.csv");
+        java.nio.file.Files.writeString(file, "name\nfirst\nsecond\nthird\n");
+        var properties = baseProperties();
+        properties.setFilePath(file.toString());
+        properties.setStartupDelaySeconds(600);
+        var items = new java.util.ArrayList<io.pockethive.work.api.WorkItem>();
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(true);
+        when(state.rawConfig()).thenReturn(java.util.Map.of());
+        doAnswer(call -> {
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot> listener = call.getArgument(1);
+            listener.accept(state);
+            return null;
+        }).when(control).registerStateListener(any(), any());
+        var input = new CsvDataSetWorkInput(definition(), control, (name, item) -> {
+            items.add(item);
+            if (items.size() == 1) throw new IllegalStateException("template failure");
+            return item;
+        }, new ControlPlaneIdentity("swarm-1", "role", "instance-1"), properties);
+        try {
+            input.start();
+            assertThatCode(input::tick).doesNotThrowAnyException();
+            input.stop();
+            java.nio.file.Files.writeString(file, "name\nchanged-first\nchanged-second\nchanged-third\n");
+            input.start();
+            input.tick();
+            input.tick();
+            input.tick();
+            assertThat(items).extracting(io.pockethive.work.api.WorkItem::asString)
+                .containsExactly("{\"name\":\"first\"}", "{\"name\":\"changed-second\"}",
+                    "{\"name\":\"changed-third\"}");
+            assertThat(items).extracting(item -> item.headers().get("x-ph-csv-row"))
+                .containsExactly("1", "2", "3");
+            assertThat(items).extracting(item -> item.headers().get("x-ph-csv-remaining"))
+                .containsExactly(2L, 1L, 0L);
+            assertThat(items).allSatisfy(item -> assertThat(item.headers())
+                .containsEntry("x-ph-csv-file", file.toString())
+                .containsEntry("swarmId", "swarm-1").containsEntry("instanceId", "instance-1"));
+        } finally { input.stop(); }
+    }
+
+    @Test
     void validatesDirectRuntimeConfigWithHighRateAndNoBusinessUpperBound() {
         CsvDataSetInputProperties properties = baseProperties();
         properties.setRatePerSec(2500.5);
@@ -94,6 +138,57 @@ class CsvDataSetWorkInputTest {
             .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("inputs.csv.tickIntervalMs")
             .hasMessageContaining(">= 100");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void stopPreservesUnadmittedRowsEvenWhenImmediatelyRestarted(boolean restart) throws Exception {
+        var file = directory.resolve("batch.csv");
+        java.nio.file.Files.writeString(file, "name\nfirst\nsecond\nthird\n");
+        var properties = baseProperties();
+        properties.setFilePath(file.toString());
+        properties.setRatePerSec(5);
+        properties.setStartupDelaySeconds(600);
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(true);
+        when(state.rawConfig()).thenReturn(java.util.Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1)); listener.get().accept(state); return null;
+        }).when(control).registerStateListener(any(), any());
+        var items = new java.util.ArrayList<io.pockethive.work.api.WorkItem>();
+        var input = new CsvDataSetWorkInput(definition(), control, (name, item) -> {
+            items.add(item);
+            if (items.size() == 1) {
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    when(state.enabled()).thenReturn(false);
+                    listener.get().accept(state);
+                    if (restart) {
+                        when(state.enabled()).thenReturn(true);
+                        listener.get().accept(state);
+                    }
+                }).get(5, java.util.concurrent.TimeUnit.SECONDS);
+            }
+            return item;
+        }, new ControlPlaneIdentity("swarm-1", "role", "instance-1"), properties);
+        try {
+            input.start();
+            input.tick();
+            assertThat(items).hasSize(1);
+            if (!restart) {
+                input.tick();
+                assertThat(items).hasSize(1);
+                when(state.enabled()).thenReturn(true);
+                listener.get().accept(state);
+            }
+            input.tick();
+            assertThat(items).extracting(item -> item.headers().get("x-ph-csv-row"))
+                .containsExactly("1", "2", "3");
+            assertThat(items).extracting(item -> item.headers().get("x-ph-csv-remaining"))
+                .containsExactly(2L, 1L, 0L);
+        } finally { input.stop(); }
     }
 
     private static CsvDataSetInputProperties baseProperties() {

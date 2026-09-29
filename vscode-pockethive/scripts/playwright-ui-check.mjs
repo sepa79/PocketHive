@@ -26,6 +26,10 @@ const endpoint = 'http://localhost:8088/mcp';
 const connectionScopes = [...POCKETHIVE_COMPANION_SCOPES];
 const TABS = ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'];
 const findings = [];
+const fixtureArguments = process.argv.slice(2);
+assert.equal(fixtureArguments.length, 2, 'Usage: npm run ui:check -- <template-id> <sut-id|NONE>');
+assert.ok(fixtureArguments.every(value => value.trim().length > 0), 'Fixture identifiers must not be empty');
+const [fixtureTemplateId, fixtureSutId] = fixtureArguments;
 
 await mkdir(auditDirectory, { recursive: true });
 for (const name of await readdir(auditDirectory)) {
@@ -93,6 +97,16 @@ try {
     mcpUrl: endpoint,
     endpointSecurityMode: 'LOCAL_LOOPBACK_HTTP',
   });
+
+  await show(page, { ...base, page: 'add', draft, busy: true,
+    attempt: { ...editing, state: 'DISCOVERING' } }, '02-endpoint-discovery');
+  await page.getByText('Checking endpoint…', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await page.getByRole('button', { name: 'Save & open', exact: true }).isEnabled(), false);
+  await clickAndExpectMessage(page, 'Cancel connection', { type: 'cancelConnection' });
+  await show(page, { ...base, page: 'add', draft,
+    attempt: { ...editing, state: 'CANCELLED' } }, '02-discovery-cancelled');
+  assert.equal(await page.getByRole('button', { name: 'Connect', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Sign in again', exact: true }).count(), 0);
 
   const ready = {
     profileId: profile.id,
@@ -236,6 +250,16 @@ try {
       journalSwarmId: local.journal.swarmId,
       journalResult: local.journal.data,
     }, '08-workspace-journal-selected');
+    const exactSwarm = page.getByLabel('Exact swarm', { exact: true });
+    assert.equal(await exactSwarm.inputValue(), local.journal.swarmId);
+    await exactSwarm.press('End');
+    assert.equal(await exactSwarm.evaluate(input => input.selectionEnd), local.journal.swarmId.length);
+    assert.equal(await exactSwarm.evaluate(input =>
+      input.scrollWidth <= input.clientWidth + 1 || input.scrollLeft > 0), true,
+    'long exact swarm identifiers must remain reachable by keyboard scrolling');
+    await exactSwarm.press('Home');
+    assert.equal(await exactSwarm.evaluate(input => input.selectionStart), 0);
+    await exactSwarm.press('Tab');
   }
   await selectTab(page, workspaceBase, 'Debug', local.swarms, '09-workspace-debug');
 
@@ -894,7 +918,7 @@ try {
   });
   await page.getByText('2 cleanup candidates', { exact: true }).waitFor({ state: 'visible' });
   assert.equal(await page.getByRole('button', { name: 'Execute cleanup', exact: true }).isDisabled(), true,
-    'cleanup execution must stay disabled without governed HiveGate approval');
+    'cleanup execution must stay disabled in the plan-only companion');
   await page.locator('.debug-maintenance').scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(auditDirectory, '16a-selected-debug-cleanup-plan.png') });
   await dispatch(page, { ...workspaceBase, activeTab: 'Debug', workspaceData: interactionSwarms });
@@ -1090,7 +1114,9 @@ async function inspectState(page, state) {
     const clipped = visible.filter(node => {
       if (node.matches('pre, .truncate, .tabs, .sr-only') || node.closest('.tabs, .sr-only')) return false;
       const style = getComputedStyle(node);
-      const intentionallyScrollable = ['auto', 'scroll'].includes(style.overflowX)
+      const nativeTextInput = node instanceof HTMLInputElement
+        && ['text', 'search', 'url', 'email', 'password'].includes(node.type);
+      const intentionallyScrollable = nativeTextInput || ['auto', 'scroll'].includes(style.overflowX)
         || ['auto', 'scroll'].includes(style.overflowY);
       const clips = ['hidden', 'clip'].includes(style.overflowX)
         || ['hidden', 'clip'].includes(style.overflowY);
@@ -1293,7 +1319,13 @@ async function connectLocalMcp(browser) {
   assert.equal(replay.status, 400, 'a retired refresh token must be rejected');
   assert.equal((await replay.json()).error, 'invalid_grant');
 
-  const client = new McpHttpClient(manifest.version);
+  const client = new McpHttpClient(manifest.version, async (url, init) => {
+    if (typeof init?.body === 'string') {
+      const request = JSON.parse(init.body);
+      console.log(`UI audit MCP: ${request.method}${request.params?.name ? ` ${request.params.name}` : ''}`);
+    }
+    return fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
+  });
   const evidence = await client.connect(endpoint, refreshed.access_token);
   const toolList = await client.listTools();
   const tools = Array.isArray(toolList?.tools) ? toolList.tools : [];
@@ -1602,7 +1634,7 @@ async function connectLocalMcp(browser) {
 }
 
 async function probeDisposableRuntime(client, scenarios) {
-  const templateId = 'capability-controls-io-matrix';
+  const templateId = fixtureTemplateId;
   assert.equal(scenarios.some?.(scenario => scenario?.id === templateId && scenario?.defunct !== true), true,
     `live Scenario Manager must expose the ${templateId} acceptance template`);
   const swarmId = `mcp-acceptance-${randomBytes(6).toString('hex')}`;
@@ -1614,7 +1646,7 @@ async function probeDisposableRuntime(client, scenarios) {
       templateId,
       idempotencyKey: key('create'),
       autoPullImages: false,
-      sutId: null,
+      sutId: fixtureSutId === 'NONE' ? null : fixtureSutId,
       variablesProfileId: null,
       networkMode: 'DIRECT',
       networkProfileId: null,

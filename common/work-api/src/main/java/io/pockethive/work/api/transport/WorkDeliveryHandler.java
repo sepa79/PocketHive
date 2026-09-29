@@ -8,6 +8,7 @@ import io.pockethive.work.api.WorkItem;
  * Contract: RESP-WORK-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-transport.
  */
 public interface WorkDeliveryHandler {
-    void onWork(WorkItem item);
+    /** Normal return admits the item independently of task completion; rejection means no task was submitted. */
+    void onWork(WorkItem item) throws WorkNotAcceptedException;
     void onDecodeFailure(byte[] body, Exception failure);
 }

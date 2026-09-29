@@ -246,7 +246,6 @@ public final class WorkItem {
      * <ul>
      *   <li>{@link HistoryPolicy#FULL} – returns this instance unchanged.</li>
      *   <li>{@link HistoryPolicy#LATEST_ONLY} – equivalent to {@link #clearHistory()}.</li>
-     *   <li>{@link HistoryPolicy#DISABLED} – returns a view with the same body/headers but no prior history.</li>
      * </ul>
      */
     public WorkItem applyHistoryPolicy(HistoryPolicy policy) {
@@ -255,17 +254,6 @@ public final class WorkItem {
         }
         if (policy == HistoryPolicy.LATEST_ONLY) {
             return clearHistory();
-        }
-        if (policy == HistoryPolicy.DISABLED) {
-            // Preserve only the latest step as the new baseline so callers continue to see
-            // a single, explicit step without historical snapshots.
-            if (steps == null || steps.isEmpty()) {
-                // WorkItemBuilder guarantees at least one step; this is just a guard.
-                return clearHistory();
-            }
-            WorkStep last = steps.get(steps.size() - 1);
-            WorkStep normalised = last.withIndex(0);
-            return new WorkItem(this.headers, messageId, contentType, observabilityContext, List.of(normalised));
         }
         return this;
     }

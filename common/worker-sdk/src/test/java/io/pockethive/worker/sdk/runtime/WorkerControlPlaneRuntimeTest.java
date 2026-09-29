@@ -24,7 +24,7 @@ import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
-import io.pockethive.templating.RedisSequenceGenerator;
+import io.pockethive.redis.api.RedisSequenceGenerator;
 import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.util.Map;
@@ -88,7 +88,7 @@ class WorkerControlPlaneRuntimeTest {
             .identity(IDENTITY)
             .build();
         runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY,
-            PROPERTIES.getControlPlane(), null, mutationPolicies(), workConfigurationParser());
+            PROPERTIES.getControlPlane(), null, mutationPolicies(), workConfigurationParser(), new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
         reset(emitter);
     }
 
@@ -101,7 +101,7 @@ class WorkerControlPlaneRuntimeTest {
         var csvStore = new WorkerStateStore();
         csvStore.getOrCreate(csvDefinition);
         var csvRuntime = new WorkerControlPlaneRuntime(controlPlane, csvStore, MAPPER, emitter, IDENTITY,
-            PROPERTIES.getControlPlane(), null, mutationPolicies(), workConfigurationParser());
+            PROPERTIES.getControlPlane(), null, mutationPolicies(), workConfigurationParser(), new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
         var startup = new io.pockethive.work.local.csv.CsvDatasetParser().parse(Map.of(
             "filePath", "/data/input.csv", "ratePerSec", 1, "rotate", false, "skipHeader", true,
             "delimiter", ",", "charset", "UTF-8", "startupDelaySeconds", 0, "tickIntervalMs", 1000), "inputs.csv");
@@ -279,7 +279,7 @@ class WorkerControlPlaneRuntimeTest {
 	            PROPERTIES.getControlPlane(),
 	            renderer,
 	            mutationPolicies(), workConfigurationParser()
-	        );
+	        , new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
 
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
@@ -342,16 +342,15 @@ class WorkerControlPlaneRuntimeTest {
 
     @Test
     void configUpdateRejectsInvalidRedisBeforeChangingWorkerState() throws Exception {
-        var originalConnection = RedisSequenceGenerator.currentConfig();
-        try {
+        try (var sequences = new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties())) {
             TemplateRenderer renderer = mock(TemplateRenderer.class);
             WorkerControlPlaneRuntime target = new WorkerControlPlaneRuntime(
                 controlPlane, stateStore, MAPPER, emitter, IDENTITY, PROPERTIES.getControlPlane(), renderer,
-                mutationPolicies(), workConfigurationParser());
+                mutationPolicies(), workConfigurationParser(), sequences);
             applyConfigUpdate(target, Map.of("enabled", false, "ratePerSec", 1.0,
                 "redis", Map.of("host", "redis", "port", 6379, "ssl", false)));
             var acceptedConfig = target.workerRawConfig(definition.beanName());
-            var acceptedConnection = RedisSequenceGenerator.currentConfig();
+            var acceptedConnection = sequences.currentSettings();
             var observed = new AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot>();
             target.registerStateListener(definition.beanName(), observed::set);
             reset(emitter);
@@ -369,7 +368,7 @@ class WorkerControlPlaneRuntimeTest {
             assertThat(target.workerRawConfig(definition.beanName())).isEqualTo(acceptedConfig);
             assertThat(stateStore.getOrCreate(definition).privateConfig()).isEmpty();
             assertThat(observed.get().rawConfig()).isEqualTo(acceptedConfig);
-            assertThat(RedisSequenceGenerator.currentConfig()).isEqualTo(acceptedConnection);
+            assertThat(sequences.currentSettings()).isEqualTo(acceptedConnection);
             verify(renderer, times(0)).resetSeededSelections();
 
             reset(emitter);
@@ -378,9 +377,8 @@ class WorkerControlPlaneRuntimeTest {
             verify(emitter, times(0)).emitFailure(any());
             assertThat(target.workerConfig(definition.beanName(), TestConfig.class)).contains(new TestConfig(false, 4.0));
             assertThat(target.workerRawConfig(definition.beanName())).containsEntry("redis", acceptedConfig.get("redis"));
-            assertThat(RedisSequenceGenerator.currentConfig()).isEqualTo(acceptedConnection);
-        } finally {
-            RedisSequenceGenerator.configure(originalConnection);
+            assertThat(sequences.currentSettings()).isEqualTo(acceptedConnection);
+
         }
     }
 
@@ -434,7 +432,7 @@ class WorkerControlPlaneRuntimeTest {
             PROPERTIES.getControlPlane(),
             null,
             mutationPolicies(), workConfigurationParser()
-        );
+        , new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
         applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
         reset(emitter);
 
@@ -491,7 +489,7 @@ class WorkerControlPlaneRuntimeTest {
             PROPERTIES.getControlPlane(),
             null,
             mutationPolicies(), workConfigurationParser()
-        );
+        , new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
         applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
         reset(emitter);
 
@@ -519,7 +517,7 @@ class WorkerControlPlaneRuntimeTest {
             PROPERTIES.getControlPlane(),
             null,
             mutationPolicies(), workConfigurationParser()
-        );
+        , new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
         Map<String, Object> initialConfig = new java.util.LinkedHashMap<>(redisRuntimeIoConfig(1.0));
         initialConfig.put("enabled", true);
         applyConfigUpdate(ioRuntime, Map.copyOf(initialConfig));
@@ -566,7 +564,7 @@ class WorkerControlPlaneRuntimeTest {
             PROPERTIES.getControlPlane(),
             null,
             mutationPolicies(), workConfigurationParser()
-        );
+        , new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
         applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
         reset(emitter);
 
@@ -1016,7 +1014,7 @@ class WorkerControlPlaneRuntimeTest {
             PROPERTIES.getControlPlane(),
             null,
             mutationPolicies(), workConfigurationParser()
-        );
+        , new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
         PrivateTestConfig initialConfig = new PrivateTestConfig(
             true,
             7.5,

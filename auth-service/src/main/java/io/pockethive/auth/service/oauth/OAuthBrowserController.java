@@ -9,11 +9,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
@@ -24,46 +26,53 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
- * Responsibility: Render interactive OAuth login, consent, callback, and error pages.
- * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Responsibility: Map interactive OAuth login and consent requests to authentication and bounded page responses.
+ * Must not: Own OAuth client, scope, token, or page-rendering policy.
+ * Contract: RESP-OAUTH-BROWSER-PAGES — docs/architecture/runtime-responsibilities.md#resp-oauth-browser-pages.
  */
 
 @Controller
 public final class OAuthBrowserController {
+    static final String STYLESHEET_PATH = "/oauth/pockethive-auth.css";
+    static final String LOGO_PATH = "/oauth/logo.svg";
     private final AuthServiceProperties properties;
     private final InMemoryUserStore users;
     private final OAuthBrowserPageRenderer pages;
+    private final OAuthBrowserAuthorizationFailureHandler failures;
     private final RegisteredClientRepository clients;
     private final HttpSessionSecurityContextRepository contexts = new HttpSessionSecurityContextRepository();
 
     public OAuthBrowserController(AuthServiceProperties properties, InMemoryUserStore users,
                                   OAuthBrowserPageRenderer pages,
+                                  OAuthBrowserAuthorizationFailureHandler failures,
                                   RegisteredClientRepository clients) {
         this.properties = properties;
         this.users = users;
         this.pages = pages;
+        this.failures = failures;
         this.clients = clients;
     }
 
     @GetMapping(value = "/oauth/dev/login", produces = MediaType.TEXT_HTML_VALUE)
     void loginPage(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        requireDev();
+        if (!requireDev(response)) return;
         CsrfToken csrf = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
         String action = publicEndpoint("/oauth/dev/login");
         response.setContentType(MediaType.TEXT_HTML_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.getWriter().write(pages.login(action, csrf.getParameterName(), csrf.getToken(),
-            publicEndpoint("/oauth/pockethive-auth.css"), publicEndpoint("/oauth/logo.svg")));
+            publicEndpoint(STYLESHEET_PATH), publicEndpoint(LOGO_PATH)));
     }
 
     @PostMapping("/oauth/dev/login")
     void login(@RequestParam("username") String username, HttpServletRequest request,
                HttpServletResponse response) throws IOException {
-        requireDev();
-        StoredUser user = users.findByUsername(username).filter(StoredUser::active)
-            .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.UNAUTHORIZED, "Unknown or inactive user"));
+        if (!requireDev(response)) return;
+        StoredUser user = users.findByUsername(username).filter(StoredUser::active).orElse(null);
+        if (user == null) {
+            failures.writeFailure(response, OAuth2ErrorCodes.ACCESS_DENIED, HttpStatus.UNAUTHORIZED);
+            return;
+        }
         UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
             user.username(), "N/A", List.of(new SimpleGrantedAuthority("ROLE_USER")));
         SecurityContext context = SecurityContextHolder.createEmptyContext();
@@ -85,26 +94,26 @@ public final class OAuthBrowserController {
             .flatMap(value -> java.util.Arrays.stream(value.split(" "))).filter(value -> !value.isBlank()).toList();
         RegisteredClient client = clients.findByClientId(clientId);
         if (client == null) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.BAD_REQUEST, "Unknown OAuth client");
+            failures.writeFailure(response, OAuth2ErrorCodes.INVALID_REQUEST, HttpStatus.BAD_REQUEST);
+            return;
         }
         response.setContentType(MediaType.TEXT_HTML_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.getWriter().write(pages.consent(
             publicEndpoint("/oauth/authorize"), clientId, client.getClientName(),
             properties.getOauth().getResource().toString(), state,
-            csrf.getParameterName(), csrf.getToken(), scopes, publicEndpoint("/oauth/pockethive-auth.css"),
-            publicEndpoint("/oauth/logo.svg")));
+            csrf.getParameterName(), csrf.getToken(), scopes, publicEndpoint(STYLESHEET_PATH),
+            publicEndpoint(LOGO_PATH)));
     }
 
     private String publicEndpoint(String path) {
         return properties.getOauth().getIssuer() + path;
     }
 
-    private void requireDev() {
-        if (properties.getProvider() != AuthProvider.DEV) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.METHOD_NOT_ALLOWED, "DEV login is disabled");
-        }
+    private boolean requireDev(HttpServletResponse response) throws IOException {
+        if (properties.getProvider() == AuthProvider.DEV) return true;
+        failures.writeFailure(response, OAuthBrowserAuthorizationFailureHandler.AUTHORIZATION_ERROR,
+            HttpStatus.METHOD_NOT_ALLOWED);
+        return false;
     }
 }

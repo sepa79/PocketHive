@@ -15,7 +15,8 @@ import io.pockethive.work.api.WorkItem;
 public interface WorkerRuntime {
 
     /**
-     * Dispatches an inbound message to the named worker bean.
+     * Dispatches an already-admitted message to the named worker bean. Input adapters own
+     * admission; a subsequent STOP does not cancel this invocation or suppress its outcome.
      *
      * @param workerBeanName Spring bean name discovered via {@link PocketHiveWorker}
      * @param message        inbound {@link WorkItem}

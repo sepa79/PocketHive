@@ -12,10 +12,11 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Own canonical bundle-local SUT descriptor CRUD and listing.
  * Must not: Discover bundles, own catalogue state, or define SUT validation rules.
- * Contract: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md and docs/scenarios/SCENARIO_CONTRACT.md.
+ * Uses RESP-SCENARIO-BUNDLE-LAYOUT — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-layout for paths.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
-public class ScenarioBundleSutService {
+class ScenarioBundleSutService {
     private final ScenarioService scenarios;
     private final ScenarioBundleValidator validator;
 
@@ -96,7 +97,7 @@ public class ScenarioBundleSutService {
 
     private Path sutDirectory(String scenarioId, String sutId) {
         Path bundle = scenarios.bundleDirFor(scenarioId);
-        Path sutDirectory = bundle.resolve("sut").resolve(sutId).normalize();
+        Path sutDirectory = ScenarioBundleLayout.sutDirectory(bundle, sutId);
         if (!sutDirectory.startsWith(bundle)) {
             throw new IllegalArgumentException("Invalid sutId");
         }

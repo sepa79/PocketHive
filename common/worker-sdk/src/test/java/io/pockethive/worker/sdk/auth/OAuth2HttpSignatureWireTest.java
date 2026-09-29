@@ -138,7 +138,7 @@ class OAuth2HttpSignatureWireTest {
                     }));
             AuthRuntime runtime = new AuthRuntime(Map.of("wire", profile), Map.of("wire", "wire-fingerprint"),
                 store, (template, ignored) -> template, mutatingClient);
-            AuthRuntime.MutableHttpRequest downstream = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+            MutableHttpRequest downstream = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
 
             assertThatThrownBy(() -> runtime.applyHttp(
                 new AuthRef("wire", AuthApplyAs.HTTP_AUTHORIZATION_BEARER, null, null, null), downstream, null, context))

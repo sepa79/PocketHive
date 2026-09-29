@@ -1,6 +1,12 @@
 # TCP Mock Server - Capabilities & Features
 
-Complete overview of TCP Mock Server capabilities, features, and use cases.
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
+Historical feature catalogue and examples. Entries below describe intended capabilities, not verified runtime support; [TCP capability qualification](WIREMOCK-PARITY.md) records the current assessment.
 
 ## Core Capabilities
 
@@ -384,25 +390,16 @@ POST /api/enterprise/settings
 
 ---
 
-## Performance Characteristics
+## Performance and limits qualification
 
-### Throughput
-- **Concurrent Connections**: 1000+
-- **Requests/Second**: 10,000+
-- **Response Time**: <5ms (without delay)
-- **Memory**: ~100MB base + ~1KB per mapping
+Throughput, response time, memory use, mapping capacity and concurrent connection
+capacity are unqualified. Earlier numerical claims had no supporting measurement
+attached and have been removed.
 
-### Scalability
-- **Mappings**: Tested with 10,000+ mappings
-- **Requests**: Handles millions of requests
-- **Scenarios**: 100+ concurrent scenarios
-- **Recording**: Minimal overhead when disabled
+Do not treat the historical examples as enforced limits. Qualify message size,
+connection limits and bounded request history against the selected runtime as
+required by [TCP capability qualification](WIREMOCK-PARITY.md).
 
-### Limits
-- **Max Message Size**: 10MB (configurable)
-- **Max Mappings**: No hard limit (memory dependent)
-- **Max Connections**: OS dependent (typically 10,000+)
-- **Request History**: 10,000 requests (configurable)
 
 ---
 

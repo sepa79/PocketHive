@@ -4,6 +4,7 @@ import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.transport.WorkDeliveryHandler;
 import io.pockethive.work.api.transport.WorkInputChannel;
 import io.pockethive.work.api.transport.WorkInputChannelState;
+import io.pockethive.work.api.transport.WorkNotAcceptedException;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Objects;
@@ -82,11 +83,18 @@ final class InMemoryWorkChannel implements WorkInputChannel {
             WorkDeliveryHandler deliveryHandler;
             synchronized (this) {
                 if (removed || state != WorkInputChannelState.RUNNING || pending.isEmpty()) return;
-                // Admission is atomic with stop/removal; already admitted work may finish afterwards.
+                // Reserve delivery under the resource lock; the handler owns execution admission.
                 item = pending.removeFirst();
                 deliveryHandler = handler;
             }
-            deliveryHandler.onWork(item);
+            try {
+                deliveryHandler.onWork(item);
+            } catch (WorkNotAcceptedException notAccepted) {
+                synchronized (this) {
+                    if (!removed) pending.addFirst(item);
+                }
+                return;
+            }
         }
     }
 

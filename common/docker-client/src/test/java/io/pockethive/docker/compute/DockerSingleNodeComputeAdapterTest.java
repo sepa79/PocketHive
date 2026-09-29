@@ -78,6 +78,22 @@ class DockerSingleNodeComputeAdapterTest {
         .hasMessage("docker unavailable");
   }
 
+  @Test
+  void workerMountsAreAppliedByTheActiveComputeAdapter() {
+    DockerContainerClient docker = mock(DockerContainerClient.class);
+    when(docker.createAndStartContainer(any(), any(), any(), any(), any())).thenAnswer(invocation -> {
+      UnaryOperator<com.github.dockerjava.api.model.HostConfig> customize = invocation.getArgument(3);
+      var host = customize.apply(com.github.dockerjava.api.model.HostConfig.newHostConfig());
+      assertThat(host.getBinds()).extracting(Object::toString)
+          .containsExactly("/tmp/source:/app/data:ro");
+      return "container-id";
+    });
+    new DockerSingleNodeComputeAdapter(docker).applyWorkers("swarm-1", List.of(new WorkerSpec(
+        "processor-worker", "processor", "processor:test", workerEnv(),
+        List.of(" /tmp/source:/app/data:ro "))));
+    verify(docker).createAndStartContainer(any(), any(), any(), any(), any());
+  }
+
   private static Map<String, String> workerEnv() {
     return Map.of(
         "POCKETHIVE_CONTROL_PLANE_SWARM_ID", "swarm-1",

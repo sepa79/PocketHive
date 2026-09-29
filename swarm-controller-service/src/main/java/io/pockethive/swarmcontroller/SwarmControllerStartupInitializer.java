@@ -16,7 +16,8 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Apply the verified filesystem startup artifact to the canonical lifecycle owner exactly once.
  * Must not: Consume control-plane messages, publish status, or own lifecycle state after initialization.
- * Contract: Readiness remains false until both swarm and scenario plans are serialized and applied successfully.
+ * Contract: RESP-CONTROLLER-CONTROL — docs/architecture/runtime-responsibilities.md#resp-controller-control;
+ * readiness remains false after plan failure while the existing status and REMOVE handlers stay available.
  */
 @Component
 public class SwarmControllerStartupInitializer {
@@ -50,15 +51,20 @@ public class SwarmControllerStartupInitializer {
     this.artifactSha256 = resolvedLoader.expectedSha256();
     this.startedAt = Objects.requireNonNull(clock, "clock").instant();
     SwarmStartupArtifact artifact = resolvedLoader.load(swarmId);
+    boolean applied = false;
     try {
       lifecycle.prepare(resolvedMapper.writeValueAsString(artifact.swarmPlan()));
       lifecycle.applyScenarioPlan(resolvedMapper.writeValueAsString(artifact.scenarioPlan()));
-    } catch (JsonProcessingException failure) {
-      throw new IllegalStateException(
-          "Failed to serialize verified startup artifact for swarm " + swarmId, failure);
+      applied = true;
+    } catch (JsonProcessingException | RuntimeException failure) {
+      lifecycle.fail("Startup plan application failed");
+      log.error("Startup plan application failed for swarm {}; status and explicit REMOVE remain available",
+          swarmId, failure);
     }
-    this.initialized = true;
-    log.info("Initialized swarm {} from filesystem startup artifact", swarmId);
+    this.initialized = applied;
+    if (applied) {
+      log.info("Initialized swarm {} from filesystem startup artifact", swarmId);
+    }
   }
 
   boolean isInitialized() {

@@ -31,7 +31,6 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -39,8 +38,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.slf4j.LoggerFactory;
 
 /** Real template/runner/Redis capture behavior against a disposable, explicitly configured Redis fixture. */
-@EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_HOST", matches = ".+")
-@EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_PORT", matches = "[0-9]+")
 @Timeout(30)
 class HttpSequenceDebugCaptureTest {
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();

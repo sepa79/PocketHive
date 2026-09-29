@@ -1,63 +1,69 @@
 package io.pockethive.tcpmock.controller;
 
-import org.springframework.web.bind.annotation.*;
+import io.pockethive.tcpmock.config.TcpMockIdentityResolver;
+import io.pockethive.tcpmock.model.Workspace;
+import io.pockethive.tcpmock.model.WorkspaceRequest;
+import io.pockethive.tcpmock.service.WorkspaceService;
+import java.util.List;
+import java.util.NoSuchElementException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import java.util.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
 
+/**
+ * Responsibility: map workspace HTTP operations to the catalogue owner. Must not: store workspaces,
+ * allocate IDs or decide default protection. Contract: RESP-TCP-MOCK-WORKSPACES —
+ * docs/architecture/runtime-responsibilities.md#resp-tcp-mock-workspaces.
+ */
 @RestController
 @RequestMapping("/api/workspaces")
 public class WorkspaceController {
+  private final WorkspaceService workspaces;
+  private final TcpMockIdentityResolver identities;
 
-  private final Map<String, Workspace> workspaces = new HashMap<>();
-
-  public WorkspaceController() {
-    workspaces.put("default", new Workspace("default", "Default Workspace", "system", false));
+  public WorkspaceController(WorkspaceService workspaces, TcpMockIdentityResolver identities) {
+    this.workspaces = workspaces;
+    this.identities = identities;
   }
 
   @GetMapping
   public List<Workspace> getAll() {
-    return new ArrayList<>(workspaces.values());
+    return workspaces.findAll();
   }
 
   @PostMapping
-  public ResponseEntity<Workspace> create(@RequestBody WorkspaceRequest request) {
-    String id = "ws-" + System.currentTimeMillis();
-    Workspace workspace = new Workspace(id, request.name, "current-user", request.shared);
-    workspaces.put(id, workspace);
-    return ResponseEntity.ok(workspace);
+  public ResponseEntity<Workspace> create(
+      @RequestBody WorkspaceRequest request, Authentication authentication) {
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(
+            workspaces.create(
+                request.name(), request.shared(), identities.resolve(authentication).ownerId()));
   }
 
   @DeleteMapping("/{id}")
   public ResponseEntity<Void> delete(@PathVariable("id") String id) {
-    if ("default".equals(id)) {
-      return ResponseEntity.badRequest().build();
-    }
-    workspaces.remove(id);
-    return ResponseEntity.ok().build();
+    workspaces.delete(id);
+    return ResponseEntity.noContent().build();
   }
 
   @PutMapping("/{id}")
-  public ResponseEntity<Workspace> update(@PathVariable("id") String id, @RequestBody Workspace workspace) {
-    workspaces.put(id, workspace);
-    return ResponseEntity.ok(workspace);
+  public Workspace update(@PathVariable("id") String id, @RequestBody WorkspaceRequest request) {
+    return workspaces.update(id, request.name(), request.shared());
   }
 
-  static class Workspace {
-    public String id;
-    public String name;
-    public String owner;
-    public boolean shared;
-
-    public Workspace(String id, String name, String owner, boolean shared) {
-      this.id = id;
-      this.name = name;
-      this.owner = owner;
-      this.shared = shared;
-    }
+  @ExceptionHandler(NoSuchElementException.class)
+  public ResponseEntity<String> missing(NoSuchElementException error) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error.getMessage());
   }
 
-  static class WorkspaceRequest {
-    public String name;
-    public boolean shared;
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<String> invalid(IllegalArgumentException error) {
+    return ResponseEntity.badRequest().body(error.getMessage());
+  }
+
+  @ExceptionHandler(IllegalStateException.class)
+  public ResponseEntity<String> conflict(IllegalStateException error) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(error.getMessage());
   }
 }

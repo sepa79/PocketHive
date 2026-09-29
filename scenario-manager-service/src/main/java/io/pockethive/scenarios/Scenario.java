@@ -1,6 +1,7 @@
 package io.pockethive.scenarios;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Topology;
 import io.pockethive.swarm.model.TrafficPolicy;
@@ -8,8 +9,18 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
 
+/**
+ * Responsibility: define the scenario descriptor shape and its field metadata.
+ * Must not: discover bundles, project catalogues or perform runtime validation.
+ * Contract: RESP-SCENARIO-AUTHORING-PROJECTION — docs/architecture/runtime-responsibilities.md#resp-scenario-authoring-projection;
+ * docs/scenarios/SCENARIO_CONTRACT.md.
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Scenario {
+    public static final String TEMPLATE_FIELD = "template";
+    public static final String TRAFFIC_POLICY_FIELD = "trafficPolicy";
+    public static final String PLAN_FIELD = "plan";
+
     @NotBlank
     private String protocolVersion;
     @NotBlank
@@ -18,10 +29,12 @@ public class Scenario {
     private String name;
     private String description;
     @Valid
+    @JsonProperty(value = TEMPLATE_FIELD, required = true)
     private SwarmTemplate template;
     @Valid
     private Topology topology;
     @Valid
+    @JsonProperty(TRAFFIC_POLICY_FIELD)
     private TrafficPolicy trafficPolicy;
     /**
      * Optional scenario execution plan.
@@ -31,6 +44,7 @@ public class Scenario {
      * {@code Map} avoids a hard dependency on orchestrator-specific types
      * while still round-tripping the plan between YAML and JSON.
      */
+    @JsonProperty(PLAN_FIELD)
     private Map<String, Object> plan;
 
     public Scenario() {}

@@ -1,5 +1,11 @@
 # TCP Mock Server - Deployment Checklist
 
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
 ## ✅ Pre-Deployment Checklist
 
 ### Backend Verification
@@ -263,20 +269,15 @@
 - [ ] Deployment successful
 - [ ] Monitoring configured
 - [ ] Rollback plan tested
-- [ ] Production ready
+- [ ] Qualification evidence reviewed against WIREMOCK-PARITY.md
 
 **Signature:** _________________ **Date:** _________
 
 ---
 
-## 🎉 Deployment Complete
+## Deployment qualification
 
-Once all checklists are complete:
-
-✅ **Backend:** Production Ready
-✅ **UI:** Production Ready
-✅ **Documentation:** Complete
-✅ **Testing:** Passed
-✅ **Deployment:** Successful
-
-**Status: LIVE** 🚀
+Completing this historical checklist does not establish production suitability.
+Use [TCP capability qualification](WIREMOCK-PARITY.md) and the repository's
+supported ingress and deployment gates. Record actual test results before
+claiming readiness.

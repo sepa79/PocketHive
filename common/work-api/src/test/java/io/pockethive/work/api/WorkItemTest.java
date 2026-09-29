@@ -126,12 +126,6 @@ class WorkItemTest {
         WorkItem latestOnly = item.applyHistoryPolicy(HistoryPolicy.LATEST_ONLY);
         assertThat(steps(latestOnly)).hasSize(1);
         assertThat(latestOnly.asString()).isEqualTo("second");
-
-        WorkItem disabled = item.applyHistoryPolicy(HistoryPolicy.DISABLED);
-        // history disabled: a single baseline step is retained so callers still
-        // see the latest payload without previous snapshots.
-        assertThat(steps(disabled)).hasSize(1);
-        assertThat(disabled.asString()).isEqualTo("second");
     }
 
     private static List<WorkStep> steps(WorkItem item) {

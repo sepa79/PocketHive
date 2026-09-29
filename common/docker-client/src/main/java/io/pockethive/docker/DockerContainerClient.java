@@ -20,14 +20,19 @@ import java.util.Map;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
-public class DockerContainerClient {
+/**
+ * Responsibility: execute Docker container operations and host discovery.
+ * Must not: choose lifecycle outcomes or compute mode.
+ * Contract: RESP-DOCKER-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-docker-runtime.
+ */
+public class DockerContainerClient implements io.pockethive.manager.ports.ComputeHost {
     private static final String DOCKER_HINT =
         "Ensure Docker is installed, running, and that the process can access the Docker socket "
             + "(for example /var/run/docker.sock) or an explicit DOCKER_HOST.";
 
     private final DockerClient dockerClient;
 
-    public DockerContainerClient(DockerClient dockerClient) {
+    DockerContainerClient(DockerClient dockerClient) {
         this.dockerClient = dockerClient;
     }
 

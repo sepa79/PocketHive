@@ -32,6 +32,11 @@ class RabbitWorkTopologyTest {
             swarm -> new RabbitWorkTopologySettings(" prefix ", " hive ")).resolve("swarm", Set.of(" jobs "));
         assertThat(topology.controllerEnvironment()).containsEntry(
             "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", "prefix");
+        var environment = new org.springframework.core.env.StandardEnvironment();
+        environment.getPropertySources().addFirst(new org.springframework.core.env.SystemEnvironmentPropertySource(
+            "test", Map.copyOf(topology.controllerEnvironment())));
+        assertThat(RabbitControllerTopologyEnvironment.decode(environment::getProperty))
+            .isEqualTo(new RabbitWorkTopologySettings("prefix", "hive"));
         assertThat(topology.channel(" jobs ").inputAddress()).isEqualTo("prefix.jobs");
         assertThat(topology.channel(" jobs ").inputEnvironment()).containsEntry(
             RabbitWorkSettingsBootstrap.INPUT_QUEUE_ENV, "prefix.jobs");

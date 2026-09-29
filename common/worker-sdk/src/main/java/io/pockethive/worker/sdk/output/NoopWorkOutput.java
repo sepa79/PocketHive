@@ -1,5 +1,8 @@
 package io.pockethive.worker.sdk.output;
 
+import io.pockethive.work.config.WorkDelivery;
+import io.pockethive.work.config.WorkerOutputType;
+
 import io.pockethive.work.api.transport.WorkOutput;
 
 import io.pockethive.work.api.WorkItem;
@@ -24,7 +27,8 @@ public final class NoopWorkOutput implements WorkOutput {
     }
 
     @Override
-    public void publish(WorkItem item) {
+    public void publish(WorkItem item, WorkDelivery delivery) {
+        WorkerOutputType.NONE.requireDelivery(delivery);
         if (log.isDebugEnabled()) {
             log.debug("Dropping worker result for '{}' because no output is configured", workerName);
         }

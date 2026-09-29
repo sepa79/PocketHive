@@ -1,10 +1,16 @@
 package io.pockethive.sink.clickhouse.metrics;
 
+import io.pockethive.sink.clickhouse.ClickHouseConnectionSettings;
 import java.util.regex.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Responsibility: own metrics sink configuration and its existing defaults/validation.
+ * Must not: issue HTTP requests or own buffered data.
+ * Contract: RESP-CLICKHOUSE-INSERT — docs/architecture/runtime-responsibilities.md#resp-clickhouse-insert.
+ */
 @ConfigurationProperties(prefix = "pockethive.metrics.clickhouse")
-public class ClickHouseMetricsSinkProperties {
+public class ClickHouseMetricsSinkProperties implements ClickHouseConnectionSettings {
 
   public static final String DEFAULT_TABLE = "ph_metrics_samples";
   private static final Pattern TABLE_NAME =

@@ -1,7 +1,7 @@
 package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import java.time.Instant;
+import io.pockethive.swarm.model.lifecycle.Target;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -12,19 +12,13 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Aggregates per-worker status deltas into a swarm-level worker list snapshot.
- *
- * <p>This is intended for Swarm Controller {@code status-full} publishing so UIs
- * can avoid subscribing directly to worker status fan-out.</p>
+ * Responsibility: Project reported worker presentation data together with canonical observations.
+ * Must not: Own heartbeat time, enabled state, freshness policy or lifecycle outcomes.
+ * Contract: RESP-SWARM-OBSERVATION — docs/architecture/runtime-responsibilities.md#resp-swarm-observation.
  */
 final class SwarmWorkersAggregator {
 
-  private final long staleAfterMillis;
-  private final Map<String, WorkerSnapshot> byKey = new ConcurrentHashMap<>();
-
-  SwarmWorkersAggregator(long staleAfterMillis) {
-    this.staleAfterMillis = staleAfterMillis;
-  }
+  private final Map<Target, WorkerSnapshot> byKey = new ConcurrentHashMap<>();
 
   void updateFromWorkerStatus(String role, String instance, JsonNode dataNode, JsonNode runtimeNode) {
     if (role == null || role.isBlank() || instance == null || instance.isBlank()) {
@@ -34,13 +28,8 @@ final class SwarmWorkersAggregator {
       return;
     }
 
-    String key = key(role, instance);
+    Target key = new Target(role, instance);
     WorkerSnapshot previous = byKey.get(key);
-    JsonNode enabledNode = dataNode.get("enabled");
-    if (enabledNode == null || !enabledNode.isBoolean()) {
-      throw new IllegalArgumentException("worker status data.enabled must be a boolean");
-    }
-    boolean enabled = enabledNode.asBoolean();
     long tps = dataNode.path("tps").asLong(0L);
 
     JsonNode ioStateNode = dataNode.path("ioState").path("work");
@@ -52,38 +41,35 @@ final class SwarmWorkersAggregator {
     }
     Map<String, Object> config = configFrom(dataNode, previous);
 
-    long now = System.currentTimeMillis();
     WorkerSnapshot snapshot = new WorkerSnapshot(
         role,
         instance,
-        enabled,
         tps,
         input,
         output,
         runtime,
-        config,
-        Instant.ofEpochMilli(now).toString(),
-        now);
+        config);
     byKey.put(key, snapshot);
   }
 
-  List<Map<String, Object>> snapshot() {
+  List<Map<String, Object>> snapshot(Map<Target, WorkerObservation> observations) {
     if (byKey.isEmpty()) {
       return List.of();
     }
-    long now = System.currentTimeMillis();
     List<WorkerSnapshot> snapshots = new ArrayList<>(byKey.values());
     snapshots.sort(Comparator.comparing(WorkerSnapshot::role).thenComparing(WorkerSnapshot::instance));
 
     List<Map<String, Object>> out = new ArrayList<>(snapshots.size());
     for (WorkerSnapshot snapshot : snapshots) {
+      WorkerObservation observation = observations.get(new Target(snapshot.role(), snapshot.instance()));
+      if (observation == null) continue;
       Map<String, Object> entry = new LinkedHashMap<>();
       entry.put("role", snapshot.role());
       entry.put("instance", snapshot.instance());
-      entry.put("enabled", snapshot.enabled());
+      entry.put("enabled", observation.enabled());
       entry.put("tps", snapshot.tps());
-      entry.put("lastSeenAt", snapshot.lastSeenAt());
-      entry.put("stale", now - snapshot.lastSeenMillis() > staleAfterMillis);
+      entry.put("lastSeenAt", observation.lastSeenAt().toString());
+      entry.put("stale", observation.stale());
       entry.put("ioState", Map.of(
           "work", Map.of(
               "input", snapshot.workInput(),
@@ -103,10 +89,6 @@ final class SwarmWorkersAggregator {
 
   void clear() {
     byKey.clear();
-  }
-
-  private static String key(String role, String instance) {
-    return Objects.requireNonNull(role).trim() + ":" + Objects.requireNonNull(instance).trim();
   }
 
   private static Map<String, Object> runtimeFrom(JsonNode node) {
@@ -185,13 +167,10 @@ final class SwarmWorkersAggregator {
   private record WorkerSnapshot(
       String role,
       String instance,
-      boolean enabled,
       long tps,
       String workInput,
       String workOutput,
       Map<String, Object> runtime,
-      Map<String, Object> config,
-      String lastSeenAt,
-      long lastSeenMillis) {
+      Map<String, Object> config) {
   }
 }

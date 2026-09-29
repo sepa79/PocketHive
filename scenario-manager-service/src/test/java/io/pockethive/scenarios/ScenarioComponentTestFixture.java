@@ -35,6 +35,12 @@ abstract class ScenarioComponentTestFixture {
         scenarios = new ScenarioService(scenariosDir.toString(), tempDir.resolve("runtime"), validator);
     }
 
+    protected ScenarioBundleService bundleService() {
+        return new ScenarioBundleService(scenarios, new ScenarioBundleOrganizationService(scenarios), validator,
+            new ScenarioBundleZipExporter(), new ScenarioBundleWorkspaceService(scenarios),
+            new ScenarioBundleContentService(scenarios, validator), new ScenarioBundleSutService(scenarios, validator));
+    }
+
     protected void writeBundleScenario(String scenarioId) throws IOException {
         Path bundle = Files.createDirectories(scenariosDir.resolve(scenarioId));
         Files.writeString(bundle.resolve(ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE), """

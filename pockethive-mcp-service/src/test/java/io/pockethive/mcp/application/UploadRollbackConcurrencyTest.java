@@ -507,7 +507,7 @@ class UploadRollbackConcurrencyTest {
 
     private PocketHiveMcpProperties properties() {
         URI ingress = URI.create("http://127.0.0.1:8080");
-        return new PocketHiveMcpProperties(ingress, ingress, McpStateMode.MEMORY,
+        return new PocketHiveMcpProperties(false, ingress, ingress, McpStateMode.MEMORY,
             temporaryDirectory.resolve("state"), temporaryDirectory.resolve("spool"), Duration.ofMinutes(30),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(5),
             100, 10, 100, 10, 1_000_000, 2, 10, 100_000, 200_000, 20, 200_000, 8, 100,

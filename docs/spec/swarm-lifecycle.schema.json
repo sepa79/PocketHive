@@ -40,7 +40,7 @@
     },
     "WorkloadIntent": {
       "type": "string",
-      "enum": ["RUNNING", "STOPPED"]
+      "enum": ["RUNNING", "STOPPED", "UNKNOWN"]
     },
     "ControllerState": {
       "type": "string",

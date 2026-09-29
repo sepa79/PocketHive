@@ -1,7 +1,10 @@
 package io.pockethive.orchestrator.infra.scenario;
 
 import io.pockethive.orchestrator.config.OrchestratorScenarioManagerProperties;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import io.pockethive.scenarios.api.RuntimeRequest;
+import io.pockethive.scenarios.api.ScenarioRuntimeResponse;
+import io.pockethive.scenarios.api.VariablesResolveResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.ScenarioClient;
@@ -24,7 +27,9 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
  
 /**
- * HTTP client to retrieve templates and SUT environments from scenario-manager-service.
+ * Responsibility: execute Scenario Manager HTTP requests and decode contracts into application projections.
+ * Must not: resolve variables, materialize runtime files or define service-local wire copies.
+ * Contract: RESP-SCENARIO-HTTP-CLIENT — docs/architecture/runtime-responsibilities.md#resp-scenario-http-client.
  */
 @Component
 public class ScenarioManagerClient implements ScenarioClient {
@@ -70,8 +75,10 @@ public class ScenarioManagerClient implements ScenarioClient {
         }
         String url = baseUrl + "/api/templates/" + trimmedTemplate;
         HttpResponse<String> resp = sendGet(url, "template-metadata " + trimmedTemplate);
-        ScenarioTemplateResponse body = json.readValue(resp.body(), ScenarioTemplateResponse.class);
-        return new ScenarioTemplateDescriptor(body.id(), body.bundleKey(), body.bundlePath(), body.folderPath(), body.defunct());
+        ScenarioTemplateDescriptor descriptor = json.readerFor(ScenarioTemplateDescriptor.class)
+            .without(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .readValue(resp.body());
+        return Objects.requireNonNull(descriptor, "scenario template response");
     }
 
     @Override
@@ -152,7 +159,7 @@ public class ScenarioManagerClient implements ScenarioClient {
             url = sb.toString();
         }
         HttpResponse<String> resp = sendGet(url, "scenario-variables " + tpl, correlationId, idempotencyKey);
-        ScenarioVariablesResolveResponse body = json.readValue(resp.body(), ScenarioVariablesResolveResponse.class);
+        VariablesResolveResponse body = json.readValue(resp.body(), VariablesResolveResponse.class);
         Map<String, Object> vars = body.vars() == null ? Map.of() : body.vars();
         java.util.List<String> warnings = body.warnings() == null ? java.util.List.of() : body.warnings();
         return new ResolvedVariables(body.profileId(), body.sutId(), vars, warnings);
@@ -274,16 +281,4 @@ public class ScenarioManagerClient implements ScenarioClient {
             : serviceTokenProvider.getAuthorizationHeader();
     }
 
-    public record RuntimeRequest(String swarmId) {
-    }
-
-    public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record ScenarioTemplateResponse(String id, String bundleKey, String bundlePath, String folderPath, boolean defunct) {
-    }
-
-    public record ScenarioVariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, java.util.List<String> warnings) {
-    }
 }

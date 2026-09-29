@@ -4,10 +4,9 @@ This directory contains early PocketHive concepts that are worth discussing,
 testing, or socializing, but are not yet implementation plans, product
 contracts, or RFCs.
 
-The previous MCP/plugin/feedback concepts were moved to
-`docs/archive/pre-boundary-reset/concepts/` on 2026-09-07. They must be reassessed
-against the current Java MCP contract before reuse. The active architecture plan
-is `docs/inProgress/work-plane-module-boundaries.md`.
+The previous MCP/plugin/feedback concepts are retained only in
+Git history. They must be reassessed
+against the current Java MCP contract before reuse. Current architecture is defined in `docs/ARCHITECTURE.md`.
 
 Use this folder for:
 

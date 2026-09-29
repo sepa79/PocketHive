@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.auth;
 
+import io.pockethive.redis.api.RedisTokenStore;
 import io.pockethive.redis.config.RedisConnectionSettings;
 import java.net.http.HttpClient;
 import java.time.Duration;

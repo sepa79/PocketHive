@@ -86,8 +86,8 @@ public interface WorkerContext {
     ObservabilityContext observabilityContext();
 
     /**
-     * Returns the effective {@link HistoryPolicy} for this worker, as resolved from service defaults
-     * and, if applicable, Scenario configuration. The default is {@link HistoryPolicy#FULL}.
+     * Returns the effective {@link HistoryPolicy} captured from accepted worker configuration
+     * at the start of this invocation. The default is {@link HistoryPolicy#FULL}.
      */
     default HistoryPolicy historyPolicy() {
         return HistoryPolicy.FULL;

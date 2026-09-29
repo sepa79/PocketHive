@@ -43,6 +43,14 @@ class RedisDataSetWorkInputTest {
     }
 
     @Test
+    void productionFactoryCreatesDatasetInputWithoutOpeningAConnection() {
+        var factory = new RedisDataSetWorkInputFactory(new RecordingWorkerRuntime(),
+            mock(WorkerControlPlaneRuntime.class), identity());
+        input = (RedisDataSetWorkInput) factory.create(definition(), baseProperties());
+        assertThat(input).isNotNull();
+    }
+
+    @Test
     void intakeFollowsWorkerEnablementAcrossUpdatesAndRestart() throws Exception {
         var properties = baseProperties();
         properties.setInitialDelayMs(600_000L);
@@ -81,6 +89,222 @@ class RedisDataSetWorkInputTest {
         listener.get().accept(state);
         input.tick();
         assertThat(runtime.items).extracting(WorkItem::asString).containsExactly("one", "two");
+    }
+
+    @Test
+    void stopUpdateStartEndsOldBatchWithoutLosingAlreadyPoppedItem() {
+        var properties = baseProperties();
+        properties.setInitialDelayMs(600_000L);
+        properties.setRatePerSec(2.0);
+        var runtime = new RecordingWorkerRuntime();
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(true);
+        when(state.rawConfig()).thenReturn(Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1));
+            listener.get().accept(state);
+            return null;
+        }).when(control).registerStateListener(any(), any());
+        var oldData = new ArrayDeque<>(List.of("old-one", "old-two"));
+        var newData = new ArrayDeque<>(List.of("new-one", "new-two"));
+        var reader = mock(io.pockethive.redis.api.RedisListReader.class);
+        when(reader.pop("dataset")).thenAnswer(call -> {
+            String value = oldData.remove();
+            when(state.enabled()).thenReturn(false);
+            listener.get().accept(state);
+            when(state.rawConfig()).thenReturn(Map.of("inputs", Map.of("redis", Map.of("listName", "new"))));
+            listener.get().accept(state);
+            when(state.enabled()).thenReturn(true);
+            listener.get().accept(state);
+            return value;
+        });
+        when(reader.pop("new")).thenAnswer(call -> newData.poll());
+        input = new RedisDataSetWorkInput(definition(), control, runtime, identity(), properties,
+            LoggerFactory.getLogger("test-redis-input"), settings -> reader);
+        input.start();
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString).containsExactly("old-one");
+        assertThat(oldData).containsExactly("old-two");
+        assertThat(newData).hasSize(2);
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString)
+            .containsExactly("old-one", "new-one", "new-two");
+        assertThat(oldData).containsExactly("old-two");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void controlCanStopAndRestartWhilePoppedItemIsBeingDispatched(boolean restart) throws Exception {
+        var properties = baseProperties();
+        properties.setInitialDelayMs(600_000L);
+        properties.setRatePerSec(2.0);
+        var runtime = mock(WorkerRuntime.class);
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(true);
+        when(state.rawConfig()).thenReturn(Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1));
+            listener.get().accept(state);
+            return null;
+        }).when(control).registerStateListener(any(), any());
+        var data = new ArrayDeque<>(List.of("one", "two", "three"));
+        var enteredDispatch = new java.util.concurrent.CountDownLatch(1);
+        var releaseDispatch = new java.util.concurrent.CountDownLatch(1);
+        doAnswer(call -> {
+            enteredDispatch.countDown();
+            assertThat(releaseDispatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            return null;
+        }).when(runtime).dispatch(any(), any());
+        input = new RedisDataSetWorkInput(definition(), control, runtime, identity(), properties,
+            LoggerFactory.getLogger("test-redis-input"), new QueueRedisClientFactory(data));
+        input.start();
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var tick = executor.submit(input::tick);
+            try {
+                assertThat(enteredDispatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                executor.submit(() -> {
+                    when(state.enabled()).thenReturn(false);
+                    listener.get().accept(state);
+                    if (restart) {
+                        when(state.enabled()).thenReturn(true);
+                        listener.get().accept(state);
+                    }
+                }).get(5, java.util.concurrent.TimeUnit.SECONDS);
+            } finally {
+                releaseDispatch.countDown();
+            }
+            tick.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertThat(data).containsExactly("two", "three");
+        when(state.enabled()).thenReturn(true);
+        listener.get().accept(state);
+        input.tick();
+        assertThat(data).isEmpty();
+    }
+
+    @Test
+    void stopDuringEmptyMultiSourceReadDoesNotPopNextListAfterRestart() {
+        var properties = baseProperties();
+        properties.setInitialDelayMs(600_000L);
+        properties.setListName(null);
+        properties.setSources(List.of(source("red", 1), source("blue", 1)));
+        var runtime = new RecordingWorkerRuntime();
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(true);
+        when(state.rawConfig()).thenReturn(Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1));
+            listener.get().accept(state);
+            return null;
+        }).when(control).registerStateListener(any(), any());
+        var reader = mock(io.pockethive.redis.api.RedisListReader.class);
+        when(reader.pop("red")).thenAnswer(call -> {
+            when(state.enabled()).thenReturn(false);
+            listener.get().accept(state);
+            when(state.enabled()).thenReturn(true);
+            listener.get().accept(state);
+            return null;
+        });
+        when(reader.pop("blue")).thenReturn("blue-item");
+        input = new RedisDataSetWorkInput(definition(), control, runtime, identity(), properties,
+            LoggerFactory.getLogger("test-redis-input"), settings -> reader);
+        input.start();
+        input.tick();
+        org.mockito.Mockito.verify(reader, org.mockito.Mockito.never()).pop("blue");
+        assertThat(runtime.items).isEmpty();
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString).containsExactly("blue-item");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"true,false", "false,false", "true,true", "false,true"})
+    void stopDoesNotWaitForRedisIoAndOldBatchCannotResume(boolean connecting, boolean stopInput) throws Exception {
+        var properties = baseProperties();
+        properties.setInitialDelayMs(600_000L);
+        properties.setRatePerSec(2.0);
+        var runtime = new RecordingWorkerRuntime();
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(true);
+        when(state.rawConfig()).thenReturn(Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1));
+            listener.get().accept(state);
+            return null;
+        }).when(control).registerStateListener(any(), any());
+        var enteredIo = new java.util.concurrent.CountDownLatch(1);
+        var releaseIo = new java.util.concurrent.CountDownLatch(1);
+        Runnable awaitRelease = () -> {
+            enteredIo.countDown();
+            try {
+                assertThat(releaseIo.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            } catch (InterruptedException ex) {
+                throw new AssertionError(ex);
+            }
+        };
+        var firstReader = mock(io.pockethive.redis.api.RedisListReader.class);
+        var nextReader = mock(io.pockethive.redis.api.RedisListReader.class);
+        when(firstReader.pop("dataset")).thenAnswer(call -> {
+            awaitRelease.run();
+            return "old-item";
+        });
+        when(firstReader.pop("new")).thenReturn("new-item");
+        when(nextReader.pop("new")).thenReturn("new-item");
+        var creations = new java.util.concurrent.atomic.AtomicInteger();
+        input = new RedisDataSetWorkInput(definition(), control, runtime, identity(), properties,
+            LoggerFactory.getLogger("test-redis-input"), settings -> {
+                if (creations.getAndIncrement() == 0) {
+                    if (connecting) {
+                        awaitRelease.run();
+                    }
+                    return firstReader;
+                }
+                return nextReader;
+            });
+        input.start();
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var tick = executor.submit(input::tick);
+            try {
+                assertThat(enteredIo.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                executor.submit(() -> {
+                    when(state.enabled()).thenReturn(false);
+                    listener.get().accept(state);
+                    if (stopInput) {
+                        input.stop();
+                    }
+                    when(state.rawConfig()).thenReturn(Map.of("inputs", Map.of("redis", Map.of("listName", "new"))));
+                    listener.get().accept(state);
+                    when(state.enabled()).thenReturn(true);
+                    listener.get().accept(state);
+                    if (stopInput) {
+                        input.start();
+                    }
+                }).get(2, java.util.concurrent.TimeUnit.SECONDS);
+            } finally {
+                releaseIo.countDown();
+            }
+            tick.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertThat(runtime.items).hasSize(connecting ? 0 : 1);
+        org.mockito.Mockito.verify(firstReader, org.mockito.Mockito.times(connecting ? 0 : 1)).pop("dataset");
+        if (connecting || stopInput) {
+            org.mockito.Mockito.verify(firstReader).close();
+        }
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString)
+            .endsWith("new-item", "new-item");
+        org.mockito.Mockito.verify(firstReader, org.mockito.Mockito.times(connecting ? 0 : 1)).pop("dataset");
     }
 
     @Test
@@ -439,7 +663,7 @@ class RedisDataSetWorkInputTest {
         return new RedisDatasetSource(listName, weight);
     }
 
-    private static final class QueueRedisClientFactory implements RedisDataSetWorkInput.RedisClientFactory {
+    private static final class QueueRedisClientFactory implements java.util.function.Function<io.pockethive.redis.config.RedisConnectionSettings, io.pockethive.redis.api.RedisListReader> {
 
         private final Queue<String> queue;
 
@@ -448,12 +672,12 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.redis.config.RedisConnectionSettings settings) {
+        public io.pockethive.redis.api.RedisListReader apply(io.pockethive.redis.config.RedisConnectionSettings settings) {
             return new QueueRedisListClient(queue);
         }
     }
 
-    private static final class QueueRedisListClient implements RedisDataSetWorkInput.RedisListClient {
+    private static final class QueueRedisListClient implements io.pockethive.redis.api.RedisListReader {
 
         private final Queue<String> queue;
 
@@ -472,7 +696,7 @@ class RedisDataSetWorkInputTest {
         }
     }
 
-    private static final class MultiQueueRedisClientFactory implements RedisDataSetWorkInput.RedisClientFactory {
+    private static final class MultiQueueRedisClientFactory implements java.util.function.Function<io.pockethive.redis.config.RedisConnectionSettings, io.pockethive.redis.api.RedisListReader> {
 
         private final Map<String, Queue<String>> queues;
 
@@ -481,12 +705,12 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.redis.config.RedisConnectionSettings settings) {
+        public io.pockethive.redis.api.RedisListReader apply(io.pockethive.redis.config.RedisConnectionSettings settings) {
             return new MultiQueueRedisListClient(queues);
         }
     }
 
-    private static final class MultiQueueRedisListClient implements RedisDataSetWorkInput.RedisListClient {
+    private static final class MultiQueueRedisListClient implements io.pockethive.redis.api.RedisListReader {
 
         private final Map<String, Queue<String>> queues;
 

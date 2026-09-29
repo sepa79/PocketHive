@@ -3,6 +3,9 @@ package io.pockethive.worker.sdk.testing;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.work.api.transport.WorkDeliveryHandler;
+import io.pockethive.work.api.transport.WorkNotAcceptedException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -136,6 +139,36 @@ class InMemoryWorkTransportTest {
         }
         assertThat(received).containsExactly(admitted);
         assertThatThrownBy(input::start).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void unacceptedDeliveryRemainsPendingWithoutRetryUntilRestart() {
+        var transport = new InMemoryWorkTransport();
+        transport.create(ADDRESS);
+        var input = transport.input(ADDRESS);
+        var accepting = new AtomicBoolean();
+        var attempts = new AtomicInteger();
+        var received = new ArrayList<WorkItem>();
+        input.register(handler(item -> {
+            attempts.incrementAndGet();
+            if (!accepting.get()) {
+                input.stop();
+                throw new WorkNotAcceptedException("Admission paused");
+            }
+            received.add(item);
+        }));
+        input.start();
+        var waiting = item("waiting");
+        transport.output(ADDRESS).publish(waiting);
+        assertThat(attempts).hasValue(1);
+        assertThat(received).isEmpty();
+        assertThat(transport.pending(ADDRESS)).containsExactly(waiting);
+
+        accepting.set(true);
+        input.start();
+        assertThat(attempts).hasValue(2);
+        assertThat(received).containsExactly(waiting);
+        assertThat(transport.pending(ADDRESS)).isEmpty();
     }
 
     private static WorkItem item(String body) {

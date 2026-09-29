@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.autoconfigure;
 
+import io.pockethive.worker.sdk.config.ConfiguredSequenceAccess;
+import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlTopology;
 
 import io.pockethive.templating.api.SequenceAccess;
@@ -99,15 +101,20 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(SequenceAccess.class)
-    SequenceAccess sequenceAccess() {
-        return new io.pockethive.templating.ConfiguredRedisSequenceAccess();
+    SequenceAccess sequenceAccess(RedisSequenceConfiguration sequences) {
+        return new ConfiguredSequenceAccess(sequences);
+    }
+
+    @Bean(destroyMethod = "close")
+    RedisSequenceConfiguration redisSequenceConfiguration(RedisSequenceProperties properties) {
+        return new RedisSequenceConfiguration(properties);
     }
 
     @Bean
     @ConditionalOnMissingBean(ScheduledInvocationPolicy.class)
     @ConditionalOnProperty(prefix = "pockethive.inputs", name = "type", havingValue = "SCHEDULER")
     ScheduledInvocationPolicy<Object> rateSchedulePolicy() {
-        return new io.pockethive.worker.sdk.input.RateSchedulePolicy();
+        return new io.pockethive.work.local.scheduler.RateSchedulePolicy();
     }
 
     @Bean
@@ -178,14 +185,11 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         ConfigurableListableBeanFactory beanFactory,
         ObjectProvider<MeterRegistry> meterRegistry,
         ObjectProvider<ObservationRegistry> observationRegistry,
-        ObjectProvider<ControlPlaneIdentity> controlPlaneIdentity,
-        ObjectProvider<List<PocketHiveWorkerProperties<?>>> propertiesProvider
+        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity
     ) {
         MeterRegistry meters = meterRegistry.getIfAvailable(SimpleMeterRegistry::new);
         ObservationRegistry observations = observationRegistry.getIfAvailable(ObservationRegistry::create);
-        ControlPlaneIdentity identity = controlPlaneIdentity.getIfAvailable();
-        List<PocketHiveWorkerProperties<?>> properties = propertiesProvider.getIfAvailable(Collections::emptyList);
-        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations, identity, properties);
+        return new DefaultWorkerContextFactory(beanFactory::getBean, meters, observations, identity);
     }
 
     @Bean
@@ -214,6 +218,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        WorkerControlPlaneProperties workerControlPlaneProperties,
 	        io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
 	        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser,
+	        RedisSequenceConfiguration sequences,
 	        ObjectProvider<TemplateRenderer> templateRendererProvider,
 	        ObjectProvider<ObjectMapper> objectMapperProvider
 	    ) {
@@ -224,7 +229,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
 	        TemplateRenderer renderer = templateRendererProvider.getIfAvailable();
 	        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
-	            controlPlane, renderer, mutationPolicies, workConfigurationParser);
+	            controlPlane, renderer, mutationPolicies, workConfigurationParser, sequences);
 	    }
 
     @Bean
@@ -304,7 +309,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @Bean
     @ConditionalOnBean(WorkerControlPlaneRuntime.class)
     @ConditionalOnProperty(prefix = "pockethive.outputs", name = "type", havingValue = "REDIS")
-    WorkOutputFactory redisWorkOutputFactory(
+    RedisWorkOutputFactory redisWorkOutputFactory(
         WorkerControlPlaneRuntime controlPlaneRuntime,
         TemplateRenderer templateRenderer
     ) {
@@ -353,7 +358,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(RedisUploaderInterceptor.class)
-    WorkerInvocationInterceptor redisUploaderInterceptor(TemplateRenderer templateRenderer) {
+    RedisUploaderInterceptor redisUploaderInterceptor(TemplateRenderer templateRenderer) {
         return new RedisUploaderInterceptor(templateRenderer);
     }
 

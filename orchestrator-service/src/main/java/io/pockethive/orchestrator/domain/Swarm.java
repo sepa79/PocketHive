@@ -17,6 +17,11 @@ import io.pockethive.swarm.model.lifecycle.RuntimeResourceState;
 import io.pockethive.swarm.model.lifecycle.WorkloadIntent;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 
+/**
+ * Responsibility: hold one registered runtime identity, accepted intent and status observations.
+ * Must not: infer commands from observations, discover resources or perform infrastructure IO.
+ * Contract: swarm-lifecycle.schema.json; discovered workload intent is UNKNOWN until a command is accepted.
+ */
 public class Swarm {
     private final String id;
     private final String instanceId;
@@ -31,7 +36,7 @@ public class Swarm {
     private volatile JsonNode controllerStatusFull;
     private volatile Instant controllerStatusReceivedAt;
     private volatile RuntimeIntent runtimeIntent = RuntimeIntent.PRESENT;
-    private volatile WorkloadIntent workloadIntent = WorkloadIntent.STOPPED;
+    private volatile WorkloadIntent workloadIntent;
     private volatile ControllerState controllerState = ControllerState.PROVISIONING;
     private volatile WorkloadState workloadState = WorkloadState.UNAVAILABLE;
     private volatile Health health = Health.UNKNOWN;
@@ -39,6 +44,12 @@ public class Swarm {
     private volatile Map<String, Object> observation = Map.of();
 
     public Swarm(String id, String instanceId, String containerId, String runId, NetworkMode networkMode) {
+        this(id, instanceId, containerId, runId, networkMode, WorkloadIntent.STOPPED);
+    }
+
+    public Swarm(String id, String instanceId, String containerId, String runId, NetworkMode networkMode,
+                 WorkloadIntent workloadIntent) {
+        this.workloadIntent = java.util.Objects.requireNonNull(workloadIntent, "workloadIntent");
         this.id = id;
         this.instanceId = instanceId;
         this.containerId = containerId;
@@ -171,6 +182,9 @@ public class Swarm {
     }
 
     public void requestWorkload(WorkloadIntent workloadIntent) {
+        if (workloadIntent == WorkloadIntent.UNKNOWN) {
+            throw new IllegalArgumentException("UNKNOWN is not a requested workload intent");
+        }
         this.workloadIntent = java.util.Objects.requireNonNull(workloadIntent, "workloadIntent");
     }
 

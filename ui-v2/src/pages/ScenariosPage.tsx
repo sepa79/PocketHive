@@ -1,3 +1,7 @@
+import { useAccessObservation } from '../lib/useAccessObservation'
+import { scenarioOperationsAccessApi } from '../lib/scenarioOperationsAccessApi'
+import { AccessObservationNotice } from '../components/AccessObservationNotice'
+import { useScenarioCatalogue } from '../lib/useScenarioCatalogue'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { Icon } from '../components/Icon'
@@ -15,7 +19,6 @@ import {
   deleteBundle,
   deleteBundleEntry,
   downloadBundle,
-  listBundleWorkspaces,
   readBundleFile,
   readBundleTree,
   reloadScenarioManager,
@@ -55,11 +58,19 @@ type BundleValidationPanelState = {
   results: BundleValidationResult[]
 }
 
+/**
+ * Responsibility: present the bundle workspace and delegate catalogue/access loading to useScenarioCatalogue.
+ * Must not: interpret per-bundle grant scopes or authorize backend mutations.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (toolbar);
+ * RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (catalogue slice).
+ */
 export function ScenariosPage() {
   const auth = useAuth()
-  const [loading, setLoading] = useState(false)
+  const operations = useAccessObservation(auth.user, auth.session?.accessToken ?? null, scenarioOperationsAccessApi, auth.canAccessPocketHive)
+  const canReload = operations.value?.canReload === true
+  const canUpload = operations.value?.canUpload === true
+  const { entries: items, access: bundleAccess, loading, error: catalogueError, reload } = useScenarioCatalogue('read', auth.user)
   const [error, setError] = useState<string | null>(null)
-  const [items, setItems] = useState<BundleTemplateEntry[]>([])
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [bundleTreeNodes, setBundleTreeNodes] = useState<BundleTreeNode[]>([])
   const [bundleTreeLoading, setBundleTreeLoading] = useState(false)
@@ -84,11 +95,8 @@ export function ScenariosPage() {
   )
   const selectedBundleKey = selected?.bundleKey ?? null
 
-  const canManageSelected = selected ? auth.canManageBundle(selected.bundlePath, selected.folderPath) : false
-  const visibleItems = useMemo(
-    () => items.filter((entry) => auth.canViewBundle(entry.bundlePath, entry.folderPath)),
-    [auth, items],
-  )
+  const canManageSelected = selected ? bundleAccess.get(selected.bundleKey) === true : false
+  const visibleItems = items
   const validationTotals = useMemo(() => {
     const results = validationState?.results ?? []
     return {
@@ -179,29 +187,14 @@ export function ScenariosPage() {
     setBundleTreeNodes(tree.nodes)
   }, [selected])
 
-  const reload = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const list = await listBundleWorkspaces()
-      setItems(list)
-      setSelectedKey((current) => {
-        if (list.length === 0) return null
-        if (current && list.some((entry) => entry.bundleKey === current)) return current
-        return list[0].bundleKey
-      })
-      return list
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load scenarios')
-      return []
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
   useEffect(() => {
-    void reload()
-  }, [reload])
+    if (loading || catalogueError) return
+    setSelectedKey(current => {
+      if (items.length === 0) return null
+      if (current && items.some(entry => entry.bundleKey === current)) return current
+      return items[0].bundleKey
+    })
+  }, [items, loading, catalogueError])
 
   const triggerUpload = useCallback(() => {
     uploadInputRef.current?.click()
@@ -278,7 +271,7 @@ export function ScenariosPage() {
 
   const runBundleValidation = useCallback(
     async (scope: 'all' | 'selected') => {
-      if (!auth.canManagePocketHive) return
+      if (!canReload || (scope === 'selected' && !canManageSelected)) return
       if (!confirmDiscardChanges()) return
       setValidationBusy(true)
       setValidationError(null)
@@ -310,7 +303,7 @@ export function ScenariosPage() {
         setValidationBusy(false)
       }
     },
-    [auth.canManagePocketHive, confirmDiscardChanges, reload, selected, selectedKey],
+    [canReload, canManageSelected, confirmDiscardChanges, reload, selected, selectedKey],
   )
 
   const handleSelectBundle = useCallback((bundleKey: string) => {
@@ -443,6 +436,8 @@ export function ScenariosPage() {
     }
   }, [fileDraft, refreshCurrentBundleTree, reload, selected, selectedFile])
 
+  if (auth.status === 'authenticated' && auth.accessStatus !== 'ready') return null
+
   if (!auth.canAccessPocketHive) {
     return (
       <div className="page">
@@ -482,17 +477,17 @@ export function ScenariosPage() {
             style={{ display: 'none' }}
             onChange={(event) => void handleUploadChange(event)}
           />
-          {auth.canManagePocketHive ? (
+          {canReload || canUpload ? (
             <>
               <button
                 type="button"
                 className="actionButton actionButtonGhost"
                 onClick={() => void runBundleValidation('all')}
-                disabled={busy || validationBusy}
+                disabled={busy || validationBusy || !canReload}
               >
                 Reload & validate all
               </button>
-              <button type="button" className="actionButton" onClick={triggerUpload} disabled={busy || validationBusy}>
+              <button type="button" className="actionButton" onClick={triggerUpload} disabled={busy || validationBusy || !canUpload}>
                 Upload bundle
               </button>
             </>
@@ -501,11 +496,13 @@ export function ScenariosPage() {
         </div>
       </div>
 
-      {error ? (
+      <AccessObservationNotice status={operations.status} error={operations.error} retry={operations.reload} />
+
+      {catalogueError || error ? (
         <div className="card" style={{ marginTop: 12 }}>
           <div className="pill pillBad">ERROR</div>
           <div className="muted" style={{ marginTop: 8 }}>
-            {error}
+            {catalogueError || error}
           </div>
         </div>
       ) : null}
@@ -669,12 +666,12 @@ export function ScenariosPage() {
               </div>
 
               <div className="scenarioWorkspaceActions">
-                {auth.canManagePocketHive ? (
+                {canReload ? (
                   <button
                     type="button"
                     className="actionButton actionButtonGhost"
                     onClick={() => void runBundleValidation('selected')}
-                    disabled={busy || validationBusy || !selected}
+                    disabled={busy || validationBusy || !canManageSelected}
                   >
                     Reload & validate this
                   </button>

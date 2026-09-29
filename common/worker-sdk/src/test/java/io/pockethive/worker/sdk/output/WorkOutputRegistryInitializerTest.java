@@ -107,7 +107,7 @@ class WorkOutputRegistryInitializerTest {
         WorkerRegistry workerRegistry = new WorkerRegistry(List.of(definition));
         WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource(Map.of())));
-        WorkOutput preferredOutput = result -> { };
+        WorkOutput preferredOutput = (result, delivery) -> { };
         WorkOutputFactory preferred = new OrderedOutputFactory(Ordered.HIGHEST_PRECEDENCE) {
             @Override
             public WorkOutput create(WorkerDefinition def, WorkOutputConfig config) {

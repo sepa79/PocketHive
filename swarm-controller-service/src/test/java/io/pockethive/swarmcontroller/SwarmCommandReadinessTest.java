@@ -26,13 +26,13 @@ class SwarmCommandReadinessTest {
     SwarmCommandReadinessSnapshot snapshot =
         new SwarmCommandReadiness(lifecycle, initialized::get).snapshot();
 
-    assertThat(snapshot.accepts(false)).isTrue();
-    assertThat(snapshot.accepts(true)).isTrue();
+    assertThat(snapshot.acceptsStart()).isTrue();
+    assertThat(snapshot.acceptsConfig(true)).isTrue();
     assertThat(snapshot.workloadState()).isEqualTo(WorkloadState.RUNNING);
   }
 
   @Test
-  void pendingConfigUpdateRejectsEveryCommandAdmissionMode() {
+  void pendingBootstrapBlocksStartAndConfigButNotStop() {
     when(lifecycle.isReadyForWork()).thenReturn(true);
     when(lifecycle.hasPendingConfigUpdates()).thenReturn(true);
     when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
@@ -40,7 +40,18 @@ class SwarmCommandReadinessTest {
     SwarmCommandReadinessSnapshot snapshot =
         new SwarmCommandReadiness(lifecycle, () -> true).snapshot();
 
-    assertThat(snapshot.accepts(false)).isFalse();
-    assertThat(snapshot.accepts(true)).isFalse();
+    assertThat(snapshot.acceptsStop()).isTrue();
+    assertThat(snapshot.acceptsStart()).isFalse();
+    assertThat(snapshot.acceptsConfig(true)).isFalse();
   }
+  @Test
+  void staleWorkersBlockStartButPermitStopAndRunningConfig() {
+    var snapshot = new SwarmCommandReadinessSnapshot(true, false, false, WorkloadState.RUNNING);
+    assertThat(snapshot.acceptsStart()).isFalse();
+    assertThat(snapshot.acceptsStop()).isTrue();
+    assertThat(snapshot.acceptsConfig(true)).isTrue();
+    assertThat(new SwarmCommandReadinessSnapshot(false, false, false, WorkloadState.RUNNING).acceptsStop())
+        .isFalse();
+  }
+
 }

@@ -25,6 +25,8 @@ class RuntimeFilesystemLayoutTest {
         .isEqualTo(localRoot.resolve("alpha/operations/remove/corr-1"));
     assertThat(layout.swarmRunDirectory("alpha", "run-1"))
         .isEqualTo(localRoot.resolve("alpha/run-1"));
+    assertThat(layout.swarmJournalFile("alpha", "run-1"))
+        .isEqualTo(localRoot.resolve("alpha/run-1/journal.ndjson")).doesNotExist();
     assertThat(layout.swarmRoot("alpha")).isEqualTo(localRoot.resolve("alpha"));
   }
 
@@ -42,6 +44,37 @@ class RuntimeFilesystemLayoutTest {
     assertThatThrownBy(() -> layout.swarmRoot("../outside"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("single path segment");
+  }
+
+  @Test
+  void journalUsesTheSameIdentifierValidationAndRunIsolation() {
+    RuntimeFilesystemLayout layout = RuntimeFilesystemLayout.of(localRoot.toString(), "/runtime");
+    assertThat(layout.swarmJournalFile(" alpha ", " run-1 "))
+        .isEqualTo(layout.swarmJournalFile("alpha", "run-1"));
+    assertThat(layout.swarmJournalFile("alpha", "run-2"))
+        .isNotEqualTo(layout.swarmJournalFile("alpha", "run-1"));
+    for (String invalid : new String[] {"", "..", "../run", "/outside", "a/b", "a\\b"}) {
+      assertThatThrownBy(() -> layout.swarmJournalFile("alpha", invalid))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(() -> layout.swarmJournalFile(invalid, "run-1"))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+  }
+
+  @Test
+  void projectsIsolatedWorkerOutputsToHostAndContainerWithoutCreatingDirectories() {
+    RuntimeFilesystemLayout layout = RuntimeFilesystemLayout.of(localRoot.toString(), "/runtime");
+    Path first = layout.workerOutputDirectory("alpha", "run-1", "exporter-1");
+    assertThat(first).isEqualTo(localRoot.resolve("alpha/run-1/outputs/exporter-1")).doesNotExist();
+    assertThat(layout.publishedWorkerOutputDirectory("alpha", "run-1", "exporter-1"))
+        .isEqualTo(Path.of("/runtime/alpha/run-1/outputs/exporter-1"));
+    assertThat(layout.workerOutputDirectory("alpha", "run-2", "exporter-1")).isNotEqualTo(first);
+    assertThat(layout.workerOutputDirectory("alpha", "run-1", "exporter-2")).isNotEqualTo(first);
+    assertThat(layout.workerOutputDirectory("beta", "run-1", "exporter-1")).isNotEqualTo(first);
+    assertThatThrownBy(() -> layout.workerOutputDirectory("alpha", "run-1", "../other"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> layout.publishedWorkerOutputDirectory("alpha", "../run", "exporter-1"))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @Test

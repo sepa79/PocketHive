@@ -1,4 +1,4 @@
-Status: implemented in branch; production HiveGate registration pending
+Status: implemented in branch; companion cleanup execution is not implemented
 
 # Runtime Debug MCP Cleanup Spec
 
@@ -36,9 +36,13 @@ diagnostic discovery must not independently authorize orphan deletion. No runtim
 API or UI behavior changes are authorized by this deferral record.
 
 This work is separate from the [Rabbit isolation PR](work-plane-module-boundaries.md),
-the [native manifest/orphan cleanup extension for Artemis](../todo/work-plane-artemis-3ds.md),
+the [Artemis adapter](work-plane-artemis-3ds.md),
 and [Orchestrator registry/reset design](orchestrator-correctness.md). The ownership
 manifest is not the Controller's filesystem startup artifact or a durable swarm registry.
+On 2026-09-15 the user explicitly excluded native manifest/orphan-cleanup expansion
+from Artemis: preserve the existing startup/remove path and remove its dependency
+on the Rabbit-only diagnostic projection. Manifest replacement belongs to this
+separate diagnostics/refactoring scope.
 
 ## Ownership
 
@@ -54,7 +58,7 @@ manifest is not the Controller's filesystem startup artifact or a durable swarm 
 | Agent-facing runtime tools | `pockethive-mcp-service` | Typed pass-through or compatibility projection of Orchestrator APIs |
 | Cleanup plan/execute | Orchestrator | Single runtime cleanup authority |
 | MCP tool surface | `pockethive-mcp-service` | Agent facade, not runtime authority |
-| Cleanup approval/policy | HiveGate | Governs destructive execute in production |
+| Cleanup approval | Human operator | Approves the exact reviewed plan before an authorised caller executes it |
 | Cleanup evidence | Orchestrator | MCP must not keep a second evidence authority |
 
 ## Runtime Flow
@@ -78,7 +82,8 @@ flowchart LR
   Orchestrator --> Topology[RabbitMQ topology]
   Orchestrator --> Evidence[Cleanup evidence]
 
-  HiveGate[HiveGate policy and approval] -. governs exact execute input .-> MCP
+  Operator[Human operator] -. approves exact reviewed plan .-> Caller[Authorised caller]
+  Caller --> MCP
   HiveForge[HiveForge: deployment only, no bee cleanup]
 ```
 
@@ -261,17 +266,17 @@ Runtime debug must have zero scenario-path impact.
 - RabbitMQ diagnostics read exact Orchestrator-owned metadata only.
 - Debug taps, when used, must use separate temporary queues.
 - Agents should not tight-loop diagnostics during benchmark runs; rate-limit via
-  client/HiveGate policy.
+  explicit client request limits.
 
 ## Governance
 
 - PocketHive MCP does not approve its own destructive tool.
-- Register `runtime_cleanup_execute` behind HiveGate for production use.
-- HiveGate policy should bind `swarmId`, `runId`, `includeRunning`,
-  `includeRabbit`, `candidateSetHash`,
-  `candidateIds`, and `idempotencyKey`.
-- No MCP or ChatGPT approval widget is part of this feature. Governance belongs
-  in HiveGate or the production control plane that invokes the execute tool.
+- The caller must hold the required cleanup scope and obtain explicit human
+  approval of the current plan before invoking `runtime_cleanup_execute`.
+- Execute must preserve the reviewed `swarmId`, `runId`, `includeRunning`,
+  `includeRabbit`, `candidateSetHash`, `candidateIds`, and `idempotencyKey`.
+- No MCP or ChatGPT approval widget is part of this feature. The companion
+  displays the plan but does not implement cleanup execution.
 
 ## Evidence
 

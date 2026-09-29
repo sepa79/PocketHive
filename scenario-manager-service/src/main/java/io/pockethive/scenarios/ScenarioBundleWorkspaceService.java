@@ -1,6 +1,5 @@
 package io.pockethive.scenarios;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,18 +10,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 /**
- * Responsibility: Own safe tree, file, folder, and download operations inside a discovered scenario bundle.
+ * Responsibility: Own safe tree, file, and folder operations inside a discovered scenario bundle.
  * Must not: Discover bundles, own catalogue state, authorize callers, or interpret scenario domain content.
- * Contract: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ * Contract: RESP-SCENARIO-BUNDLE-API — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-api; docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
-public class ScenarioBundleWorkspaceService {
+class ScenarioBundleWorkspaceService {
     private static final String NODE_TYPE_DIRECTORY = "directory";
     private static final String NODE_TYPE_FILE = "file";
     private static final String EDITOR_KIND_TEXT = "text";
@@ -35,29 +32,6 @@ public class ScenarioBundleWorkspaceService {
 
     public ScenarioBundleWorkspaceService(ScenarioService scenarios) {
         this.scenarios = scenarios;
-    }
-
-    public BundleDownload download(String bundleKey) throws IOException {
-        synchronized (scenarios) {
-            ScenarioBundleWorkspaceLocation location = scenarios.bundleWorkspaceLocation(bundleKey);
-            requireDirectory(location);
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            try (ZipOutputStream zip = new ZipOutputStream(out);
-                 Stream<Path> paths = Files.walk(location.root())) {
-                for (Path path : (Iterable<Path>) paths::iterator) {
-                    if (Files.isDirectory(path)) {
-                        continue;
-                    }
-                    String entryName = relativePath(location.root(), path);
-                    zip.putNextEntry(new ZipEntry(entryName));
-                    Files.copy(path, zip);
-                    zip.closeEntry();
-                }
-            }
-            return new BundleDownload(
-                out.toByteArray(),
-                scenarios.fallbackBundleName(location.bundlePath()) + "-bundle.zip");
-        }
     }
 
     public BundleTree readTree(String bundleKey) throws IOException {

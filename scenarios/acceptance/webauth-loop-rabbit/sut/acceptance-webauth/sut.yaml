@@ -1,0 +1,7 @@
+id: acceptance-webauth
+name: Acceptance WebAuth TCP
+type: tcp
+endpoints:
+  default:
+    kind: tcp
+    baseUrl: tcp://tcp-mock-server:9090

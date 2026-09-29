@@ -1,47 +1,32 @@
 package io.pockethive.swarmcontroller.infra.docker;
 
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.dockerjava.core.DockerClientImpl;
-import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
-import com.github.dockerjava.transport.DockerHttpClient;
-import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.docker.DockerEngine;
+import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.ports.ComputeHost;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Responsibility: supply Controller compute ports from its configured Docker engine.
+ * Must not: construct SDK clients or select an alternative compute mode.
+ * Contract: RESP-DOCKER-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-docker-runtime.
+ */
 @Configuration
 public class DockerConfiguration {
-  private final SwarmControllerProperties properties;
-
-  public DockerConfiguration(SwarmControllerProperties properties) {
-    this.properties = properties;
-  }
-
-  @Bean
-  public DefaultDockerClientConfig dockerClientConfig() {
-    DefaultDockerClientConfig.Builder builder = DefaultDockerClientConfig.createDefaultConfigBuilder();
-    SwarmControllerProperties.Docker docker = properties.getDocker();
-    if (docker.hasHost()) {
-      builder.withDockerHost(docker.host());
-    } else {
-      builder.withDockerHost("unix://" + docker.socketPath());
+    @Bean(destroyMethod = "close")
+    public DockerEngine dockerEngine(SwarmControllerProperties properties) {
+        var docker = properties.getDocker();
+        return DockerEngine.forController(docker.host(), docker.socketPath());
     }
-    return builder.build();
-  }
 
-  @Bean
-  public DockerClient dockerClient(DefaultDockerClientConfig config) {
-    DockerHttpClient httpClient = new ApacheDockerHttpClient.Builder()
-        .dockerHost(config.getDockerHost())
-        .sslConfig(config.getSSLConfig())
-        .build();
-    return DockerClientImpl.getInstance(config, httpClient);
-  }
+    @Bean
+    public ComputeHost computeHost(DockerEngine engine) {
+        return engine.host();
+    }
 
-  @Bean
-  public DockerContainerClient dockerContainerClient(DockerClient dockerClient) {
-    return new DockerContainerClient(dockerClient);
-  }
-
+    @Bean
+    public ComputeAdapter computeAdapter(DockerEngine engine, SwarmControllerProperties properties) {
+        return engine.controllerAdapter(properties.getDocker() == null ? null : properties.getDocker().computeAdapter());
+    }
 }

@@ -1,0 +1,82 @@
+protocolVersion: "2.0.0"
+id: acceptance-tcp-delayed-artemis
+name: Acceptance tcp-delayed (artemis)
+description: Independent tcp-delayed fixture with explicit transport settings.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: SCHEDULER
+          scheduler: { ratePerSec: 0.2, maxMessages: 1 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+        message:
+          bodyType: SIMPLE
+          body: '{"kind":"tcp.request","request":{"behavior":"REQUEST_RESPONSE","body":"SLOW_acceptance-timeout\n","headers":{},"endTag":"COMPLETED","maxBytes":1024},"resultRules":null}'
+          headers: {}
+      work:
+        out: { out: requests }
+      ports:
+        - { id: out, direction: out }
+    - role: processor
+      image: processor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        tcpTransport:
+          type: socket
+          connectTimeoutMs: 3000
+          readTimeoutMs: 8000
+          maxBytes: 1024
+          keepAlive: false
+          workerThreads: 1
+          tcpNoDelay: true
+          sslVerify: false
+          connectionReuse: NONE
+          maxRetries: 0
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+      work:
+        in: { in: requests }
+        out: { out: responses }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs: { type: NONE }
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in: { in: responses }
+      ports:
+        - { id: in, direction: in }
+topology:
+  version: 1
+  edges:
+    - id: request-processing
+      from: { role: generator, port: out }
+      to: { role: processor, port: in }
+    - id: response-consumption
+      from: { role: processor, port: out }
+      to: { role: postprocessor, port: in }

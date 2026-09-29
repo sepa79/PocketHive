@@ -8,6 +8,7 @@
   "mutate": [
     "src/connection/authorizedMcpSession.ts",
     "src/connection/connectionAttempt.ts",
+    "src/connection/endpointSecurityPolicy.ts",
     "src/connection/oauthAuthentication.ts",
     "src/connection/profile.ts",
     "src/debug/actions.ts",

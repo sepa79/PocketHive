@@ -3,7 +3,7 @@ package io.pockethive.swarmcontroller;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.Locale;
+import io.pockethive.docker.DockerRuntimeNames;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,7 +12,8 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Resolve the Swarm Controller runtime metadata published on control-plane envelopes.
  * Must not: Build envelopes, publish messages, or infer missing required runtime identity.
- * Contract: Resolve one immutable metadata snapshot from the explicit process environment and journal run id.
+ * Contract: RESP-DOCKER-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-docker-runtime.
+ * Resolve one immutable metadata snapshot from the explicit process environment and journal run id.
  */
 @Component
 final class SwarmControllerRuntimeMetadata {
@@ -26,7 +27,7 @@ final class SwarmControllerRuntimeMetadata {
     Map<String, Object> resolved = new LinkedHashMap<>();
     resolved.put("containerId", envValue("HOSTNAME"));
     resolved.put("image", envValue("POCKETHIVE_RUNTIME_IMAGE"));
-    resolved.put("stackName", "ph-" + requireText(swarmId, "swarmId").toLowerCase(Locale.ROOT));
+    resolved.put("stackName", DockerRuntimeNames.stackName(requireText(swarmId, "swarmId")));
     resolved.put("templateId", requireEnvValue("POCKETHIVE_TEMPLATE_ID"));
     resolved.put("runId", requireText(journalRunId, "pockethive.journal.run-id"));
     this.values = Collections.unmodifiableMap(resolved);

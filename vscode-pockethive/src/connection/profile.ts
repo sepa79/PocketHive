@@ -1,3 +1,9 @@
+/**
+ * Responsibility: Construct validated immutable connection profiles from explicit input.
+ * Must not: Discover endpoints, persist profiles, or decide transport policy independently.
+ * Contract: RESP-COMPANION-CONNECTION-PROFILE — docs/architecture/runtime-responsibilities.md#resp-companion-connection-profile.
+ */
+import { validateEndpointTransport } from './endpointSecurityPolicy';
 import {
   AuthenticationMode,
   ConnectionContractError,
@@ -5,7 +11,6 @@ import {
   McpConnectionProfile,
 } from './contracts';
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const AUTHENTICATION_MODE: AuthenticationMode = 'OAUTH_AUTHORIZATION_CODE_PKCE';
 
 export function createConnectionProfile(input: {
@@ -24,24 +29,9 @@ export function createConnectionProfile(input: {
   } catch {
     throw new ConnectionContractError('MCP_ENDPOINT_INVALID', 'MCP URL must be an absolute URL');
   }
-  if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
-    throw new ConnectionContractError(
-      'MCP_ENDPOINT_INVALID',
-      'MCP URL must not contain credentials, query parameters, or a fragment',
-    );
-  }
+  validateEndpointTransport(endpoint, input.endpointSecurityMode);
   if (endpoint.pathname !== '/mcp') {
     throw new ConnectionContractError('MCP_ENDPOINT_PATH_INVALID', 'MCP URL path must be exactly /mcp');
-  }
-  if (input.endpointSecurityMode === 'REMOTE_HTTPS' && endpoint.protocol !== 'https:') {
-    throw new ConnectionContractError('MCP_ENDPOINT_HTTPS_REQUIRED', 'Remote MCP environments require HTTPS');
-  }
-  if (input.endpointSecurityMode === 'LOCAL_LOOPBACK_HTTP'
-      && (endpoint.protocol !== 'http:' || !LOOPBACK_HOSTS.has(endpoint.hostname))) {
-    throw new ConnectionContractError(
-      'MCP_ENDPOINT_LOOPBACK_REQUIRED',
-      'Local HTTP MCP environments require an explicit loopback host',
-    );
   }
   endpoint.pathname = '/mcp';
   return Object.freeze({

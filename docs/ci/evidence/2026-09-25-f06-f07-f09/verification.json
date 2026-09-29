@@ -1,0 +1,205 @@
+{
+  "date": "2026-09-25",
+  "scope": "local development proof; separate source review and bounded deployed browser verification recorded",
+  "surefireReports": {
+    "common/worker-sdk": {
+      "tests": 475,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pockethive-mcp-service": {
+      "tests": 253,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "http-sequence-service": {
+      "tests": 101,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "processor-service": {
+      "tests": 93,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "request-builder-service": {
+      "tests": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tcp-mock-server": {
+      "tests": 78,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "common/control-plane-core": {
+      "tests": 70,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "packagedProofs": {
+    "native": {
+      "passed": true,
+      "processStarts": 3,
+      "forcedProcessDeaths": 2,
+      "provider": "NATIVE",
+      "tcpEchoVerified": true,
+      "authOutageTcpVerified": false,
+      "retained": [
+        "identity",
+        "owner",
+        "name",
+        "shared",
+        "order",
+        "default policy",
+        "deletion"
+      ],
+      "jarSha256": "fb7b344f849d1dfd135f076b9af3ff5ee9c2cdc57e6a3909d7b3b2e510220dd9",
+      "scope": "packaged standalone HTTP component; no host-crash or deployed-ingress claim"
+    },
+    "pockethive": {
+      "passed": true,
+      "processStarts": 3,
+      "forcedProcessDeaths": 2,
+      "provider": "POCKETHIVE",
+      "tcpEchoVerified": true,
+      "authOutageTcpVerified": true,
+      "retained": [
+        "identity",
+        "owner",
+        "name",
+        "shared",
+        "order",
+        "default policy",
+        "deletion"
+      ],
+      "jarSha256": "fb7b344f849d1dfd135f076b9af3ff5ee9c2cdc57e6a3909d7b3b2e510220dd9",
+      "scope": "packaged standalone HTTP component; no host-crash or deployed-ingress claim",
+      "authJarSha256": "98ddfc11ee40a3fdc61f1242cdae333c6625dc8b32927fdf8dd4ec2e729a74ac"
+    }
+  },
+  "localLogs": {
+    "/tmp/ph-release-reactor.log": {
+      "sha256": "b1954246e77afc058c0517aab125a0a5f134d82084978f9e4a0e294f32d28b41",
+      "bytes": 4401324
+    },
+    "/tmp/ph-release-provider-final-package.log": {
+      "sha256": "db37c061ae075bcdfe7ae26753d9d54c4f7574fcbccaebcd116a2cca84d102f7",
+      "bytes": 22445
+    },
+    "/tmp/ph-release-final-import-boundary-rerun.log": {
+      "sha256": "f01a86a93ea490c1334f60e9394303fc35150950e60279bfe293c995a70a4a49",
+      "bytes": 3018
+    },
+    "/tmp/ph-release-auth-mutation.log": {
+      "sha256": "7ca075f0704e5a82174bd39895f8b8e05c35bc4268f389ec091d8aa644daa6dc",
+      "bytes": 10309
+    },
+    "/tmp/ph-release-sequence-mutation.log": {
+      "sha256": "2a39c2e7c072439e09630ce2efc7fae1c21d0d7e2ae26f756ac9c463b5406d3a",
+      "bytes": 12502
+    },
+    "/tmp/ph-release-mcp-mutation-verified.log": {
+      "sha256": "e9071078167003d7136c0ab9587051147fb7a2bdaf80d9abd88aea2320e29096",
+      "bytes": 169732
+    },
+    "/tmp/ph-release-ui-final.log": {
+      "sha256": "66f27650a07093913d529ea7d64dd40db1c1220e953e9b7ec5a27ea9739a616b",
+      "bytes": 1710
+    },
+    "/tmp/ph-release-ui-v2-tests.log": {
+      "sha256": "1fb412ac8248588de2f3efd873d57c7167e90eee0448e5b1e5fe74c7e8b24bb1",
+      "bytes": 390
+    },
+    "/tmp/ph-release-ui-build.log": {
+      "sha256": "36b5b3e2d0853789a09b060860122f66fcfe2fce80ff3f3d066eadd20ac5941e",
+      "bytes": 1199
+    },
+    "/tmp/ph-release-ui-plugin-build.log": {
+      "sha256": "9be70803bc02f11d4bb82b242b7a21cfbf38210b50c7a9ab2a56eec3bc9752dd",
+      "bytes": 1028
+    },
+    "/tmp/ph-release-vscode-tests.log": {
+      "sha256": "4b198aef8d0954e476be60bfd1cc9ea531e3b25865fdcf999abf36938f8f8c11",
+      "bytes": 18733
+    },
+    "/tmp/ph-release-vscode-package.log": {
+      "sha256": "c5bea9311d755a65a6e8ca92b9877a08317dc670068bf1f27e5ec6f8dacd332d",
+      "bytes": 131
+    },
+    "/tmp/ph-release-native-proof.log": {
+      "sha256": "cb29452f6fbf8d28eec6600c3ada852a697a0819172a0eab73c34c5cc3f1e83b",
+      "bytes": 403
+    },
+    "/tmp/ph-release-pockethive-proof.log": {
+      "sha256": "200ac2aeccc665e7d27a16ca39ce81e1157285eece470a2303f67848726ee2bd",
+      "bytes": 491
+    },
+    "/tmp/ph-release-auth-discovery-fix.log": {
+      "sha256": "89512074aba4f5a7cd6ef611c391565b694cc6a91a11ee65cb0112539dbd8351",
+      "bytes": 4521
+    },
+    "/tmp/ph-release-session-asset-red.log": {
+      "sha256": "9fc777a95e54cfe381a5a3fa736b72814f66c035dea3536d78ed58bd7539f893",
+      "bytes": 1351
+    },
+    "/tmp/ph-release-ui-review-fix-tests.log": {
+      "sha256": "d698d1404c92273212f81b4293c3c60835278b56fccdf086594a2438d1085af9",
+      "bytes": 390
+    },
+    "/tmp/ph-release-ui-review-fix-build.log": {
+      "sha256": "6a74dd7419dedb01afc58a2f689658614af15b5eb1f915d4f3fc60f7e0ad66f1",
+      "bytes": 1199
+    },
+    "/tmp/ph-release-ui-review-fix-plugin.log": {
+      "sha256": "74194ff6d340553d9c40a348c251bb8bfd36d4cf81bddc6a57f55bff544896da",
+      "bytes": 1028
+    },
+    "/tmp/ph-tcp-ui-fixes-unit.log": {
+      "sha256": "b6bf7fc6af16e133d85e48a9b7227a9012922446f728ed4da1df41359980217c",
+      "bytes": 1963
+    },
+    "/tmp/ph-tcp-playwright/release-run.log": {
+      "sha256": "6f8965bb844c02b2572c1e862c048096ead8460515dec574f629fc5e00ef684b",
+      "bytes": 1639
+    },
+    "/tmp/ph-tcp-playwright/redeploy-layout.log": {
+      "sha256": "11273747a1562a35aef39424942499e6632753bb3de40254a66ec744335b761f",
+      "bytes": 13371
+    },
+    "/tmp/ph-tcp-playwright/tablet-final-run.log": {
+      "sha256": "6f8965bb844c02b2572c1e862c048096ead8460515dec574f629fc5e00ef684b",
+      "bytes": 1639
+    },
+    "/tmp/ph-tcp-playwright/redeploy-tablet.log": {
+      "sha256": "d27effee7f959f469963d64307c6693a437f4d56ef466e88ea4638ac58be6f41",
+      "bytes": 13295
+    }
+  },
+  "reviewCorrections": {
+    "authRuntimeTests": 15,
+    "uiTests": 33,
+    "uiTestFiles": 11,
+    "normalAndPluginBuild": "passed",
+    "scope": "targeted verification after initial full reactor and mutation gates; independent follow-up resolved R1-R3; browser verification recorded separately"
+  },
+  "browserVerification": {
+    "runner": "Playwright Chromium 1.60.0 / axe 4.12.1",
+    "passedSteps": 21,
+    "failedSteps": 0,
+    "uncaughtPageErrors": 0,
+    "axeViolations": 0,
+    "axeScope": "stable light-theme mappings page, WCAG 2 A/AA and 2.1 AA rules",
+    "nodeUiTests": 20,
+    "report": "browser/report.json",
+    "notes": "browser-review.md"
+  }
+}

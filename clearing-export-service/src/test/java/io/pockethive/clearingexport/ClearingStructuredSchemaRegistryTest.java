@@ -57,7 +57,6 @@ class ClearingStructuredSchemaRegistryTest {
         "H|{{ now }}",
         "D|{{ steps.selected.payload }}",
         "T|{{ recordCount }}",
-        "/tmp/out",
         ".tmp",
         false,
         "reports/clearing/manifest.jsonl",

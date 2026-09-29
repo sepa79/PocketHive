@@ -1,0 +1,94 @@
+protocolVersion: "2.0.0"
+id: acceptance-worker-overrides-rabbit
+name: Acceptance explicit worker overrides (rabbit)
+description: Explicit non-baseline configuration for every worker and selected transport.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: SCHEDULER
+          scheduler: { ratePerSec: 7.0, maxMessages: 0 }
+        outputs:
+          type: RABBITMQ
+          rabbit: { persistent: false, publisherConfirms: false }
+        message:
+          bodyType: HTTP
+          method: POST
+          path: /test
+          body: acceptance-overrides-probe
+          headers: { content-type: text/plain }
+      work:
+        out: { out: generated }
+      ports:
+        - { id: out, direction: out }
+    - role: moderator
+      image: moderator:latest
+      config:
+        enabled: true
+        historyPolicy: LATEST_ONLY
+        inputs:
+          type: RABBITMQ
+          rabbit: { prefetch: 3 }
+        outputs:
+          type: RABBITMQ
+          rabbit: { persistent: false, publisherConfirms: false }
+        mode: { type: rate-per-sec, ratePerSec: 3.0 }
+      work:
+        in: { in: generated }
+        out: { out: moderated }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: processor
+      image: processor:latest
+      config:
+        enabled: true
+        historyPolicy: LATEST_ONLY
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}/api"
+        mode: THREAD_COUNT
+        threadCount: 2
+        inputs:
+          type: RABBITMQ
+          rabbit: { prefetch: 3 }
+        outputs:
+          type: RABBITMQ
+          rabbit: { persistent: false, publisherConfirms: false }
+      work:
+        in: { in: moderated }
+        out: { out: responses }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: RABBITMQ
+          rabbit: { prefetch: 3 }
+        outputs: { type: NONE }
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: false
+      work:
+        in: { in: responses }
+      ports:
+        - { id: in, direction: in }
+topology:
+  version: 1
+  edges:
+    - id: generation-moderation
+      from: { role: generator, port: out }
+      to: { role: moderator, port: in }
+    - id: moderated-processing
+      from: { role: moderator, port: out }
+      to: { role: processor, port: in }
+    - id: response-consumption
+      from: { role: processor, port: out }
+      to: { role: postprocessor, port: in }

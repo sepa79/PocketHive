@@ -15,7 +15,9 @@ import io.pockethive.auth.contract.AuthServicePermissionIds;
 import io.pockethive.auth.contract.AuthServiceResourceTypes;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
 import io.pockethive.auth.contract.PocketHiveResourceTypes;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,15 +25,40 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 class AuthControllerTest {
+    @TempDir
+    static Path dynamicClientStateDirectory;
+
+    @DynamicPropertySource
+    static void dynamicClientState(DynamicPropertyRegistry registry) {
+        registry.add("pockethive.auth-service.oauth.dynamic-client-state-path",
+            () -> dynamicClientStateDirectory.resolve("dynamic-clients.json").toString());
+    }
+
     @Autowired
     MockMvc mvc;
 
     @Autowired
     ObjectMapper mapper;
+
+    @Test
+    void accessProjectionAuthenticatesAndDoesNotCache() throws Exception {
+        mvc.perform(get("/api/auth/access")).andExpect(status().isUnauthorized());
+        MvcResult login = mvc.perform(post("/api/auth/dev/login")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"local-admin\"}"))
+            .andExpect(status().isOk()).andReturn();
+        mvc.perform(get("/api/auth/access").header(HttpHeaders.AUTHORIZATION, bearer(login)))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(jsonPath("$.canAccessPocketHive").value(true))
+            .andExpect(jsonPath("$.canRunPocketHive").value(true))
+            .andExpect(jsonPath("$.canManageUsers").value(true));
+    }
 
     @Test
     void devLoginAndResolveFlowWorks() throws Exception {

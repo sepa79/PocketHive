@@ -78,7 +78,7 @@ class OAuth2HttpSignatureRuntimeTest {
     void acquiresSignedTokenParsesResponseAndAppliesOnlyBearerDownstream() throws Exception {
         respond(200, "{\"access_token\":\"issued-token\",\"token_type\":\"Bearer\",\"expires_in\":120}");
         Instant before = Instant.now();
-        AuthRuntime.MutableHttpRequest request = apply();
+        MutableHttpRequest request = apply();
         Instant after = Instant.now();
 
         assertThat(request.headers()).containsExactlyEntriesOf(Map.of("Authorization", "Bearer issued-token"));
@@ -146,7 +146,7 @@ class OAuth2HttpSignatureRuntimeTest {
     @CsvSource({"401,'{\"error\":\"denied\"}'", "200,'{}'", "200,'{\"access_token\":\" \"}'", "200,'not-json'"})
     void failuresReleaseRefreshClaimAndNeverCacheOrApplyToken(int status, String body) throws Exception {
         respond(status, body);
-        AuthRuntime.MutableHttpRequest downstream = downstream();
+        MutableHttpRequest downstream = downstream();
         assertThatThrownBy(() -> runtime.applyHttp(REF, downstream, null, context)).isInstanceOf(AuthFailureException.class);
         assertThat(downstream.headers()).isEmpty();
         verify(store).releaseClaim(eq(TOKEN_KEY), eq(FINGERPRINT), any());
@@ -264,7 +264,7 @@ class OAuth2HttpSignatureRuntimeTest {
 
     @ParameterizedTest
     @CsvSource({"OAUTH2_CLIENT_CREDENTIALS,grant_type=client_credentials&client_id=client&client_secret=secret&scope=read",
-        "OAUTH2_PASSWORD_GRANT,grant_type=password&username=user&password=password&client_id=client&scope=read"})
+        "OAUTH2_PASSWORD_GRANT,grant_type=password&username=user&password=password&client_id=client&client_secret=secret&scope=read"})
     void existingOAuthProfilesKeepUnsignedTokenRequestsAndBearerApplication(AuthType type, String expectedBody) throws Exception {
         profile.setType(type);
         profile.putProperty("clientId", "client");
@@ -299,7 +299,7 @@ class OAuth2HttpSignatureRuntimeTest {
         respond(200, "{\"access_token\":\"unpublished\",\"token_type\":\"Bearer\",\"expires_in\":60}");
         org.mockito.Mockito.doThrow(new IllegalStateException("claim no longer owned"))
             .when(store).store(any(), any(), any());
-        AuthRuntime.MutableHttpRequest request = downstream();
+        MutableHttpRequest request = downstream();
         assertThatThrownBy(() -> runtime.applyHttp(REF, request, null, context)).isInstanceOf(AuthFailureException.class);
         assertThat(request.headers()).isEmpty();
         assertThat(cached.get()).isNull();
@@ -330,7 +330,7 @@ class OAuth2HttpSignatureRuntimeTest {
         org.mockito.Mockito.doThrow(new java.security.SignatureException("synthetic signing failure")).when(signer).sign();
         try (org.mockito.MockedStatic<java.security.Signature> signatures = org.mockito.Mockito.mockStatic(java.security.Signature.class)) {
             signatures.when(() -> java.security.Signature.getInstance("SHA256withRSA")).thenReturn(signer);
-            AuthRuntime.MutableHttpRequest request = downstream();
+            MutableHttpRequest request = downstream();
             assertThatThrownBy(() -> runtime.applyHttp(REF, request, null, context)).isInstanceOf(AuthFailureException.class);
             assertThat(request.headers()).isEmpty();
             verify(store).releaseClaim(eq(TOKEN_KEY), eq(FINGERPRINT), any());
@@ -379,14 +379,14 @@ class OAuth2HttpSignatureRuntimeTest {
             """.formatted(id, type, keyId, key.toString().replace("'", "''"));
     }
 
-    private AuthRuntime.MutableHttpRequest apply() {
-        AuthRuntime.MutableHttpRequest request = downstream();
+    private MutableHttpRequest apply() {
+        MutableHttpRequest request = downstream();
         runtime.applyHttp(REF, request, null, context);
         return request;
     }
 
-    private static AuthRuntime.MutableHttpRequest downstream() {
-        return new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "downstream-body");
+    private static MutableHttpRequest downstream() {
+        return new MutableHttpRequest("GET", "/accounts", Map.of(), "downstream-body");
     }
 
     private static TokenRecord record(String token, Instant expiresAt, Instant refreshAt) {

@@ -1,14 +1,20 @@
 # Migration Guide - Enhanced TCP Mock Server
 
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
 ## Overview
 
-The TCP Mock Server has been enhanced with complete WireMock parity. Existing mappings continue to work without changes, but you can now leverage advanced features.
+This historical guide contains examples of intended mapping changes. It does not guarantee that old mappings or WireMock mappings work unchanged. The target is equivalent TCP workflows; WireMock API/SDK compatibility is not required. Validate any imported mapping against [TCP capability qualification](WIREMOCK-PARITY.md).
 
 ---
 
 ## Backward Compatibility
 
-### ✅ All Existing Mappings Work Unchanged
+### Historical compatibility examples — unverified
 
 ```json
 {

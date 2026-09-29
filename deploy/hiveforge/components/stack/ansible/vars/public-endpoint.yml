@@ -1,0 +1,5 @@
+---
+# Shared deployment input for deploy/update; services receive projections of these values.
+pockethive_allow_remote_http: "{{ lookup('env', 'POCKETHIVE_ALLOW_REMOTE_HTTP') }}"
+pockethive_public_ingress: "{{ lookup('env', 'POCKETHIVE_PUBLIC_INGRESS') }}"
+pockethive_public_host: "{{ lookup('env', 'POCKETHIVE_PUBLIC_HOST') }}"

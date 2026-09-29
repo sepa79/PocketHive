@@ -1,0 +1,8 @@
+id: acceptance-http-proxy
+name: Acceptance HTTP through managed proxy
+type: http
+endpoints:
+  default:
+    kind: http
+    baseUrl: http://haproxy:18090
+    upstreamBaseUrl: http://wiremock:8080

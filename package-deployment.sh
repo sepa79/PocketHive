@@ -25,9 +25,28 @@ sed 's#\./#/opt/pockethive/#g' docker-compose.yml > "${DEPLOY_DIR}/docker-compos
 cp README.md "${DEPLOY_DIR}/"
 cp LICENSE "${DEPLOY_DIR}/"
 
+# Validate the required ClickHouse and TCP runtime inputs before copying them.
+for directory in clickhouse/init tcp-mock-server/mappings tcp-mock-server/__files; do
+  if [[ ! -d "${directory}" ]]; then
+    echo "Required deployment directory is missing or not a directory: ${directory}" >&2
+    exit 1
+  fi
+done
+for script in clickhouse/clickhouse-entrypoint.sh clickhouse/migrate-tx-outcome-v1-to-v2.sh; do
+  if [[ ! -f "${script}" ]]; then
+    echo "Required deployment script is missing or not a file: ${script}" >&2
+    exit 1
+  fi
+done
+
 # RabbitMQ config (definitions, listeners, and plugins)
 mkdir -p "${DEPLOY_DIR}/rabbitmq"
 cp -r rabbitmq/* "${DEPLOY_DIR}/rabbitmq/" 2>/dev/null || true
+
+# Required ClickHouse bootstrap assets
+mkdir -p "${DEPLOY_DIR}/clickhouse"
+cp -R clickhouse/init "${DEPLOY_DIR}/clickhouse/"
+cp clickhouse/clickhouse-entrypoint.sh clickhouse/migrate-tx-outcome-v1-to-v2.sh "${DEPLOY_DIR}/clickhouse/"
 
 # Grafana
 mkdir -p "${DEPLOY_DIR}/grafana/dashboards"
@@ -44,6 +63,10 @@ mkdir -p "${DEPLOY_DIR}/wiremock/__files"
 cp wiremock/mappings/*.json "${DEPLOY_DIR}/wiremock/mappings/" 2>/dev/null || true
 cp wiremock/__files/* "${DEPLOY_DIR}/wiremock/__files/" 2>/dev/null || true
 cp wiremock/README.md "${DEPLOY_DIR}/wiremock/" 2>/dev/null || true
+
+# Required TCP mock assets for both cleartext and TLS services
+mkdir -p "${DEPLOY_DIR}/tcp-mock-server"
+cp -R tcp-mock-server/mappings tcp-mock-server/__files "${DEPLOY_DIR}/tcp-mock-server/"
 
 # Scenario assets and Scenario Manager capabilities/network/SUT definitions
 mkdir -p "${DEPLOY_DIR}/scenarios"
@@ -109,8 +132,10 @@ with `docker compose down -v` if you need a clean slate.
 ## What's Included
 
 - `docker-compose.yml` - Main deployment configuration
+- `clickhouse/` - Initialization SQL, entrypoint, and transaction-outcome migration script
 - `grafana/` - ClickHouse/Postgres dashboards and datasources
 - `wiremock/` - Mock server stubs
+- `tcp-mock-server/` - TCP and TLS mock mappings and response files
 - `scenarios/` - Example Scenario bundles (YAML + assets)
 - `scenario-manager-service/` - Scenario Manager capabilities, network profiles, and SUT environment definitions
 - `docs/` - Deployment guides
@@ -197,7 +222,7 @@ rm -rf "${TEMP_DIR}"
 echo
 echo "=== Package Created ==="
 echo "File: ${PACKAGE_NAME}"
-echo "Size: $(du -h "${PACKAGE_NAME}" | cut -f1)"
+echo "Size: $(du -h "${SCRIPT_DIR}/${PACKAGE_NAME}" | cut -f1)"
 echo
 echo "Extract and deploy:"
 echo "  sudo mkdir -p /opt"

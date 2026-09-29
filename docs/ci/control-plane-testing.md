@@ -30,30 +30,15 @@ Both suites execute automatically as part of the existing Maven workflows. Runni
 `./mvnw verify` or the module-specific Maven `test` goals above will execute the new checks, making
 it easy to plug them into GitHub Actions or other CI runners without extra wiring.
 
-The root CI test job also supplies a disposable RabbitMQ management broker for
-`SwarmLifecycleManagerIntegrationTest`. It sets `RABBITMQ_SERVER_REQUIRED=true`
-so an unavailable broker fails the job instead of skipping its two lifecycle
-tests. The broker is a component-test fixture, not an entrypoint into a deployed
-PocketHive stack.
-
-To include these tests in a local root run, configure the same explicit settings
-for your test-owned broker:
-
-| Environment variable | CI fixture value |
-| --- | --- |
-| `RABBITMQ_TEST_HOSTNAME` | `127.0.0.1` |
-| `RABBITMQ_TEST_PORT` | `5672` |
-| `RABBITMQ_TEST_ADMIN_URI` | `http://127.0.0.1:15672/api/` |
-| `RABBITMQ_TEST_USER`, `RABBITMQ_TEST_ADMIN_USER` | `guest` |
-| `RABBITMQ_TEST_PASSWORD`, `RABBITMQ_TEST_ADMIN_PASSWORD` | `guest` |
-| `RABBITMQ_SERVER_REQUIRED` | `true` |
-
-The CI broker permits the fixture's guest account from the host runner and binds
-its published ports to loopback. Keep that configuration limited to disposable
-test infrastructure. The test derives its Spring/work-plane Rabbit connection
-settings from the same `RabbitAvailableCondition` broker; no independent Spring
-host or port override is needed. Docker must also be available for its
-Testcontainers PostgreSQL dependency.
+Full builds and Java CI use the shared disposable fixtures described below for
+`SwarmLifecycleManagerIntegrationTest`. Maven requires Rabbit availability, so
+an unavailable broker fails instead of skipping lifecycle tests. The wrapper
+exports the Rabbit test connection environment from dynamically assigned ports.
+It permits the fixture's guest account from the host runner and binds published
+ports to loopback. These are component-test fixtures, not entrypoints into a
+running PocketHive stack. The test derives its Spring/work-plane connection from
+`RabbitAvailableCondition`; no independent Spring override is needed. Docker is
+also required for its Testcontainers PostgreSQL dependency.
 
 ## Repository import boundaries
 
@@ -61,9 +46,11 @@ Testcontainers PostgreSQL dependency.
 production imports across all repository Maven modules. Its inline table owns these
 source rules; [review rules](../REVIEW_RULES.md#sole-source-scanning-test-exception)
 define the scope and limits. It replaces the former ControlPlane source scanner.
-Maven Surefire supplies the repository root explicitly; no directory guessing is used.
+Maven Surefire supplies the repository root explicitly. Module declarations come from
+the root and nested POMs; traversal is limited to their `src/main/java` trees, so transient
+JVM/build files elsewhere cannot interrupt the scan. No directory guessing is used.
 
-Run through normal root `./mvnw -B -ntp test`, or the focused reactor:
+Run through `tools/test/with-infrastructure.sh ./mvnw -B -ntp test`, or the focused reactor:
 
 ```bash
 ./mvnw -B -ntp -pl common/control-plane-core -am test
@@ -74,5 +61,33 @@ behavior or replace relevant codec, startup, lifecycle or ingress behavior check
 Module ownership/selection is verified by imports/dependencies and source review,
 following [the boundary-verification policy](../REVIEW_RULES.md#boundary-verification-and-test-value).
 
+## New acceptance system
+
+`acceptance-tests` is built independently from the frozen legacy suite. It uses
+Java 21, JUnit 5 and JDK HTTP against official ingress; canonical product contracts
+remain the wire authority. Plain Maven tests verify framework behavior without a
+PocketHive deployment. Live acceptance requires an explicit target file and group.
+No missing-target assumption skips and no automatic legacy execution.
+
+The [framework responsibility records](../architecture/acceptance-tests.md) own the
+implementation boundaries. The [coverage ledger](acceptance-coverage.md) maps current
+requirements to new evidence. The [replacement plan](../inProgress/e2e-test-system.md)
+owns N0–N4, including deletion only after confirmed replacement. This does not alter
+existing control-plane contract tests or authorize direct service-port stack checks.
+
 For worker OAuth fixtures and MCP authoring checks, see
 [Authentication regression tests](auth-testing.md).
+
+## Required build integration fixtures
+
+`tools/test/with-infrastructure.sh` owns disposable Redis/Rabbit fixture startup,
+readiness, connection environment and cleanup for full local builds and Java CI.
+Its test-only Compose manifest pins the images and publishes random loopback ports.
+It must not reuse or modify the running PocketHive stack. Missing infrastructure
+fails the run; Redis and Rabbit integration tests must not silently skip.
+Use `tools/test/with-infrastructure.sh ./mvnw -B test` for a standalone reactor run.
+`build-hive.sh` invokes it automatically unless the explicit `--quick` mode is used.
+
+The fixture wrapper forwards cancellation to the owned command process group,
+allows five seconds for shutdown, then kills remaining processes before removing
+the fixture containers. INT/TERM preserve exit codes 130/143.

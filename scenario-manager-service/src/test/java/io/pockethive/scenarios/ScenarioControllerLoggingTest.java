@@ -17,26 +17,14 @@ class ScenarioControllerLoggingTest {
     @Test
     void logsListingScenarios(CapturedOutput output) {
         ScenarioService service = Mockito.mock(ScenarioService.class);
-        ScenarioBundleWorkspaceService workspace = Mockito.mock(ScenarioBundleWorkspaceService.class);
-        ScenarioBundleOrganizationService organization = Mockito.mock(ScenarioBundleOrganizationService.class);
-        ScenarioBundleSutService bundleSuts = Mockito.mock(ScenarioBundleSutService.class);
-        ScenarioBundleContentService content = Mockito.mock(ScenarioBundleContentService.class);
+        ScenarioBundleService bundles = Mockito.mock(ScenarioBundleService.class);
         ScenarioRuntimeMaterializer runtimeMaterializer = Mockito.mock(ScenarioRuntimeMaterializer.class);
-        ScenarioBundlePublicationService publication = Mockito.mock(ScenarioBundlePublicationService.class);
         ScenarioVariablesService variables = Mockito.mock(ScenarioVariablesService.class);
         AvailableScenarioRegistry registry = Mockito.mock(AvailableScenarioRegistry.class);
         Mockito.when(registry.list()).thenReturn(Collections.emptyList());
-        ScenarioController controller = new ScenarioController(
-            service,
-            workspace,
-            organization,
-            bundleSuts,
-            content,
-            runtimeMaterializer,
-            publication,
-            variables,
-            registry,
-            new ScenarioManagerAuthorization());
+        ScenarioController controller = new ScenarioController(service, bundles, runtimeMaterializer,
+            variables, registry, new ScenarioManagerAuthorization(),
+            new ScenarioAccessService(service, new ScenarioManagerAuthorization(), bundles));
 
         controller.list(false);
 

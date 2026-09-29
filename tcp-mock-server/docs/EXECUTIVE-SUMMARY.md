@@ -1,31 +1,40 @@
 # TCP Mock Server - Executive Handover Summary
 
-## ✅ Project Status: PRODUCTION READY
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
 
-The TCP Mock Server is complete with 100% WireMock feature parity plus superior binary protocol support.
+## Project status: qualification incomplete
 
-## 📦 What's Delivered
+The target is a functional TCP counterpart to WireMock. Current gaps and the required acceptance evidence are defined in [TCP capability qualification](WIREMOCK-PARITY.md).
 
-### 1. Production Code (100% Complete)
-- **Backend**: 25 Java classes, fully tested
+## Historical inventory
+
+### 1. Implementation inventory — unqualified
+
+- **Backend**: Java implementation; functional qualification incomplete
 - **Frontend**: 1 HTML + 15 JavaScript modules
-- **Tests**: 85% coverage
-- **Build**: Maven, Docker, Kubernetes ready
+- **Tests**: No coverage percentage or passing result is asserted
+- **Build**: Historical Maven, Docker and Kubernetes notes
 
-### 2. Documentation (100% Complete)
+### 2. Documentation inventory
+
 - **10 Final Documents** covering all aspects
 - **Quick Start Guide** for immediate use
 - **API Reference** for developers
 - **Deployment Guide** for operations
 
-### 3. Example Configurations (100% Complete)
+### 3. Historical example configurations
+
 - **18 Mapping Files** covering all use cases
 - **Docker Compose** for local testing
 - **Kubernetes Manifests** for production
 
 ## 🎯 Key Achievements
 
-### WireMock Parity (100%)
+### Intended TCP workflows — qualification required
 ✅ Request journal with filtering  
 ✅ Advanced matching (JSONPath/XPath)  
 ✅ Fault injection (4 types)  
@@ -35,7 +44,7 @@ The TCP Mock Server is complete with 100% WireMock feature parity plus superior 
 ✅ Template engine  
 ✅ Priority management  
 
-### Beyond WireMock
+### Historical feature descriptions
 ✅ Binary protocol support (ISO-8583)  
 ✅ ByteBuf handling (no String corruption)  
 ✅ Configurable delimiters per mapping  
@@ -75,32 +84,14 @@ packages it under the runtime `docs/` classpath and Docker copies it to
 6. **QUICK-REFERENCE.md** - API reference
 7. **SCENARIO-SETUP.md** - Test scenarios
 
-## 🚀 Next Steps
+## Next steps and evidence
 
-### Immediate (Day 1)
-1. ✅ Rebuild and test locally
-2. ✅ Review documentation
+Complete [TCP capability qualification](WIREMOCK-PARITY.md) before treating the
+implementation as a shared SUT mock. Record runtime, security, capacity and
+recovery results from the supported ingress.
 
-### Short Term (Week 1)
-4. ✅ Deploy to test environment
-5. ✅ Run integration tests
-6. ✅ Train operations team
-
-### Production (Week 2)
-7. ✅ Deploy to production
-8. ✅ Monitor metrics
-9. ✅ Validate with real traffic
-
-## 📊 Quality Metrics
-
-| Metric | Target | Actual | Status |
-|--------|--------|--------|--------|
-| WireMock Parity | 100% | 100% | ✅ |
-| Test Coverage | 80% | 85% | ✅ |
-| Documentation | Complete | 10 docs | ✅ |
-| Performance | 10k req/s | 10k+ req/s | ✅ |
-| UI Features | All | 15 modules | ✅ |
-| Binary Support | Yes | Yes | ✅ |
+The previous readiness, coverage and throughput table had no supporting evidence
+attached. No runtime tests or benchmarks were run for this documentation update.
 
 ## 🎓 Knowledge Transfer
 
@@ -127,14 +118,10 @@ packages it under the runtime `docs/` classpath and Docker copies it to
 ⚠️ No authentication (add reverse proxy)  
 ⚠️ No HTTPS (add in production)  
 
-## 🐛 Known Issues
+## Known gaps
 
-**None Critical** - All features tested and working.
-
-Minor items (by design):
-- YAML import requires JSON format
-- Metrics reset on restart (in-memory)
-- Request history limited to 1000
+See [TCP capability qualification](WIREMOCK-PARITY.md) for the current assessment.
+Historical feature and review checkmarks in this guide are not acceptance evidence.
 
 ## 📞 Support
 
@@ -153,45 +140,8 @@ Contact development team with:
 - Steps to reproduce
 - Expected vs actual behavior
 
-## ✍️ Sign-Off
+## Sign-off
 
-### Development Team
-**Status**: ✅ COMPLETE  
-**Quality**: Production-ready  
-**Documentation**: Comprehensive  
-**Tests**: Passing (85% coverage)  
-
-### Deliverables Checklist
-✅ Source code (backend + frontend)  
-✅ Documentation (10 files)  
-✅ Example mappings (18 files)  
-✅ Docker/K8s configs  
-✅ Test suite  
-✅ Deployment guides  
-✅ Cleanup instructions  
-✅ Handover document  
-
----
-
-## 🎉 Summary
-
-**The TCP Mock Server is production-ready with:**
-- ✅ 100% WireMock feature parity
-- ✅ Superior binary protocol support
-- ✅ Enterprise-grade UI
-- ✅ Comprehensive documentation
-- ✅ Production deployment configs
-
-**Action Required:**
-1. Execute cleanup (30 min)
-2. Review documentation (1 hour)
-3. Deploy to test environment (1 day)
-4. Production deployment (Week 2)
-
-**Status**: ✅ READY FOR HANDOVER
-
----
-
-**Prepared By**: Development Team  
-**Date**: 2024  
-**Version**: 1.0.0 Production Release
+Qualification remains incomplete. This historical handover is not a release
+approval; use [TCP capability qualification](WIREMOCK-PARITY.md) and attach the
+actual test evidence before recording a new sign-off.

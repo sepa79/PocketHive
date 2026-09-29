@@ -1,17 +1,12 @@
 package io.pockethive.sink.clickhouse.metrics;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.net.URI;
-import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import io.pockethive.sink.clickhouse.ClickHouseInsert;
+import io.pockethive.sink.clickhouse.ClickHouseJsonEachRowTransport;
+import io.pockethive.sink.clickhouse.ClickHouseInsertException;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,37 +15,28 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * Responsibility: serialize and buffer metric samples using its existing flush/failure policy.
+ * Must not: construct ClickHouse HTTP requests, credentials or INSERT destinations.
+ * Contract: RESP-CLICKHOUSE-INSERT — docs/architecture/runtime-responsibilities.md#resp-clickhouse-insert.
+ */
 public class ClickHouseMetricsSink implements ClickHouseMetricSampleSink {
 
   private static final DateTimeFormatter CLICKHOUSE_TIMESTAMP =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
-  private static final String INSERT_QUERY_TEMPLATE = "INSERT INTO %s FORMAT JSONEachRow";
-  private static final int MAX_ERROR_BODY_LENGTH = 500;
 
   private final ClickHouseMetricsSinkProperties properties;
   private final ObjectMapper objectMapper;
-  private final HttpClient client;
+  private final ClickHouseJsonEachRowTransport transport;
   private final ConcurrentLinkedQueue<String> buffer = new ConcurrentLinkedQueue<>();
   private final AtomicInteger bufferedCount = new AtomicInteger();
   private final AtomicLong lastFlushAtMs = new AtomicLong(System.currentTimeMillis());
   private final ReentrantLock flushLock = new ReentrantLock();
 
   public ClickHouseMetricsSink(ClickHouseMetricsSinkProperties properties, ObjectMapper objectMapper) {
-    this(
-        Objects.requireNonNull(properties, "properties"),
-        objectMapper,
-        HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(properties.getConnectTimeoutMs()))
-            .build());
-  }
-
-  ClickHouseMetricsSink(
-      ClickHouseMetricsSinkProperties properties,
-      ObjectMapper objectMapper,
-      HttpClient client) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-    this.client = Objects.requireNonNull(client, "client");
+    this.transport = new ClickHouseJsonEachRowTransport(properties);
   }
 
   public void write(ClickHouseMetricSample sample) throws Exception {
@@ -102,7 +88,7 @@ public class ClickHouseMetricsSink implements ClickHouseMetricSampleSink {
 
       int batchSize = properties.getBatchSize();
       int maxBatches = Math.max(1, (totalBuffered + batchSize - 1) / batchSize);
-      URI uri = insertUri();
+      ClickHouseInsert insert = transport.prepareInsert();
       for (int batch = 0; batch < maxBatches; batch++) {
         List<String> lines = new ArrayList<>(Math.min(batchSize, bufferedCount.get()));
         for (int i = 0; i < batchSize; i++) {
@@ -117,12 +103,15 @@ public class ClickHouseMetricsSink implements ClickHouseMetricSampleSink {
         }
         bufferedCount.addAndGet(-lines.size());
         try {
-          insertLines(uri, lines);
+          insert.write(lines);
         } catch (Exception ex) {
           for (String line : lines) {
             buffer.add(line);
           }
           bufferedCount.addAndGet(lines.size());
+          if (ex instanceof ClickHouseInsertException failure) {
+            throw new IllegalStateException(failure.describe("ClickHouse metrics insert", "..."));
+          }
           throw ex;
         }
       }
@@ -130,43 +119,6 @@ public class ClickHouseMetricsSink implements ClickHouseMetricSampleSink {
     } finally {
       flushLock.unlock();
     }
-  }
-
-  private void insertLines(URI uri, List<String> lines) throws Exception {
-    StringBuilder payload = new StringBuilder(lines.size() * 256);
-    for (String line : lines) {
-      payload.append(line).append('\n');
-    }
-    HttpRequest.Builder request = HttpRequest.newBuilder(uri)
-        .timeout(Duration.ofMillis(properties.getReadTimeoutMs()))
-        .header("Content-Type", "application/json")
-        .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8));
-
-    String username = trim(properties.getUsername());
-    if (!username.isEmpty()) {
-      String auth = username + ":" + trim(properties.getPassword());
-      String encoded = Base64.getEncoder().encodeToString(auth.getBytes(StandardCharsets.UTF_8));
-      request.header("Authorization", "Basic " + encoded);
-    }
-
-    HttpResponse<String> response =
-        client.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-    if (response.statusCode() / 100 != 2) {
-      String body = response.body() == null ? "" : response.body().trim();
-      if (body.length() > MAX_ERROR_BODY_LENGTH) {
-        body = body.substring(0, MAX_ERROR_BODY_LENGTH) + "...";
-      }
-      throw new IllegalStateException(
-          "ClickHouse metrics insert failed status=" + response.statusCode() + " body=" + body);
-    }
-  }
-
-  private URI insertUri() {
-    String endpoint = trim(properties.getEndpoint());
-    String base = endpoint.endsWith("/") ? endpoint.substring(0, endpoint.length() - 1) : endpoint;
-    String query = INSERT_QUERY_TEMPLATE.formatted(properties.getTable());
-    String encoded = URLEncoder.encode(query, StandardCharsets.UTF_8);
-    return URI.create(base + "/?query=" + encoded);
   }
 
   private void ensureConfigured() {
@@ -206,23 +158,5 @@ public class ClickHouseMetricsSink implements ClickHouseMetricSampleSink {
         sample.value(),
         sample.unit(),
         sample.labels());
-  }
-
-  private static String trim(String value) {
-    return value == null ? "" : value.trim();
-  }
-
-  private record ClickHouseMetricRow(
-      String eventTime,
-      String swarmId,
-      String runId,
-      String role,
-      String instance,
-      String metricName,
-      String metricKind,
-      String statistic,
-      double value,
-      String unit,
-      Map<String, String> labels) {
   }
 }

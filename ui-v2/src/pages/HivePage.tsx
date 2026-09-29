@@ -1,3 +1,10 @@
+import { SwarmLifecycleButtons } from './hive/SwarmLifecycleButtons'
+import { useSwarmCatalogue } from './hive/useSwarmCatalogue'
+import type { SwarmSummary } from '../lib/SwarmSummary'
+import type { NetworkMode } from '../lib/NetworkMode'
+import NetworkBindingModeBadge from './hive/NetworkBindingModeBadge'
+import { parseNetworkBindings } from '../lib/networkBindings'
+import type { NetworkBinding } from '../lib/NetworkBinding'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { SwarmIssueBox } from '../components/hive/SwarmIssueBox'
@@ -15,15 +22,11 @@ import {
   type CapabilityConfigEntry,
   type CapabilityManifest,
 } from '../lib/capabilities'
-import { listBundleTemplates, type BundleTemplateEntry } from '../lib/scenariosApi'
 import { newUuid } from '../lib/uuid'
 import {
   createIdempotencyKey as createNetworkIdempotencyKey,
   formatInstant,
-  normalizeBindings,
   normalizeProfiles,
-  type NetworkBinding,
-  type NetworkMode,
   type NetworkProfile,
 } from '../lib/networkProxy'
 import { latestJournalIssue, type SwarmJournalEntry } from '../lib/journal'
@@ -43,22 +46,6 @@ const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 type BeeSummary = {
   role: string
   image: string | null
-}
-
-type SwarmSummary = {
-  id: string
-  runtimeIntent: string
-  workloadIntent: string
-  controllerState: string
-  workloadState: string
-  health?: string | null
-  runtimeResourceState: string
-  templateId?: string | null
-  controllerImage?: string | null
-  bees?: BeeSummary[]
-  sutId?: string | null
-  networkMode?: NetworkMode
-  networkProfileId?: string | null
 }
 
 type StatusFullSnapshotResponse = {
@@ -449,14 +436,17 @@ function workerHalEyeTitle(worker: SwarmWorkerSummary | null): string {
   }`
 }
 
+/**
+ * Responsibility: present swarm management and consume backend access decisions.
+ * Must not: derive permissions from grants or replace backend command authorization.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (access presentation).
+ */
 export function HivePage() {
   const auth = useAuth()
   const navigate = useNavigate()
   const { swarmId: selectedSwarmIdParam } = useParams<{ swarmId?: string }>()
   const selectedSwarmId = selectedSwarmIdParam?.trim() ? selectedSwarmIdParam.trim() : null
-  const [swarms, setSwarms] = useState<SwarmSummary[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { swarms, access: swarmAccess, loading, error, reload: loadSwarms } = useSwarmCatalogue(auth.user)
   const [message, setMessage] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [busySwarm, setBusySwarm] = useState<string | null>(null)
@@ -482,7 +472,6 @@ export function HivePage() {
   const [capabilities, setCapabilities] = useState<CapabilityManifest[]>([])
   const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false)
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null)
-  const [templateEntries, setTemplateEntries] = useState<BundleTemplateEntry[]>([])
   const [tapBusy, setTapBusy] = useState<Record<string, boolean>>({})
   const [tapIoSelection, setTapIoSelection] = useState<Record<string, { in?: string | null; out?: string | null }>>({})
   const [networkProfiles, setNetworkProfiles] = useState<NetworkProfile[]>([])
@@ -531,34 +520,6 @@ export function HivePage() {
     },
     [navigate, selectedSwarmId],
   )
-
-  const loadSwarms = useCallback(async (options?: { showLoading?: boolean }) => {
-    const showLoading = options?.showLoading ?? true
-    if (showLoading) setLoading(true)
-    try {
-      const response = await fetch(`${ORCHESTRATOR_BASE}/swarms`, {
-        headers: { Accept: 'application/json' },
-      })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response))
-      }
-      const payload = (await response.json()) as SwarmSummary[]
-      setError(null)
-      setSwarms(Array.isArray(payload) ? payload : [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load swarms')
-    } finally {
-      if (showLoading) setLoading(false)
-    }
-  }, [])
-
-  const loadTemplateEntries = useCallback(async () => {
-    try {
-      setTemplateEntries(await listBundleTemplates())
-    } catch {
-      setTemplateEntries([])
-    }
-  }, [])
 
   const loadSnapshot = useCallback(async () => {
     if (!selectedSwarmId) {
@@ -641,34 +602,7 @@ export function HivePage() {
     [selectedSwarmId, swarms],
   )
 
-  const templateEntriesById = useMemo(() => {
-    const index = new Map<string, BundleTemplateEntry>()
-    for (const entry of templateEntries) {
-      const scenarioId = typeof entry.id === 'string' ? entry.id.trim() : ''
-      if (scenarioId) {
-        index.set(scenarioId, entry)
-      }
-    }
-    return index
-  }, [templateEntries])
-
-  const resolveTemplateEntry = useCallback(
-    (templateId: string | null | undefined) => {
-      const key = typeof templateId === 'string' ? templateId.trim() : ''
-      if (!key) return null
-      return templateEntriesById.get(key) ?? null
-    },
-    [templateEntriesById],
-  )
-
-  const selectedSwarmTemplateEntry = useMemo(
-    () => resolveTemplateEntry(selectedSwarm?.templateId ?? null),
-    [resolveTemplateEntry, selectedSwarm?.templateId],
-  )
-
-  const canManageSelectedSwarm = selectedSwarmTemplateEntry
-    ? auth.canManageBundle(selectedSwarmTemplateEntry.bundlePath, selectedSwarmTemplateEntry.folderPath)
-    : auth.canManagePocketHive
+  const canManageSelectedSwarm = selectedSwarmId !== null && swarmAccess.get(selectedSwarmId)?.canManage === true
 
   const loadNetworkState = useCallback(async () => {
     if (!selectedSwarmId) {
@@ -702,12 +636,13 @@ export function HivePage() {
           throw new Error(await readErrorMessage(bindingResponse))
         }
         const bindingPayload = await bindingResponse.json()
-        const normalized = normalizeBindings([bindingPayload])
+        const normalized = parseNetworkBindings([bindingPayload])
         setNetworkBinding(normalized[0] ?? null)
       }
 
       setNetworkError(null)
     } catch (err) {
+      setNetworkBinding(null)
       setNetworkError(err instanceof Error ? err.message : 'Failed to load network state')
     } finally {
       setNetworkLoading(false)
@@ -722,9 +657,6 @@ export function HivePage() {
     setDetailTab('snapshot')
   }, [selectedSwarmId])
 
-  useEffect(() => {
-    void loadTemplateEntries()
-  }, [loadTemplateEntries])
 
   useEffect(() => {
     void loadNetworkState()
@@ -1058,6 +990,8 @@ export function HivePage() {
       ? '1 swarm'
       : `${swarms.length} swarms`
 
+  if (auth.status === 'authenticated' && auth.accessStatus !== 'ready') return null
+
   if (!auth.canAccessPocketHive) {
     return (
       <div className="page hivePage">
@@ -1187,19 +1121,13 @@ export function HivePage() {
             <div className="swarmCell swarmActions">Actions</div>
           </div>
           {swarms.map((swarm) => {
-            const templateEntry = resolveTemplateEntry(swarm.templateId)
-            const canRunSwarm = templateEntry
-              ? auth.canRunBundle(templateEntry.bundlePath, templateEntry.folderPath)
-              : auth.canManagePocketHive
-            const canManageSwarm = templateEntry
-              ? auth.canManageBundle(templateEntry.bundlePath, templateEntry.folderPath)
-              : auth.canManagePocketHive
+            const canRunSwarm = swarmAccess.get(swarm.id)?.canRun === true
+            const canManageSwarm = swarmAccess.get(swarm.id)?.canManage === true
             const beeRoles =
               swarm.bees && swarm.bees.length > 0
                 ? swarm.bees.map((bee) => bee.role).filter(Boolean).join(', ')
                 : '—'
             const actionFeedback = lifecycleFeedback[swarm.id]
-            const isBusy = busySwarm === swarm.id || actionFeedback?.status === 'pending'
             return (
               <div key={swarm.id} className="swarmCard">
                 <div className="swarmRow">
@@ -1257,36 +1185,15 @@ export function HivePage() {
 	                        Refresh details
 	                      </button>
 	                    ) : null}
-	                    <button
-	                      type="button"
-	                      className="actionButton"
-	                      disabled={isBusy || !canRunSwarm}
-                      onClick={() => runSwarmAction(swarm, 'start')}
-                    >
-                      <span className="actionButtonContent">
-                        <span>Start</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="actionButton actionButtonGhost"
-                      disabled={isBusy || !canManageSwarm}
-                      onClick={() => runSwarmAction(swarm, 'stop')}
-                    >
-                      <span className="actionButtonContent">
-                        <span>Stop</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="actionButton actionButtonDanger"
-                      disabled={isBusy || !canManageSwarm}
-                      onClick={() => setRemoveTarget(swarm)}
-                    >
-                      <span className="actionButtonContent">
-                        <span>Remove</span>
-                      </span>
-                    </button>
+                    <SwarmLifecycleButtons
+                      requestPending={busySwarm === swarm.id}
+                      feedback={actionFeedback}
+                      canRun={canRunSwarm}
+                      canManage={canManageSwarm}
+                      onStart={() => void runSwarmAction(swarm, 'start')}
+                      onStop={() => void runSwarmAction(swarm, 'stop')}
+                      onRemove={() => setRemoveTarget(swarm)}
+                    />
                   </div>
                 </div>
 	                {actionFeedback ? (
@@ -1399,15 +1306,11 @@ export function HivePage() {
                             <div className="muted">Per-swarm proxy binding. Shared stack administration lives on the Proxy page.</div>
                           </div>
                           <div className="row">
-                            <div
-                              className={
-                                (networkBinding?.effectiveMode ?? selectedSwarm?.networkMode ?? 'DIRECT') === 'PROXIED'
-                                  ? 'pill pillInfo'
-                                  : 'pill pillWarn'
-                              }
-                            >
-                              {networkBinding?.effectiveMode ?? selectedSwarm?.networkMode ?? 'DIRECT'}
-                            </div>
+                            <NetworkBindingModeBadge
+                              binding={networkBinding}
+                              loading={networkLoading}
+                              error={networkError}
+                            />
                             <button
                               type="button"
                               className="actionButton actionButtonGhost"

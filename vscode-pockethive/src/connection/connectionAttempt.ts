@@ -1,3 +1,8 @@
+/**
+ * Responsibility: Own connection-attempt transitions and delegate discovery, authentication and testing.
+ * Must not: Perform transport IO, persist profiles or revive cancelled operations.
+ * Contract: RESP-COMPANION-CONNECTION-ATTEMPT — docs/architecture/runtime-responsibilities.md#resp-companion-connection-attempt.
+ */
 import {
   AuthenticationCancelledError,
   AuthenticationExpiredError,
@@ -34,22 +39,13 @@ export class ConnectionAttempt {
   ) {}
 
   async connect(): Promise<ConnectionAttemptView> {
-    this.requireState('EDITING');
-    const operation = this.beginOperation();
+    const operation = this.beginOperation('EDITING');
     try {
-      let endpoint: ValidatedEndpoint;
-      try {
-        endpoint = await this.endpoints.validate(this.profile);
-        this.endpoint = endpoint;
-        this.endpointValidated = true;
-      } catch (error) {
-        this.failure = failure(error, this.now());
-        return this.emit();
-      }
+      if (!await this.discover(operation.signal)) return this.view();
       this.transition('AUTHENTICATING');
       let session: OAuthSession;
       try {
-        session = await this.authentication.authenticate(this.profile, endpoint, operation.signal);
+        session = await this.authentication.authenticate(this.profile, this.endpoint!, operation.signal);
         this.authenticated = true;
       } catch (error) {
         if (error instanceof AuthenticationCancelledError || operation.signal.aborted) {
@@ -66,15 +62,11 @@ export class ConnectionAttempt {
   }
 
   async retryTest(): Promise<ConnectionAttemptView> {
-    this.requireState('CONNECTION_TEST_FAILED');
-    const operation = this.beginOperation();
+    const operation = this.beginOperation('CONNECTION_TEST_FAILED');
     try {
-      const session = await this.authentication.session(this.profile);
-      if (!session || Date.parse(session.expiresAt) <= this.now().getTime()) {
-        this.authenticated = false;
-        this.fail('AUTHENTICATION_FAILED', new AuthenticationExpiredError());
-        return this.view();
-      }
+      this.transition('TESTING');
+      const session = await this.storedSession(operation.signal);
+      if (!session) return this.view();
       return this.testSession(session, operation.signal);
     } finally {
       this.endOperation(operation);
@@ -82,22 +74,11 @@ export class ConnectionAttempt {
   }
 
   async reconnect(): Promise<ConnectionAttemptView> {
-    this.requireState('EDITING');
-    const operation = this.beginOperation();
+    const operation = this.beginOperation('EDITING');
     try {
-      try {
-        this.endpoint = await this.endpoints.validate(this.profile);
-        this.endpointValidated = true;
-      } catch (error) {
-        this.failure = failure(error, this.now());
-        return this.emit();
-      }
-      const session = await this.authentication.session(this.profile);
-      if (!session || Date.parse(session.expiresAt) <= this.now().getTime()) {
-        this.authenticated = false;
-        this.fail('AUTHENTICATION_FAILED', new AuthenticationExpiredError());
-        return this.view();
-      }
+      if (!await this.discover(operation.signal)) return this.view();
+      const session = await this.storedSession(operation.signal);
+      if (!session) return this.view();
       this.authenticated = true;
       return this.testSession(session, operation.signal);
     } finally {
@@ -106,8 +87,7 @@ export class ConnectionAttempt {
   }
 
   async signInAgain(): Promise<ConnectionAttemptView> {
-    this.requireState('AUTHENTICATION_FAILED');
-    const operation = this.beginOperation();
+    const operation = this.beginOperation('AUTHENTICATION_FAILED');
     try {
       this.authenticated = false;
       this.failure = undefined;
@@ -137,7 +117,7 @@ export class ConnectionAttempt {
   }
 
   cancel(): ConnectionAttemptView {
-    if (!['AUTHENTICATING', 'TESTING', 'READY_TO_SAVE'].includes(this.state)) {
+    if (!['DISCOVERING', 'AUTHENTICATING', 'TESTING', 'READY_TO_SAVE'].includes(this.state)) {
       throw new ConnectionContractError('CONNECTION_ATTEMPT_TRANSITION_INVALID', this.state);
     }
     this.activeAbort?.abort();
@@ -154,6 +134,23 @@ export class ConnectionAttempt {
       failure: this.failure,
       evidence: this.evidence,
     });
+  }
+
+  private async discover(signal: AbortSignal): Promise<boolean> {
+    this.failure = undefined;
+    this.transition('DISCOVERING');
+    try {
+      const endpoint = await this.endpoints.validate(this.profile, signal);
+      if (signal.aborted) return false;
+      this.endpoint = endpoint;
+      this.endpointValidated = true;
+      return true;
+    } catch (error) {
+      if (signal.aborted) return false;
+      this.failure = failure(error, this.now());
+      this.transition('EDITING');
+      return false;
+    }
   }
 
   private async testSession(session: OAuthSession, signal: AbortSignal): Promise<ConnectionAttemptView> {
@@ -176,10 +173,27 @@ export class ConnectionAttempt {
     return this.view();
   }
 
-  private beginOperation(): AbortController {
+  private async storedSession(signal: AbortSignal): Promise<OAuthSession | undefined> {
+    try {
+      const session = await this.authentication.session(this.profile);
+      if (signal.aborted) return undefined;
+      if (!session || Date.parse(session.expiresAt) <= this.now().getTime()) {
+        throw new AuthenticationExpiredError();
+      }
+      return session;
+    } catch (error) {
+      if (signal.aborted) return undefined;
+      this.authenticated = false;
+      this.fail('AUTHENTICATION_FAILED', error);
+      return undefined;
+    }
+  }
+
+  private beginOperation(expected: ConnectionAttemptState): AbortController {
     if (this.activeAbort) {
       throw new ConnectionContractError('CONNECTION_ATTEMPT_ALREADY_RUNNING', this.state);
     }
+    this.requireState(expected);
     const operation = new AbortController();
     this.activeAbort = operation;
     return operation;

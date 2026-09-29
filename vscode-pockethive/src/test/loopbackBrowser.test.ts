@@ -1,9 +1,49 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { connect } from 'node:net';
+import { once } from 'node:events';
 
 import { companionOAuthRedirectUri } from '../connection/companionOAuthClient';
 import { LoopbackBrowserAuthorization } from '../connection/loopbackBrowser';
 import { CALLBACK_LOGO_DATA_URI } from '../generated/callbackLogo';
+
+for (const outcome of ['callback', 'cancel'] as const) {
+  test(`${outcome} releases a listener with an idle browser preconnection`, async () => {
+    let ready!: (uri: string) => void;
+    const listening = new Promise<string>(resolve => { ready = resolve; });
+    const controller = new AbortController();
+    const browser = new LoopbackBrowserAuthorization(async uri => { ready(uri); return true; });
+    const authorization = browser.authorize(uri => uri, controller.signal);
+    const observed = authorization.then(result => ({ result }), error => ({ error }));
+    const redirect = new URL(await listening);
+    const idle = connect({ host: redirect.hostname, port: Number(redirect.port) });
+    await once(idle, 'connect');
+    const idleClosed = once(idle, 'close');
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      if (outcome === 'callback') {
+        const response = await fetch(`${redirect}?error=access_denied&state=state`);
+        assert.match(await response.text(), /Sign-in cancelled/);
+      } else controller.abort();
+      const result = await Promise.race([observed, new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('Callback listener did not close')), 1000);
+      })]);
+      if (outcome === 'callback') {
+        assert.ok('result' in result);
+        assert.equal(result.result.callback.searchParams.get('error'), 'access_denied');
+      } else {
+        assert.ok('error' in result);
+        assert.match(String(result.error), /OAUTH_AUTHORIZATION_CANCELLED/);
+      }
+      await idleClosed;
+    } finally {
+      clearTimeout(timeout);
+      idle.destroy();
+      controller.abort();
+      await observed;
+    }
+  });
+}
 
 test('accepts one exact IPv4 loopback callback and closes the listener', async () => {
   let redirectUri: string | undefined;

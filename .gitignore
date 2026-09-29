@@ -55,3 +55,6 @@ scenarios-runtime/
 
 # Python architecture tools
 __pycache__/
+
+# Acceptance evidence survives Maven clean; exclude it from source/images.
+acceptance-tests/runs/

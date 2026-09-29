@@ -1,2 +1,0 @@
-io.pockethive:auth-contracts:jar:0.15.35
-\- com.fasterxml.jackson.core:jackson-annotations:jar:2.21:compile

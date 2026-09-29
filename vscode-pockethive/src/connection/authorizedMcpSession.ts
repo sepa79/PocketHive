@@ -52,6 +52,11 @@ export interface SignOutResult {
   readonly remoteRevocation: 'CONFIRMED' | 'NOT_REQUIRED' | 'UNCONFIRMED';
 }
 
+/**
+ * Responsibility: Own authenticated MCP session renewal and delegate discovery and transport validation.
+ * Must not: Persist profile state, implement OAuth transport or discard caller cancellation.
+ * Contract: RESP-COMPANION-AUTHORIZED-SESSION — docs/architecture/runtime-responsibilities.md#resp-companion-authorized-session.
+ */
 export class AuthorizedMcpSession {
   private boundProfileId?: string;
   private boundAccessToken?: string;
@@ -106,7 +111,7 @@ export class AuthorizedMcpSession {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<ConnectionEvidence> {
     this.requireIdle();
-    const endpoint = await this.endpoints.validate(profile);
+    const endpoint = await this.endpoints.validate(profile, signal);
     const session = await this.authentication.authenticate(profile, endpoint, signal);
     const evidence = await this.connection.test(profile, session, signal);
     this.bind(profile, session);
@@ -129,7 +134,7 @@ export class AuthorizedMcpSession {
     let remoteRevocation: SignOutResult['remoteRevocation'] = session ? 'CONFIRMED' : 'NOT_REQUIRED';
     if (session) {
       try {
-        const endpoint = await this.endpoints.validate(profile);
+        const endpoint = await this.endpoints.validate(profile, signal);
         await this.authentication.revoke(profile, endpoint, session, signal);
       } catch {
         remoteRevocation = 'UNCONFIRMED';
@@ -153,7 +158,7 @@ export class AuthorizedMcpSession {
     const bound = this.boundProfileId === profile.id && this.boundAccessToken === session.accessToken;
     const endpoint = bound && Date.parse(session.expiresAt) > this.now().getTime() + SESSION_RENEWAL_SKEW_MS
       ? undefined
-      : await this.endpoints.validate(profile);
+      : await this.endpoints.validate(profile, signal);
     if (!endpoint) return undefined;
     if (Date.parse(session.expiresAt) <= this.now().getTime() + SESSION_RENEWAL_SKEW_MS) {
       try {

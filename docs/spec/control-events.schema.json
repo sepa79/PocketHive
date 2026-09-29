@@ -127,7 +127,7 @@
       "required": ["target", "requestedWorkloadState", "observedWorkloadState", "nonConvergedWorkers"],
       "properties": {
         "target": { "$ref": "swarm-lifecycle.schema.json#/$defs/Target" },
-        "requestedWorkloadState": { "$ref": "swarm-lifecycle.schema.json#/$defs/WorkloadIntent" },
+        "requestedWorkloadState": { "$ref": "swarm-lifecycle.schema.json#/$defs/WorkloadIntent", "not": { "const": "UNKNOWN" } },
         "observedWorkloadState": { "$ref": "swarm-lifecycle.schema.json#/$defs/WorkloadState" },
         "nonConvergedWorkers": {
           "type": "array",

@@ -14,7 +14,7 @@ class SwarmWorkersAggregatorTest {
 
   @Test
   void propagatesWorkerStatusFullConfigIntoSnapshot() throws Exception {
-    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator(60_000);
+    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator();
     Map<String, Object> expectedConfig = Map.of(
         "enabled", true,
         "message", Map.of(
@@ -55,7 +55,7 @@ class SwarmWorkersAggregatorTest {
             """),
         runtime());
 
-    Map<String, Object> worker = singleWorker(aggregator.snapshot());
+    Map<String, Object> worker = singleWorker(aggregator.snapshot(observations(true)));
 
     assertThat(worker).containsKey("config");
     assertThat(config(worker)).isEqualTo(expectedConfig);
@@ -66,7 +66,7 @@ class SwarmWorkersAggregatorTest {
 
   @Test
   void keepsLastReportedConfigWhenLaterStatusOmitsConfig() throws Exception {
-    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator(60_000);
+    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator();
 
     aggregator.updateFromWorkerStatus(
         "generator",
@@ -108,7 +108,7 @@ class SwarmWorkersAggregatorTest {
             """),
         null);
 
-    Map<String, Object> worker = singleWorker(aggregator.snapshot());
+    Map<String, Object> worker = singleWorker(aggregator.snapshot(observations(false)));
 
     assertThat(worker).containsEntry("enabled", false);
     assertThat(config(worker)).containsKey("inputs");
@@ -116,7 +116,7 @@ class SwarmWorkersAggregatorTest {
 
   @Test
   void preservesExplicitEmptyConfigFromStatusFull() throws Exception {
-    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator(60_000);
+    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator();
 
     aggregator.updateFromWorkerStatus(
         "postprocessor",
@@ -154,7 +154,7 @@ class SwarmWorkersAggregatorTest {
             """),
         runtime());
 
-    Map<String, Object> worker = singleWorker(aggregator.snapshot());
+    Map<String, Object> worker = singleWorker(aggregator.snapshot(observations(true)));
 
     assertThat(worker).containsKey("config");
     assertThat(config(worker)).isEmpty();
@@ -162,7 +162,7 @@ class SwarmWorkersAggregatorTest {
 
   @Test
   void separatesDuplicateRolesByRuntimeInstanceWithoutSecondRuntimeId() throws Exception {
-    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator(60_000);
+    SwarmWorkersAggregator aggregator = new SwarmWorkersAggregator();
 
     aggregator.updateFromWorkerStatus(
         "generator",
@@ -189,7 +189,7 @@ class SwarmWorkersAggregatorTest {
             """),
         runtime());
 
-    List<Map<String, Object>> workers = aggregator.snapshot();
+    List<Map<String, Object>> workers = aggregator.snapshot(observations(true));
 
     assertThat(workers)
         .extracting(worker -> worker.get("instance"))
@@ -206,6 +206,15 @@ class SwarmWorkersAggregatorTest {
         .filteredOn(worker -> "gen-b".equals(worker.get("instance")))
         .singleElement()
         .satisfies(worker -> assertThat(config(worker)).containsEntry("message", Map.of("path", "/beta")));
+  }
+
+  private static Map<io.pockethive.swarm.model.lifecycle.Target, WorkerObservation> observations(boolean enabled) {
+    WorkerObservation observation = new WorkerObservation(java.time.Instant.EPOCH, enabled, false);
+    return Map.of(
+        new io.pockethive.swarm.model.lifecycle.Target("generator", "gen-1"), observation,
+        new io.pockethive.swarm.model.lifecycle.Target("generator", "gen-a"), observation,
+        new io.pockethive.swarm.model.lifecycle.Target("generator", "gen-b"), observation,
+        new io.pockethive.swarm.model.lifecycle.Target("postprocessor", "post-1"), observation);
   }
 
   private static JsonNode data(String json) throws Exception {

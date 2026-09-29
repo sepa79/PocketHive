@@ -42,6 +42,9 @@ class SwarmWorkerStatusHandlerTest {
   @Test
   void appliesAFullDisabledObservationAndUpdatesReadOnlyProjections() {
     when(lifecycle.markReady(ROLE, INSTANCE)).thenReturn(true);
+    when(lifecycle.workerObservations()).thenReturn(Map.of(
+        new io.pockethive.swarm.model.lifecycle.Target(ROLE, INSTANCE),
+        new WorkerObservation(Instant.EPOCH, false, false)));
     StatusMetric status = status(
         StatusMetric.STATUS_FULL,
         Map.of(
@@ -107,6 +110,77 @@ class SwarmWorkerStatusHandlerTest {
         org.mockito.ArgumentMatchers.anyString(),
         org.mockito.ArgumentMatchers.anyString(),
         org.mockito.ArgumentMatchers.anyBoolean());
+  }
+
+  @Test
+  void projectsFullAndDeltaObservationsFromTheReadinessOwner() {
+    SwarmReadinessTracker tracker = new SwarmReadinessTracker((role, instance, reason) -> { });
+    org.mockito.Mockito.doAnswer(call -> {
+      tracker.recordHeartbeat(ROLE, INSTANCE, 1000L);
+      return null;
+    }).when(lifecycle).updateHeartbeat(ROLE, INSTANCE);
+    org.mockito.Mockito.doAnswer(call -> {
+      tracker.recordStatusSnapshot(ROLE, INSTANCE, false);
+      return null;
+    }).when(lifecycle).recordStatusSnapshot(ROLE, INSTANCE, false);
+    org.mockito.Mockito.doAnswer(call -> {
+      tracker.recordEnabled(ROLE, INSTANCE, true);
+      return null;
+    }).when(lifecycle).updateEnabled(ROLE, INSTANCE, true);
+    when(lifecycle.workerObservations()).thenAnswer(call -> tracker.workerObservations());
+
+    handler.observe(ROLE, INSTANCE, status(StatusMetric.STATUS_FULL,
+        Map.of("enabled", false, "config", Map.of("ratePerSec", 10))), true);
+    long revision = tracker.statusObservationRevision();
+    handler.observe(ROLE, INSTANCE, status(StatusMetric.STATUS_DELTA,
+        Map.of("enabled", true, "tps", 20)), false);
+
+    assertThat(handler.workersSnapshot()).singleElement().satisfies(worker ->
+        assertThat(worker).containsEntry("enabled", true).containsEntry("stale", true)
+            .containsEntry("lastSeenAt", Instant.ofEpochMilli(1000L).toString())
+            .containsEntry("config", Map.of("ratePerSec", 10)));
+    assertThat(tracker.metrics().enabled()).isEqualTo(1);
+    assertThat(tracker.metrics().healthy()).isZero();
+    assertThat(tracker.statusObservationRevision()).isEqualTo(revision);
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.CsvSource({"true,true", "true,false", "false,true", "false,false"})
+  void journalFailureDoesNotPairFreshTimeWithOldEnablement(boolean full, boolean enabled) {
+    SwarmReadinessTracker tracker = new SwarmReadinessTracker((role, instance, reason) -> { });
+    tracker.recordHeartbeat(ROLE, INSTANCE, 1000L);
+    tracker.recordStatusSnapshot(ROLE, INSTANCE, !enabled);
+    long previousRevision = tracker.statusObservationRevision();
+    org.mockito.Mockito.doAnswer(call -> {
+      tracker.recordHeartbeat(ROLE, INSTANCE, 2000L);
+      return null;
+    }).when(lifecycle).updateHeartbeat(ROLE, INSTANCE);
+    if (full) {
+      org.mockito.Mockito.doAnswer(call -> {
+        tracker.recordStatusSnapshot(ROLE, INSTANCE, enabled);
+        return null;
+      }).when(lifecycle).recordStatusSnapshot(ROLE, INSTANCE, enabled);
+    } else {
+      org.mockito.Mockito.doAnswer(call -> {
+        tracker.recordEnabled(ROLE, INSTANCE, enabled);
+        return null;
+      }).when(lifecycle).updateEnabled(ROLE, INSTANCE, enabled);
+    }
+    when(lifecycle.workerObservations()).thenAnswer(call -> tracker.workerObservations());
+    org.mockito.Mockito.doThrow(new IllegalStateException("journal write failed"))
+        .when(workerErrors).observe(org.mockito.ArgumentMatchers.eq(ROLE),
+            org.mockito.ArgumentMatchers.eq(INSTANCE), org.mockito.ArgumentMatchers.any());
+
+    assertThatThrownBy(() -> handler.observe(ROLE, INSTANCE,
+        status(full ? StatusMetric.STATUS_FULL : StatusMetric.STATUS_DELTA,
+            Map.of("enabled", enabled, "tps", 1)), full))
+        .isInstanceOf(IllegalStateException.class).hasMessage("journal write failed");
+
+    assertThat(handler.workersSnapshot()).singleElement().satisfies(worker ->
+        assertThat(worker).containsEntry("enabled", enabled)
+            .containsEntry("lastSeenAt", Instant.ofEpochMilli(2000L).toString()));
+    assertThat(tracker.statusObservationRevision()).isEqualTo(previousRevision + (full ? 1 : 0));
+    assertThat(tracker.metrics().enabled()).isEqualTo(enabled ? 1 : 0);
   }
 
   private static StatusMetric status(String type, Map<String, Object> data) {

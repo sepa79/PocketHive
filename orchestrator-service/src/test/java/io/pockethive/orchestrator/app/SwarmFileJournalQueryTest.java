@@ -1,0 +1,47 @@
+package io.pockethive.orchestrator.app;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.swarm.model.NetworkMode;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+class SwarmFileJournalQueryTest {
+    private final SwarmStore store = new SwarmStore();
+    private final SwarmJournalFiles files = mock(SwarmJournalFiles.class);
+    private final SwarmFileJournalQuery query = new SwarmFileJournalQuery(new SwarmJournalRunSelector(store), files);
+    private final List<Map<String, Object>> entries = List.of(Map.of("type", "observed"));
+
+    @Test
+    void explicitRunWinsOverActiveRunAndMissingFileDoesNotSelectAnotherRun() {
+        register("active");
+        when(files.read("alpha", "requested", "ERROR")).thenReturn(entries);
+        when(files.read("alpha", "missing", null)).thenReturn(null);
+        assertThat(query.read(" alpha ", " requested ", "ERROR")).isEqualTo(entries);
+        assertThat(query.read("alpha", "missing", null)).isNull();
+        verify(files).read("alpha", "requested", "ERROR");
+        verify(files).read("alpha", "missing", null);
+        verifyNoMoreInteractions(files);
+    }
+
+    @Test
+    void missingDirectoryAndInvalidSwarmReturnAbsence() {
+        assertThat(query.read("../outside", null, null)).isNull();
+        verifyNoInteractions(files);
+        assertThat(query.read("alpha", null, null)).isNull();
+        verify(files).latestRunDirectory("alpha");
+        verifyNoMoreInteractions(files);
+    }
+
+    private void register(String run) {
+        store.register(new Swarm("alpha", "controller", "container", run, NetworkMode.DIRECT));
+    }
+}

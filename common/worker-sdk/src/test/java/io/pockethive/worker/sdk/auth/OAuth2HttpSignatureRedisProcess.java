@@ -26,7 +26,7 @@ public final class OAuth2HttpSignatureRedisProcess {
     public static void main(String[] args) throws Exception {
         AuthRuntime runtime = open(Path.of(args[0]), args[1], "child", args[2], Integer.parseInt(args[3]));
         try {
-            AuthRuntime.MutableHttpRequest request = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+            MutableHttpRequest request = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
             boolean expectFailure = "EXPECT_FAILURE".equals(args[4]);
             try {
                 runtime.applyHttp(REF, request, null, context(args[1], "child"));

@@ -27,7 +27,7 @@ class WorkConfigurationContractTest {
             WorkerInputType.SCHEDULER,
             INPUT_SETTINGS,
             WorkerOutputType.NONE,
-            NoOutputWorkSettings.INSTANCE));
+            NoOutputWorkSettings.INSTANCE, WorkDelivery.IMMEDIATE));
         assertThatThrownBy(() -> result.problems().add(problem("x")))
             .isInstanceOf(UnsupportedOperationException.class);
         assertThatThrownBy(() -> result.deferredPaths().add("x"))
@@ -351,7 +351,7 @@ class WorkConfigurationContractTest {
 
     private static CompleteWorkConfiguration complete() {
         return new CompleteWorkConfiguration(
-            WorkerInputType.SCHEDULER, INPUT_SETTINGS, WorkerOutputType.NONE, NoOutputWorkSettings.INSTANCE);
+            WorkerInputType.SCHEDULER, INPUT_SETTINGS, WorkerOutputType.NONE, NoOutputWorkSettings.INSTANCE, WorkDelivery.IMMEDIATE);
     }
 
     private static void assertProblem(WorkConfigurationValidation result, String path) {

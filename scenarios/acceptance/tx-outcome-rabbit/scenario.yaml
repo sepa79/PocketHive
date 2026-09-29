@@ -1,0 +1,92 @@
+protocolVersion: 2.0.0
+id: acceptance-tx-outcome-rabbit
+name: Acceptance persisted transaction outcomes (rabbit)
+description: Real HTTP result observed in ClickHouse through public Grafana ingress.
+template:
+  image: swarm-controller:latest
+  bees:
+  - role: generator
+    image: generator:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: SCHEDULER
+        scheduler:
+          ratePerSec: 2.0
+          maxMessages: 0
+      outputs:
+        type: RABBITMQ
+      message:
+        bodyType: SIMPLE
+        body: '{"kind": "http.request", "request": {"method": "POST", "path": "/api/test",
+          "headers": {"Content-Type": "application/json"}, "body": {"probe": "acceptance-tx-outcome"}}}'
+        headers:
+          x-ph-call-id: acceptance-tx-outcome
+    work:
+      out:
+        out: requests
+    ports:
+    - id: out
+      direction: out
+  - role: processor
+    image: processor:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      baseUrl: '{{ sut.endpoints[''default''].baseUrl }}'
+      mode: THREAD_COUNT
+      threadCount: 1
+      inputs:
+        type: RABBITMQ
+        rabbit:
+          prefetch: 1
+      outputs:
+        type: RABBITMQ
+    work:
+      in:
+        in: requests
+      out:
+        out: responses
+    ports:
+    - id: in
+      direction: in
+    - id: out
+      direction: out
+  - role: postprocessor
+    image: postprocessor:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: RABBITMQ
+        rabbit:
+          prefetch: 1
+      outputs:
+        type: NONE
+      forwardToOutput: false
+      txOutcomeSinkMode: NONE
+      dropTxOutcomeWithoutCallId: true
+    work:
+      in:
+        in: responses
+    ports:
+    - id: in
+      direction: in
+topology:
+  version: 1
+  edges:
+  - id: request-processing
+    from:
+      role: generator
+      port: out
+    to:
+      role: processor
+      port: in
+  - id: response-consumption
+    from:
+      role: processor
+      port: out
+    to:
+      role: postprocessor
+      port: in

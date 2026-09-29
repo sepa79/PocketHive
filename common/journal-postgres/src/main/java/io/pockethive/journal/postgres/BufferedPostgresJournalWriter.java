@@ -16,6 +16,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * Responsibility: own buffered and durable journal-event SQL insertion and backpressure.
+ * Must not: select runs, query journals, manage archives or apply retention.
+ * Contract: RESP-JOURNAL-WRITES — docs/architecture/runtime-responsibilities.md#resp-journal-writes.
+ * <p>
  * Best-effort, non-blocking buffered writer for {@code journal_event} inserts.
  * <p>
  * Designed for high-volume control-plane journaling: uses a bounded in-memory buffer and periodic

@@ -53,6 +53,9 @@ class ScenarioServiceTest {
                   bees:
                     - role: worker
                       image: worker-image:latest
+                      config:
+                        inputs: {type: RABBITMQ}
+                        outputs: {type: RABBITMQ}
                       work:
                         in:
                           in: a
@@ -144,6 +147,9 @@ class ScenarioServiceTest {
                   bees:
                     - role: worker
                       image: worker-image:latest
+                      config:
+                        inputs: {type: RABBITMQ}
+                        outputs: {type: RABBITMQ}
                       work:
                         in:
                           in: a
@@ -187,6 +193,9 @@ class ScenarioServiceTest {
                   bees:
                     - role: worker
                       image: worker-image:latest
+                      config:
+                        inputs: {type: RABBITMQ}
+                        outputs: {type: RABBITMQ}
                       work:
                         in:
                           in: a
@@ -369,6 +378,9 @@ class ScenarioServiceTest {
                   bees:
                     - role: worker
                       image: worker-image:latest
+                      config:
+                        inputs: {type: RABBITMQ}
+                        outputs: {type: RABBITMQ}
                       work:
                         in:
                           in: a
@@ -401,6 +413,9 @@ class ScenarioServiceTest {
                   bees:
                     - role: worker
                       image: worker-image
+                      config:
+                        inputs: {type: RABBITMQ}
+                        outputs: {type: RABBITMQ}
                       work:
                         in:
                           in: a
@@ -433,6 +448,9 @@ class ScenarioServiceTest {
                   bees:
                     - role: worker
                       image: registry.example/pockethive/worker-image:0.15
+                      config:
+                        inputs: {type: RABBITMQ}
+                        outputs: {type: RABBITMQ}
                       work:
                         in:
                           in: a
@@ -466,6 +484,9 @@ class ScenarioServiceTest {
                   bees:
                     - role: worker
                       image: 192.168.88.54:5000/pockethive/worker-image:experimental
+                      config:
+                        inputs: {type: RABBITMQ}
+                        outputs: {type: RABBITMQ}
                       work:
                         in:
                           in: a

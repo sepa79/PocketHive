@@ -54,6 +54,8 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md` – implemented Scenario workspace
   UI baseline.
 - `docs/todo/sut-environments-followups.md` – remaining SUT environment work.
+- [Global SUTs, shared mocks and continuous plans](todo/global-sut-mocks-spec.md)
+  (proposed) – global identity, per-SUT controllers and TCP qualification.
 - `docs/todo/scenario-plan-followups.md` – remaining Scenario Plan extensions.
 - `docs/todo/ui-v2-control-plane-followups.md` – remaining UI control-plane hardening.
 - `docs/todo/network-proxy-followups.md` – post-V1 proxy reliability, plan integration,
@@ -61,12 +63,9 @@ by the UI under `/docs/...` as part of the runtime image.
 
 ## Plans and history
 
-- `docs/inProgress/work-plane-module-boundaries.md` — the active Work Plane-first
-  architecture execution plan; old IO/broker/sink sequences do not run in parallel.
-- `docs/archive/pre-boundary-reset/README.md` — why conflicting or completed
-  plans were archived and where their unfinished concerns are tracked.
+- `docs/inProgress/work-plane-module-boundaries.md` — delivered Work Plane isolation and explicit exclusions.
 
-- `docs/inProgress/README.md` – actively delivered work only.
+- `docs/inProgress/README.md` – delivery status and follow-up owners.
 - `docs/toBeReviewed/README.md` – bounded review queue.
 - `docs/todo/README.md` – future work and follow-ups.
 - `docs/archive/readme.md` – historical and completed plans; do not use archived

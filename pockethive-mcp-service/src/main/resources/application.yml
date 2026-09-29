@@ -10,6 +10,7 @@ management:
 
 pockethive:
   mcp:
+    allow-remote-http: ${POCKETHIVE_ALLOW_REMOTE_HTTP:false}
     pocket-hive-ingress: ${PH_MCP_POCKETHIVE_INGRESS}
     owner-api-base: ${PH_MCP_OWNER_API_BASE}
     environment-health:

@@ -67,6 +67,7 @@ import org.springframework.stereotype.Component;
  * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
  * Work diagnostics delegate to the injected neutral parser and its selected providers.
  * Auth profile storage diagnostics delegate to AuthProfileStorageFindings and shared auth contracts.
+ * Uses RESP-SCENARIO-BUNDLE-LAYOUT — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-layout for paths.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
  * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
  * docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
@@ -78,7 +79,6 @@ public final class ScenarioBundleValidator {
     private static final Logger logger = LoggerFactory.getLogger(ScenarioBundleValidator.class);
     private static final Pattern VAR_REFERENCE_PATTERN =
         Pattern.compile("\\bvars\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
-    private static final String SCENARIO_CONTAINER_ROOT = "/app/scenario";
     private static final String TEMPLATE_ROOT_CONFIG_KEY = "templateRoot";
     private static final String SERVICE_ID_CONFIG_KEY = "serviceId";
     private static final String WORKER_CONFIG_KEY = "worker";
@@ -157,7 +157,7 @@ public final class ScenarioBundleValidator {
                     scenarioId, scenarioName, resolved.getProtocolVersion(), bundleRoot, List.copyOf(findings));
                 return new ValidationRun(result, descriptorScenario, bundleRoot);
             }
-            defunctReason(resolved).ifPresent(reason -> findings.add(defunctFinding(reason)));
+            descriptorPrerequisiteFailure(resolved).ifPresent(reason -> findings.add(defunctFinding(reason)));
         }
         expectedScenarioIdFinding(scenarioId, input.expectedScenarioId()).ifPresent(findings::add);
         findings.addAll(validateScenarioTemplateSyntax(resolved));
@@ -370,7 +370,7 @@ public final class ScenarioBundleValidator {
             scenario.getPlan());
     }
 
-    public Optional<String> defunctReason(Scenario scenario) {
+    private Optional<String> descriptorPrerequisiteFailure(Scenario scenario) {
         if (scenario == null) {
             return Optional.of("Scenario descriptor could not be parsed");
         }
@@ -484,14 +484,6 @@ public final class ScenarioBundleValidator {
             "Move the bundle out of quarantine before using it to create a swarm.");
     }
 
-    public ValidationFinding defunctBundleFinding(String bundlePath, String reason) {
-        return ValidationIssue.BUNDLE_DEFUNCT.finding(
-            ValidationSeverity.ERROR,
-            bundlePath != null ? bundlePath : ValidationIssue.BUNDLE_DEFUNCT.path(),
-            cleanError(reason),
-            "Repair the scenario descriptor, then reload Scenario Manager.");
-    }
-
     public ScenarioDescriptor findScenarioDescriptor(Path root) throws IOException {
         ScenarioDescriptor found = null;
         try (Stream<Path> stream = Files.walk(root)) {
@@ -554,8 +546,8 @@ public final class ScenarioBundleValidator {
         Objects.requireNonNull(doc, "doc");
         List<String> warnings = new ArrayList<>();
 
-        if (doc.version() != 1) {
-            throw variablesFailure("%s version must be 1".formatted(ScenarioBundleLayout.VARIABLES_FILE));
+        if (doc.version() != VariablesDocument.CURRENT_VERSION) {
+            throw variablesFailure("%s version must be %d".formatted(ScenarioBundleLayout.VARIABLES_FILE, VariablesDocument.CURRENT_VERSION));
         }
         List<ScenarioVariableDefinition> definitions =
             doc.definitions() == null ? List.of() : doc.definitions();
@@ -697,7 +689,7 @@ public final class ScenarioBundleValidator {
     }
 
     public List<String> listCanonicalBundleSutIds(Path bundle, String scenarioId) throws IOException {
-        Path sutDir = bundle.resolve("sut").normalize();
+        Path sutDir = ScenarioBundleLayout.sutRoot(bundle);
         if (!sutDir.startsWith(bundle) || !Files.isDirectory(sutDir)) {
             return List.of();
         }
@@ -1444,7 +1436,12 @@ public final class ScenarioBundleValidator {
             return List.of();
         }
 
-        Map<String, Set<String>> referencesByPath = collectVariableReferences(bundleRoot);
+        Map<String, Set<String>> referencesByPath;
+        try {
+            referencesByPath = collectVariableReferences(bundleRoot);
+        } catch (BundleValidationFailure e) {
+            return List.of(findingForException(e));
+        }
         if (referencesByPath.isEmpty()) {
             return List.of();
         }
@@ -1463,7 +1460,7 @@ public final class ScenarioBundleValidator {
 
         Set<String> defined;
         try {
-            VariablesDocument doc = parseVariables(Files.readString(variablesFile));
+            VariablesDocument doc = parseVariables(readBundleText(bundleRoot, variablesFile));
             defined = doc.definitions() == null
                 ? Set.of()
                 : doc.definitions().stream()
@@ -1494,11 +1491,21 @@ public final class ScenarioBundleValidator {
         return List.copyOf(findings);
     }
 
+    private String readBundleText(Path bundleRoot, Path file) throws IOException {
+        try {
+            return Files.readString(file);
+        } catch (java.nio.charset.CharacterCodingException e) {
+            String relativePath = bundleRoot.relativize(file).toString().replace('\\', '/');
+            throw validationFailure(ValidationIssue.BUNDLE_INVALID,
+                "Bundle file '%s' is not valid UTF-8.".formatted(relativePath), e);
+        }
+    }
+
     private Map<String, Set<String>> collectVariableReferences(Path bundleRoot) throws IOException {
         Map<String, Set<String>> referencesByPath = new LinkedHashMap<>();
         for (String relativePath : bundleValidationTextFiles(bundleRoot)) {
             Path file = bundleRoot.resolve(relativePath).normalize();
-            String text = Files.readString(file);
+            String text = readBundleText(bundleRoot, file);
             Matcher matcher = VAR_REFERENCE_PATTERN.matcher(text);
             while (matcher.find()) {
                 referencesByPath
@@ -1575,7 +1582,7 @@ public final class ScenarioBundleValidator {
         List<String> canonicalSutIds = listCanonicalBundleSutIds(bundleRoot, scenarioId);
         Path variables = ScenarioBundleLayout.variablesFile(bundleRoot);
         if (variables.startsWith(bundleRoot) && Files.isRegularFile(variables)) {
-            VariablesDocument doc = parseVariables(Files.readString(variables));
+            VariablesDocument doc = parseVariables(readBundleText(bundleRoot, variables));
             validateVariables(doc, canonicalSutIds);
         }
     }
@@ -1899,10 +1906,10 @@ public final class ScenarioBundleValidator {
         if (root == null || root.isBlank()) {
             return Optional.empty();
         }
-        if (SCENARIO_CONTAINER_ROOT.equals(root)) {
+        if (ScenarioBundleLayout.CONTAINER_ROOT.equals(root)) {
             return Optional.of("");
         }
-        String prefix = SCENARIO_CONTAINER_ROOT + "/";
+        String prefix = ScenarioBundleLayout.CONTAINER_ROOT + "/";
         if (!root.startsWith(prefix)) {
             return Optional.empty();
         }
@@ -1917,9 +1924,9 @@ public final class ScenarioBundleValidator {
                 ValidationSeverity.ERROR,
                 ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role(),
                 "Worker '%s' templateRoot '%s' escapes %s."
-                    .formatted(consumer.role(), consumer.templateRoot(), SCENARIO_CONTAINER_ROOT),
+                    .formatted(consumer.role(), consumer.templateRoot(), ScenarioBundleLayout.CONTAINER_ROOT),
                 "Set templateRoot to %s/<bundle-relative-template-directory>."
-                    .formatted(SCENARIO_CONTAINER_ROOT)));
+                    .formatted(ScenarioBundleLayout.CONTAINER_ROOT)));
             return Optional.empty();
         }
         return Optional.of(normalized);

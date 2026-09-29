@@ -5,6 +5,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * Responsibility: validate exporter record, batching and file-format settings.
+ * Must not: choose the runtime output directory or persist files.
+ * Contract: RESP-CLEARING-EXPORT — docs/architecture/runtime-responsibilities.md#resp-clearing-export.
+ */
 public record ClearingExportWorkerConfig(
     String mode,
     Boolean streamingAppendEnabled,
@@ -18,7 +23,6 @@ public record ClearingExportWorkerConfig(
     String headerTemplate,
     String recordTemplate,
     String footerTemplate,
-    String localTargetDir,
     String localTempSuffix,
     Boolean writeManifest,
     String localManifestPath,
@@ -49,7 +53,6 @@ public record ClearingExportWorkerConfig(
       String headerTemplate,
       String recordTemplate,
       String footerTemplate,
-      String localTargetDir,
       String localTempSuffix,
       boolean writeManifest,
       String localManifestPath,
@@ -70,7 +73,6 @@ public record ClearingExportWorkerConfig(
         headerTemplate,
         recordTemplate,
         footerTemplate,
-        localTargetDir,
         localTempSuffix,
         writeManifest,
         localManifestPath,
@@ -99,7 +101,6 @@ public record ClearingExportWorkerConfig(
       String headerTemplate,
       String recordTemplate,
       String footerTemplate,
-      String localTargetDir,
       String localTempSuffix,
       boolean writeManifest,
       String localManifestPath,
@@ -123,7 +124,6 @@ public record ClearingExportWorkerConfig(
         headerTemplate,
         recordTemplate,
         footerTemplate,
-        localTargetDir,
         localTempSuffix,
         writeManifest,
         localManifestPath,
@@ -152,7 +152,6 @@ public record ClearingExportWorkerConfig(
       String headerTemplate,
       String recordTemplate,
       String footerTemplate,
-      String localTargetDir,
       String localTempSuffix,
       boolean writeManifest,
       String localManifestPath,
@@ -178,7 +177,6 @@ public record ClearingExportWorkerConfig(
         headerTemplate,
         recordTemplate,
         footerTemplate,
-        localTargetDir,
         localTempSuffix,
         writeManifest,
         localManifestPath,
@@ -206,7 +204,6 @@ public record ClearingExportWorkerConfig(
     flushIntervalMs = requirePositive(flushIntervalMs, "flushIntervalMs");
     maxBufferedRecords = requirePositive(maxBufferedRecords, "maxBufferedRecords");
     strictTemplate = requirePresent(strictTemplate, "strictTemplate");
-    localTargetDir = requireNonBlank(localTargetDir, "localTargetDir");
     localTempSuffix = requireNonBlank(localTempSuffix, "localTempSuffix");
     writeManifest = requirePresent(writeManifest, "writeManifest");
     localManifestPath = writeManifest ? requireNonBlank(localManifestPath, "localManifestPath") : trimToNull(localManifestPath);

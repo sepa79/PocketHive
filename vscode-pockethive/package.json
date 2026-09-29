@@ -2,7 +2,7 @@
   "name": "pockethive-vscode",
   "displayName": "PocketHive",
   "description": "Connect to PocketHive MCP environments and operate swarms, scenarios, journals, and diagnostics.",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "publisher": "pockethive",
   "license": "GPL-3.0-only",
   "repository": {
@@ -68,13 +68,13 @@
     "typescript": "5.9.2"
   },
   "overrides": {
-    "fast-uri": "3.1.5",
+    "fast-uri": "3.1.8",
     "form-data": "4.0.6",
-    "js-yaml": "4.3.1",
+    "js-yaml": "4.3.2",
     "linkify-it": "5.0.2",
     "markdown-it": "14.2.0",
     "playwright-core": "1.60.0",
-    "qs": "6.15.3",
+    "qs": "6.16.0",
     "tmp": "0.2.7"
   }
 }

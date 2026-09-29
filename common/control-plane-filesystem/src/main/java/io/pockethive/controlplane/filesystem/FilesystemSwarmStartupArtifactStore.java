@@ -11,7 +11,11 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.Objects;
 
-/** Canonical persistence and verification for immutable swarm-startup artifacts. */
+/**
+ * Responsibility: persist, resolve and verify immutable swarm-startup artifacts.
+ * Must not: infer runtime identity or own controller discovery.
+ * Contract: SwarmStartupArtifactContract and RuntimeFilesystemLayout.
+ */
 public final class FilesystemSwarmStartupArtifactStore {
 
   private final ObjectMapper mapper;
@@ -28,7 +32,7 @@ public final class FilesystemSwarmStartupArtifactStore {
     try {
       byte[] content = mapper.writeValueAsBytes(artifact);
       String sha256 = FilesystemDigest.sha256(content);
-      String fileName = "startup-" + sha256 + ".json";
+      String fileName = artifactFileName(sha256);
       Path artifactPath = layout.startupArtifactDirectory(resolvedSwarmId).resolve(fileName);
       Files.createDirectories(artifactPath.getParent());
       writeImmutable(artifactPath, content);
@@ -37,6 +41,22 @@ public final class FilesystemSwarmStartupArtifactStore {
     } catch (IOException exception) {
       throw new IllegalStateException("Failed to persist startup artifact for swarm " + resolvedSwarmId, exception);
     }
+  }
+
+  /** Resolve a reported digest through the same layout used by save. */
+  public SwarmStartupArtifactReference reference(String swarmId, String sha256) {
+    String digest = FilesystemDigest.requireSha256(sha256, "sha256");
+    return new SwarmStartupArtifactReference(
+        layout.publishedStartupArtifact(swarmId, artifactFileName(digest)).toString(), digest);
+  }
+
+  public SwarmStartupArtifact loadByDigest(String swarmId, String sha256) {
+    String digest = FilesystemDigest.requireSha256(sha256, "sha256");
+    return load(layout.startupArtifactDirectory(swarmId).resolve(artifactFileName(digest)).toString(), digest, swarmId);
+  }
+
+  private static String artifactFileName(String digest) {
+    return "startup-" + digest + ".json";
   }
 
   public SwarmStartupArtifact load(String artifactPath, String expectedSha256, String expectedSwarmId) {

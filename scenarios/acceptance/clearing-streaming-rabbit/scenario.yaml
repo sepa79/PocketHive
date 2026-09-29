@@ -1,0 +1,84 @@
+protocolVersion: 2.0.0
+id: acceptance-clearing-streaming-rabbit
+name: Acceptance streaming clearing (rabbit)
+description: Streaming time window finalizes one file of twenty distinct records before
+  STOP.
+template:
+  image: swarm-controller:latest
+  bees:
+  - role: generator
+    image: generator:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: REDIS_DATASET
+        redis:
+          host: redis
+          port: 6379
+          ssl: false
+          sources:
+          - listName: REPLACE_LIST
+            weight: 1
+          pickStrategy: ROUND_ROBIN
+          ratePerSec: 5
+          initialDelayMs: 0
+          tickIntervalMs: 100
+      outputs:
+        type: RABBITMQ
+      message:
+        bodyType: SIMPLE
+        body: '{{ payload }}'
+        headers:
+          x-ph-call-id: acceptance-dataset
+    work:
+      out:
+        out: records
+    ports:
+    - id: out
+      direction: out
+  - role: clearing-export
+    image: clearing-export:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: RABBITMQ
+        rabbit:
+          prefetch: 1
+      outputs:
+        type: NONE
+      mode: template
+      streamingAppendEnabled: true
+      streamingWindowMs: 15000
+      maxRecordsPerFile: 100
+      flushIntervalMs: 900000
+      maxBufferedRecords: 100
+      strictTemplate: true
+      recordSourceStep: latest
+      recordSourceStepIndex: -1
+      recordBuildFailurePolicy: stop
+      lineSeparator: \n
+      fileNameTemplate: ACCEPTANCE_{{ now }}.txt
+      headerTemplate: H|acceptance
+      recordTemplate: D|{{ steps.selected.payload }}
+      footerTemplate: T|{{ recordCount }}
+      localTempSuffix: .tmp
+      writeManifest: false
+      businessCodeFilterEnabled: false
+    work:
+      in:
+        in: records
+    ports:
+    - id: in
+      direction: in
+topology:
+  version: 1
+  edges:
+  - id: export
+    from:
+      role: generator
+      port: out
+    to:
+      role: clearing-export
+      port: in

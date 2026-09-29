@@ -85,9 +85,9 @@ class UIModules {
         notification.textContent = message;
         notification.style.cssText = 'position:fixed;top:20px;right:20px;padding:1rem;border-radius:0.5rem;z-index:1000;';
         
-        if (type === 'success') notification.style.background = '#10b981';
-        else if (type === 'error') notification.style.background = '#ef4444';
-        else notification.style.background = '#3b82f6';
+        if (type === 'success') notification.style.background = '#047857';
+        else if (type === 'error') notification.style.background = '#dc2626';
+        else notification.style.background = '#2563eb';
         
         notification.style.color = 'white';
         document.body.appendChild(notification);

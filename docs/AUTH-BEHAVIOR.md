@@ -90,6 +90,15 @@ Supported profile types:
 
 Refreshable strategies are OAuth client credentials, OAuth password grant, and OAuth HTTP Signature. Static strategies do not write Redis token records.
 
+### OAuth password grant
+
+`OAUTH2_PASSWORD_GRANT` sends `username` and `password` in the token request.
+An optional `clientId` adds `client_id`; when `clientSecret` is also supplied,
+it adds `client_secret` to the same form-encoded body. A secret without a client ID
+is rejected during profile preparation, before token acquisition. Profiles with
+only a client ID or without either client field remain supported.
+`AuthProfilePreparation` owns validation; `OAuth2TokenProvider` owns the request.
+
 ### OAuth HTTP Signature
 
 `OAUTH2_HTTP_SIGNATURE` is an isolated client-credentials profile. It signs only

@@ -2,26 +2,20 @@ package io.pockethive.orchestrator.auth;
 
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHiveGrantChecks;
-import io.pockethive.auth.contract.PocketHivePermissionIds;
+import io.pockethive.auth.contract.PocketHivePermissionSets;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.Set;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: apply existing service request and resource authorization through shared grant checks.
+ * Must not: own grant storage or duplicate shared permission combinations.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access.
+ */
 @Component
 public class OrchestratorAuthorization {
-    private static final Set<String> READ_PERMISSIONS = Set.of(
-        PocketHivePermissionIds.VIEW,
-        PocketHivePermissionIds.RUN,
-        PocketHivePermissionIds.ALL
-    );
-    private static final Set<String> RUN_PERMISSIONS = Set.of(
-        PocketHivePermissionIds.RUN,
-        PocketHivePermissionIds.ALL
-    );
-    private static final Set<String> MANAGE_PERMISSIONS = Set.of(PocketHivePermissionIds.ALL);
-
     public boolean isAllowed(AuthenticatedUserDto user, String method, String path) {
         if (user == null) {
             return true;
@@ -30,64 +24,64 @@ public class OrchestratorAuthorization {
             return true;
         }
         if (HttpMethod.GET.matches(method)) {
-            return PocketHiveGrantChecks.hasAnyPermission(user, READ_PERMISSIONS);
+            return PocketHiveGrantChecks.hasAnyPermission(user, PocketHivePermissionSets.READ);
         }
         if (requiresRunPermission(method, path)) {
-            return PocketHiveGrantChecks.hasAnyPermission(user, RUN_PERMISSIONS);
+            return PocketHiveGrantChecks.hasAnyPermission(user, PocketHivePermissionSets.RUN);
         }
-        return PocketHiveGrantChecks.hasAnyPermission(user, MANAGE_PERMISSIONS);
+        return PocketHiveGrantChecks.hasAnyPermission(user, PocketHivePermissionSets.MANAGE);
     }
 
     public boolean canRead(AuthenticatedUserDto user, SwarmTemplateMetadata templateMetadata) {
-        return hasPermissionInScope(user, READ_PERMISSIONS, templateMetadata);
+        return hasPermissionInScope(user, PocketHivePermissionSets.READ, templateMetadata);
     }
 
     public boolean canRead(AuthenticatedUserDto user, ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
-        return hasPermissionInScope(user, READ_PERMISSIONS, templateDescriptor);
+        return hasPermissionInScope(user, PocketHivePermissionSets.READ, templateDescriptor);
     }
 
     public boolean canRun(AuthenticatedUserDto user, SwarmTemplateMetadata templateMetadata) {
-        return hasPermissionInScope(user, RUN_PERMISSIONS, templateMetadata);
+        return hasPermissionInScope(user, PocketHivePermissionSets.RUN, templateMetadata);
     }
 
     public boolean canManage(AuthenticatedUserDto user, SwarmTemplateMetadata templateMetadata) {
-        return hasPermissionInScope(user, MANAGE_PERMISSIONS, templateMetadata);
+        return hasPermissionInScope(user, PocketHivePermissionSets.MANAGE, templateMetadata);
     }
 
     public boolean canRun(AuthenticatedUserDto user, ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
-        return hasPermissionInScope(user, RUN_PERMISSIONS, templateDescriptor);
+        return hasPermissionInScope(user, PocketHivePermissionSets.RUN, templateDescriptor);
     }
 
     public boolean canManage(AuthenticatedUserDto user, ScenarioClient.ScenarioTemplateDescriptor templateDescriptor) {
-        return hasPermissionInScope(user, MANAGE_PERMISSIONS, templateDescriptor);
+        return hasPermissionInScope(user, PocketHivePermissionSets.MANAGE, templateDescriptor);
     }
 
     public boolean canReadPocketHive(AuthenticatedUserDto user) {
         if (user == null) {
             return true;
         }
-        return PocketHiveGrantChecks.hasAnyPermission(user, READ_PERMISSIONS);
+        return PocketHiveGrantChecks.hasAnyPermission(user, PocketHivePermissionSets.READ);
     }
 
     public boolean canReadDeployment(AuthenticatedUserDto user) {
         if (user == null) {
             return true;
         }
-        return PocketHiveGrantChecks.hasPermissionInScope(user, READ_PERMISSIONS, null, null);
+        return PocketHiveGrantChecks.hasPermissionInScope(user, PocketHivePermissionSets.READ, null, null);
     }
 
     public boolean canManagePocketHive(AuthenticatedUserDto user) {
         if (user == null) {
             return true;
         }
-        return PocketHiveGrantChecks.hasAnyPermission(user, MANAGE_PERMISSIONS);
+        return PocketHiveGrantChecks.hasAnyPermission(user, PocketHivePermissionSets.MANAGE);
     }
 
     public boolean canManageDeployment(AuthenticatedUserDto user) {
         if (user == null) {
             return true;
         }
-        return PocketHiveGrantChecks.hasPermissionInScope(user, MANAGE_PERMISSIONS, null, null);
+        return PocketHiveGrantChecks.hasPermissionInScope(user, PocketHivePermissionSets.MANAGE, null, null);
     }
 
     public String denialMessage(String method, String path) {

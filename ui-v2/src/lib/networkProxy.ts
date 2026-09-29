@@ -1,26 +1,5 @@
 import { newUuid } from './uuid'
 
-export type NetworkMode = 'DIRECT' | 'PROXIED'
-
-export type ResolvedSutEndpoint = {
-  endpointId: string
-  kind: string | null
-  clientBaseUrl: string | null
-  clientAuthority: string | null
-  upstreamAuthority: string | null
-}
-
-export type NetworkBinding = {
-  swarmId: string
-  sutId: string
-  networkMode: NetworkMode
-  networkProfileId: string | null
-  effectiveMode: NetworkMode
-  requestedBy: string
-  appliedAt: string | null
-  affectedEndpoints: ResolvedSutEndpoint[]
-}
-
 export type NetworkProfile = {
   id: string
   name: string | null
@@ -71,56 +50,6 @@ export async function fetchJson<T>(url: string): Promise<T> {
     throw new Error(await readErrorMessage(response))
   }
   return (await response.json()) as T
-}
-
-export function normalizeMode(value: unknown): NetworkMode {
-  return value === 'PROXIED' ? 'PROXIED' : 'DIRECT'
-}
-
-export function normalizeEndpoint(entry: unknown): ResolvedSutEndpoint | null {
-  if (!entry || typeof entry !== 'object') return null
-  const value = entry as Record<string, unknown>
-  const endpointId = typeof value.endpointId === 'string' ? value.endpointId.trim() : ''
-  if (!endpointId) return null
-  return {
-    endpointId,
-    kind: typeof value.kind === 'string' && value.kind.trim().length > 0 ? value.kind.trim() : null,
-    clientBaseUrl: typeof value.clientBaseUrl === 'string' && value.clientBaseUrl.trim().length > 0 ? value.clientBaseUrl.trim() : null,
-    clientAuthority:
-      typeof value.clientAuthority === 'string' && value.clientAuthority.trim().length > 0 ? value.clientAuthority.trim() : null,
-    upstreamAuthority:
-      typeof value.upstreamAuthority === 'string' && value.upstreamAuthority.trim().length > 0
-        ? value.upstreamAuthority.trim()
-        : null,
-  }
-}
-
-export function normalizeBindings(data: unknown): NetworkBinding[] {
-  if (!Array.isArray(data)) return []
-  return data
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const value = entry as Record<string, unknown>
-      const swarmId = typeof value.swarmId === 'string' ? value.swarmId.trim() : ''
-      const sutId = typeof value.sutId === 'string' ? value.sutId.trim() : ''
-      if (!swarmId || !sutId) return null
-      return {
-        swarmId,
-        sutId,
-        networkMode: normalizeMode(value.networkMode),
-        networkProfileId:
-          typeof value.networkProfileId === 'string' && value.networkProfileId.trim().length > 0
-            ? value.networkProfileId.trim()
-            : null,
-        effectiveMode: normalizeMode(value.effectiveMode),
-        requestedBy: typeof value.requestedBy === 'string' ? value.requestedBy.trim() : 'unknown',
-        appliedAt: typeof value.appliedAt === 'string' && value.appliedAt.trim().length > 0 ? value.appliedAt.trim() : null,
-        affectedEndpoints: Array.isArray(value.affectedEndpoints)
-          ? value.affectedEndpoints.map(normalizeEndpoint).filter((item): item is ResolvedSutEndpoint => item !== null)
-          : [],
-      } satisfies NetworkBinding
-    })
-    .filter((entry): entry is NetworkBinding => entry !== null)
 }
 
 export function normalizeProfiles(data: unknown): NetworkProfile[] {

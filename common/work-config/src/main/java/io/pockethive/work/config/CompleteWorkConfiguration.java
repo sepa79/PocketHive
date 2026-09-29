@@ -11,12 +11,14 @@ public record CompleteWorkConfiguration(
     WorkIoType inputType,
     WorkInputSettings inputSettings,
     WorkIoType outputType,
-    WorkOutputSettings outputSettings
+    WorkOutputSettings outputSettings,
+    WorkDelivery outputDelivery
 ) {
     public CompleteWorkConfiguration {
         Objects.requireNonNull(inputType, "inputType");
         Objects.requireNonNull(inputSettings, "inputSettings");
         Objects.requireNonNull(outputType, "outputType");
         Objects.requireNonNull(outputSettings, "outputSettings");
+        Objects.requireNonNull(outputDelivery, "outputDelivery");
     }
 }

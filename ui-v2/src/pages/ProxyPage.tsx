@@ -1,15 +1,15 @@
+import { parseNetworkBindings } from '../lib/networkBindings'
+import type { NetworkBinding } from '../lib/NetworkBinding'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchJson,
   formatInstant,
   normalizeManualOverride,
-  normalizeBindings,
   normalizeProfiles,
   readErrorMessage,
   summarizeFaultConfig,
   summarizeFaults,
   type ManualNetworkOverride,
-  type NetworkBinding,
   type NetworkProfile,
 } from '../lib/networkProxy'
 
@@ -181,9 +181,11 @@ export function ProxyPage() {
         fetchHealth('/scenario-manager/actuator/health'),
         fetchJson<unknown>('/network-proxy-manager/api/network/manual-override'),
       ])
-      setBindings(normalizeBindings(bindingData))
+      const nextBindings = parseNetworkBindings(bindingData)
+      const nextProxies = parseNetworkBindings(proxyData)
+      setBindings(nextBindings)
       setProfiles(normalizeProfiles(profileData))
-      setProxies(normalizeBindings(proxyData))
+      setProxies(nextProxies)
       setRawProfiles(rawData)
       setRawLoaded(true)
       setProxyManagerHealth(managerHealth.status)
@@ -194,6 +196,8 @@ export function ProxyPage() {
       manualOverridePayloadRef.current = JSON.stringify(toManualOverridePayload(draftFromManualOverride(nextManualOverride)))
       setManualOverrideLoaded(true)
     } catch (e) {
+      setBindings([])
+      setProxies([])
       setError(e instanceof Error ? e.message : 'Failed to load proxy stack state')
     } finally {
       setLoading(false)

@@ -1,53 +1,28 @@
 package io.pockethive.work.config.composition;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-import io.pockethive.work.config.WorkerInputType;
-import io.pockethive.work.config.WorkerOutputType;
+import static org.assertj.core.api.Assertions.*;
+import io.pockethive.work.config.WorkConfigurationMode;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class CurrentWorkConfigurationProvidersTest {
-    @Test
-    void exposesTheExactCurrentSettingsProviderInventory() {
-        CurrentWorkConfigurationProviders providers = new CurrentWorkConfigurationProviders();
-
-        assertThat(providers.inputSettingsParsers().stream().map(parser -> parser.type()).toList())
-            .containsExactly(
-                WorkerInputType.RABBITMQ,
-                WorkerInputType.REDIS_DATASET,
-                WorkerInputType.CSV_DATASET,
-                WorkerInputType.SCHEDULER
-            );
-        assertThat(providers.outputSettingsParsers().stream().map(parser -> parser.type()).toList())
-            .containsExactly(WorkerOutputType.RABBITMQ, WorkerOutputType.REDIS);
+    @Test void neutralAuthoringAcceptsArtemisTuningAndRejectsItsPhysicalDestinations() {
+        var parser = new CurrentWorkConfigurationProviders().workConfigurationParser();
+        assertThat(parser.validate(configuration(Map.of("consumerWindowBytes", 0)),
+            WorkConfigurationMode.AUTHORING).problems()).isEmpty();
+        assertThat(parser.validate(configuration(Map.of("consumerWindowBytes", 0, "queue", "foreign")),
+            WorkConfigurationMode.AUTHORING).problems()).isNotEmpty();
     }
 
-    @Test
-    void exposesTheExactCurrentMutationProviderInventory() {
-        CurrentWorkConfigurationProviders providers = new CurrentWorkConfigurationProviders();
-
-        assertThat(providers.inputMutationPolicies().stream().map(policy -> policy.type()).toList())
-            .containsExactly(
-                WorkerInputType.RABBITMQ,
-                WorkerInputType.REDIS_DATASET,
-                WorkerInputType.CSV_DATASET,
-                WorkerInputType.SCHEDULER
-            );
-        assertThat(providers.outputMutationPolicies().stream().map(policy -> policy.type()).toList())
-            .containsExactly(WorkerOutputType.RABBITMQ, WorkerOutputType.REDIS, WorkerOutputType.NONE);
+    @Test void deploymentSelectionRequiresAnExplicitWorkPlaneAndRejectsInputOnlyAdapters() {
+        assertThat(CurrentWorkPlaneSelection.resolve(key -> "ARTEMIS").environment())
+            .containsEntry("POCKETHIVE_WORK_TYPE", "ARTEMIS");
+        assertThatThrownBy(() -> CurrentWorkPlaneSelection.resolve(key -> null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CurrentWorkPlaneSelection.resolve(key -> "CSV_DATASET")).isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test
-    void providerListsAreImmutableAndConstructNeutralAggregates() {
-        CurrentWorkConfigurationProviders providers = new CurrentWorkConfigurationProviders();
-
-        assertThatThrownBy(() -> providers.inputSettingsParsers().clear())
-            .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> providers.outputMutationPolicies().clear())
-            .isInstanceOf(UnsupportedOperationException.class);
-        assertThat(providers.workConfigurationParser()).isNotNull();
-        assertThat(providers.workMutationPolicyRegistry().inputPolicy(WorkerInputType.RABBITMQ)).isNotNull();
-        assertThat(providers.workMutationPolicyRegistry().outputPolicy(WorkerOutputType.NONE)).isNotNull();
+    private static Map<String, Object> configuration(Map<String, Object> input) {
+        return Map.of("inputs", Map.of("type", "ARTEMIS", "artemis", input),
+            "outputs", Map.of("type", "ARTEMIS", "artemis", Map.of("persistent", true)));
     }
 }

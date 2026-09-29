@@ -16,7 +16,7 @@ import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RuntimeLogsRespo
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RuntimeTarget;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RuntimeTargetRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RuntimeVersionResponse;
-import io.pockethive.orchestrator.runtime.RuntimeDebugPorts.ComputeRuntimeDebugPort;
+import io.pockethive.manager.ports.ComputeRuntimeDebugPort;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -30,10 +30,13 @@ import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: resolve eligible runtime diagnostic targets and coordinate diagnostic requests.
+ * Must not: decode Docker SDK responses or decide cleanup outcomes.
+ * Contract: RESP-DOCKER-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-docker-runtime.
+ */
 @Service
 public class RuntimeDebugService {
-    private static final String INSPECT_SOURCE_OWNER = "owner";
-    private static final String MOUNT_TYPE_VOLUME = "volume";
     private static final String REDACTED = "[REDACTED]";
     private static final String VERSION_SOURCE_IMAGE_TAG = "imageTag";
     private static final int DEFAULT_TAIL_LINES = 200;
@@ -157,14 +160,7 @@ public class RuntimeDebugService {
     public RuntimeInspectResponse inspect(RuntimeTargetRequest request) {
         requireRequest(request);
         RuntimeTarget target = target(request);
-        Map<String, Object> raw = debugPort.inspect(target.runtimeId());
-        Map<String, Object> source = Map.of(
-            "available", true,
-            INSPECT_SOURCE_OWNER, PocketHiveDockerLabels.OWNER_ORCHESTRATOR);
-        if (RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE.equals(target.runtimeType())) {
-            return serviceInspect(target, source, raw);
-        }
-        return containerInspect(target, source, raw);
+        return RuntimeInspectResponseMapper.map(target, debugPort.inspect(target.runtimeId()));
     }
 
     private RuntimeTarget target(RuntimeTargetRequest request) {
@@ -274,108 +270,6 @@ public class RuntimeDebugService {
             pockethiveLabelsOnly(labels));
     }
 
-    private RuntimeInspectResponse containerInspect(RuntimeTarget target, Map<String, Object> source, Map<String, Object> raw) {
-        Map<String, Object> state = map(value(raw, "State", "state"));
-        Map<String, Object> health = map(value(state, "Health", "health"));
-        Map<String, Object> hostConfig = map(value(raw, "HostConfig", "hostConfig"));
-        Map<String, Object> restartPolicy = map(value(hostConfig, "RestartPolicy", "restartPolicy"));
-        Map<String, Object> networkSettings = map(value(raw, "NetworkSettings", "networkSettings"));
-        Map<String, Object> networks = map(value(networkSettings, "Networks", "networks"));
-        Map<String, Object> stateSummary = new LinkedHashMap<>();
-        stateSummary.put("status", text(state, "Status", "status"));
-        stateSummary.put("running", value(state, "Running", "running"));
-        stateSummary.put("exitCode", value(state, "ExitCode", "exitCode", "ExitCodeLong", "exitCodeLong"));
-        stateSummary.put("error", emptyToNull(text(state, "Error", "error")));
-        stateSummary.put("health", text(health, "Status", "status"));
-        stateSummary.put("startedAt", text(state, "StartedAt", "startedAt"));
-        stateSummary.put("finishedAt", text(state, "FinishedAt", "finishedAt"));
-        return new RuntimeInspectResponse(
-            target,
-            source,
-            stateSummary,
-            text(raw, "Created", "created"),
-            integer(value(raw, "RestartCount", "restartCount")),
-            text(restartPolicy, "Name", "name"),
-            sanitizeContainerMounts(listOfMaps(value(raw, "Mounts", "mounts"))),
-            networks.keySet().stream().map(String::valueOf).sorted().toList());
-    }
-
-    private RuntimeInspectResponse serviceInspect(RuntimeTarget target, Map<String, Object> source, Map<String, Object> raw) {
-        Map<String, Object> spec = map(value(raw, "Spec", "spec"));
-        Map<String, Object> taskTemplate = map(value(spec, "TaskTemplate", "taskTemplate"));
-        Map<String, Object> containerSpec = map(value(taskTemplate, "ContainerSpec", "containerSpec"));
-        Map<String, Object> restartPolicy = map(value(taskTemplate, "RestartPolicy", "restartPolicy"));
-        Map<String, Object> stateSummary = new LinkedHashMap<>();
-        stateSummary.put("status", RuntimeCleanupPorts.RUNTIME_TYPE_SERVICE);
-        stateSummary.put("running", true);
-        stateSummary.put("exitCode", null);
-        stateSummary.put("error", null);
-        stateSummary.put("health", null);
-        stateSummary.put("startedAt", null);
-        stateSummary.put("finishedAt", null);
-        return new RuntimeInspectResponse(
-            target,
-            source,
-            stateSummary,
-            text(raw, "CreatedAt", "createdAt"),
-            null,
-            text(restartPolicy, "Condition", "condition"),
-            sanitizeServiceMounts(listOfMaps(value(containerSpec, "Mounts", "mounts"))),
-            serviceNetworks(spec, taskTemplate));
-    }
-
-    private static List<Map<String, Object>> sanitizeContainerMounts(List<Map<String, Object>> mounts) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> mount : mounts) {
-            String type = text(mount, "Type", "type");
-            String name = text(mount, "Name", "name");
-            String source = text(mount, "Source", "source");
-            Map<String, Object> safe = new LinkedHashMap<>();
-            safe.put("type", type);
-            safe.put("name", name);
-            safe.put("destination", firstText(text(mount, "Destination", "destination"), text(mount, "Target", "target")));
-            safe.put("mode", text(mount, "Mode", "mode"));
-            safe.put("rw", value(mount, "RW", "rw", "ReadOnly", "readOnly") instanceof Boolean readOnly ? !readOnly : value(mount, "RW", "rw"));
-            safe.put("propagation", text(mount, "Propagation", "propagation"));
-            safe.put("source", MOUNT_TYPE_VOLUME.equalsIgnoreCase(type) || name != null ? source : source == null ? null : REDACTED);
-            result.add(safe);
-        }
-        return List.copyOf(result);
-    }
-
-    private static List<Map<String, Object>> sanitizeServiceMounts(List<Map<String, Object>> mounts) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> mount : mounts) {
-            String type = text(mount, "Type", "type");
-            String source = text(mount, "Source", "source");
-            Boolean readOnly = bool(value(mount, "ReadOnly", "readOnly"));
-            Map<String, Object> safe = new LinkedHashMap<>();
-            safe.put("type", type);
-            safe.put("name", MOUNT_TYPE_VOLUME.equalsIgnoreCase(type) ? source : null);
-            safe.put("destination", text(mount, "Target", "target"));
-            safe.put("mode", readOnly == null ? null : readOnly ? "ro" : "rw");
-            safe.put("rw", readOnly == null ? null : !readOnly);
-            safe.put("source", MOUNT_TYPE_VOLUME.equalsIgnoreCase(type) ? source : source == null ? null : REDACTED);
-            result.add(safe);
-        }
-        return List.copyOf(result);
-    }
-
-    private static List<String> serviceNetworks(Map<String, Object> spec, Map<String, Object> taskTemplate) {
-        List<Map<String, Object>> networks = listOfMaps(value(taskTemplate, "Networks", "networks"));
-        if (networks.isEmpty()) {
-            networks = listOfMaps(value(spec, "Networks", "networks"));
-        }
-        return networks.stream()
-            .map(network -> firstText(
-                text(network, "Target", "target"),
-                text(network, "NetworkID", "networkID", "networkId"),
-                text(network, "Name", "name")))
-            .filter(Objects::nonNull)
-            .sorted()
-            .toList();
-    }
-
     private BlockedResource blocked(ComputeRuntimeResource resource, String reason) {
         return new BlockedResource(
             resource.runtimeId(),
@@ -471,59 +365,6 @@ public class RuntimeDebugService {
             .sorted(Map.Entry.comparingByKey())
             .forEach(entry -> safe.put(entry.getKey(), entry.getValue()));
         return Map.copyOf(safe);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> map(Object value) {
-        return value instanceof Map<?, ?> raw ? (Map<String, Object>) raw : Map.of();
-    }
-
-    private static List<Map<String, Object>> listOfMaps(Object value) {
-        if (!(value instanceof List<?> list)) {
-            return List.of();
-        }
-        List<Map<String, Object>> maps = new ArrayList<>();
-        for (Object item : list) {
-            maps.add(map(item));
-        }
-        return maps;
-    }
-
-    private static Object value(Map<String, Object> map, String... keys) {
-        for (String key : keys) {
-            if (map.containsKey(key)) {
-                return map.get(key);
-            }
-        }
-        return null;
-    }
-
-    private static String text(Map<String, Object> map, String... keys) {
-        Object value = value(map, keys);
-        return value == null ? null : optionalText(String.valueOf(value));
-    }
-
-    private static Integer integer(Object value) {
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        String text = optionalText(value == null ? null : String.valueOf(value));
-        if (text == null) {
-            return null;
-        }
-        try {
-            return Integer.parseInt(text);
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
-
-    private static Boolean bool(Object value) {
-        return value instanceof Boolean booleanValue ? booleanValue : null;
-    }
-
-    private static String emptyToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
     }
 
     private static String firstText(String... values) {

@@ -388,9 +388,9 @@ from exact PocketHive runtime labels using the shared control-plane topology
 descriptors. Derived worker control queues obey the same `includeRunning` gate as
 their worker runtime object, so default cleanup plans do not target a running
 worker's control queue. Prefix guessing, Docker prune-style operations, and
-implicit cleanup fallbacks are forbidden. In production, the mutating execute
-operation must be registered behind HiveGate or an equivalent governed control
-plane for policy, human approval when required, and evidence.
+implicit cleanup fallbacks are forbidden. The caller must be authorised for
+cleanup and obtain explicit human approval for the exact reviewed plan before
+invoking execute. Orchestrator verifies plan freshness and records the outcome.
 
 #### 2.9.1 Runtime debug capabilities
 `GET /api/runtime/debug/capabilities`
@@ -512,6 +512,16 @@ missing manifest returns `404 Not Found`.
 ```
 
 **Response (200)** is the canonical `RuntimeOwnershipManifest` object.
+
+Scope clarification for Artemis A4: `rabbit` contains only Rabbit resources. With
+Artemis WORK, it retains Rabbit CONTROL queues; empty `rabbit.workQueues` and
+`rabbit.exchanges` do not mean that native WORK resources are absent. The factory
+logs this excluded coverage when projecting a non-Rabbit topology. The Rabbit
+topology snapshot, its assessment check and `includeRabbit` orphan cleanup share
+this Rabbit-only scope. They are not a complete inventory or orphan cleanup of
+Artemis. Ordinary swarm remove uses its existing owner-issued WORK_RESOURCE
+targets and verified postconditions, independently of the manifest. No JSON fields,
+cleanup actions or lifecycle contracts are added by this clarification.
 
 #### 2.9.7 Rabbit topology snapshot
 `POST /api/runtime/debug/rabbit/topology`
@@ -694,7 +704,7 @@ marked `running=true` and `highRisk=true`.
 
 Recomputes the plan, verifies the candidate hash and idempotency key, then
 executes only the selected candidate ids. This endpoint does not approve itself;
-production access is governed by HiveGate policy outside Orchestrator.
+the caller must obtain explicit human approval before invoking it.
 
 **Request**
 ```json
@@ -741,12 +751,18 @@ production access is governed by HiveGate policy outside Orchestrator.
 #### 2.8.3 Close tap
 `DELETE /api/debug/taps/{tapId}`
 
-Deletes the tap queue and returns the last known tap state.
+Closes the adapter-owned tap resources and returns the last known tap state only when
+the adapter close completes successfully. An adapter close failure returns HTTP 500;
+cleanup is then unconfirmed. The tap registration is removed for this close attempt,
+so a later 404 does not turn that failed close into proof of native resource removal.
+There is no automatic retry. Scheduled expiry retains its existing best-effort cleanup.
 
 ### Lifecycle operation conflicts
 
-Only one non-terminal lifecycle operation may exist for a swarm. A `create`, `start`, `stop`, or
-`remove` request that conflicts with a different active lifecycle operation returns `409 Conflict`.
+Lifecycle operations are exclusive, except that STOP may follow an awaiting START
+for the same controller and run. The Controller settles the superseded START as FAILED.
+Other overlapping `create`, `start`, `stop`, or `remove` requests return `409 Conflict`,
+including a second distinct STOP while STOP is pending.
 The response body is the canonical active `SwarmOperation`, allowing the caller to follow its
 `correlationId` instead of retrying or replacing it implicitly.
 
@@ -760,6 +776,16 @@ Create authorization is evaluated before lifecycle-operation lookup or reservati
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
 - Emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** only after Controller state is `READY`, workload observation is `STOPPED`, every expected worker is fresh and bootstrap-acknowledged, and the reported startup artifact digest matches the launch record.
 - On failure, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** with `data.status=Failed` and an accompanying `event.alert.{type}` if applicable.
+- After startup artifact verification, a plan-application or provisioning failure
+  leaves the Controller available for status and filesystem-backed `REMOVE`.
+  It reports failed Controller state with `startupReady=false`; workload commands
+  remain rejected. A failed observation matching the Controller instance, run,
+  template and launch digest terminates `CREATE` as `FAILED`, allowing a subsequent
+  explicit remove request.
+  Partial resources remain owned by the existing Controller lifecycle and use
+  the normal verified removal path. No automatic deletion or registry reset occurs.
+  Artifact verification and process/bootstrap failures still fail startup; this
+  does not introduce recovery for a dead Controller or cross-restart reconciliation.
 - Requires a `templateId` referencing the scenario template to instantiate.
 
 **Request**
@@ -834,7 +860,11 @@ When the Controller is ready and the workload is already `RUNNING`, a new `START
 
 Completion requires fresh post-dispatch status from every expected worker with `enabled=false`. Dispatch acceptance is not completion.
 
-When the Controller is ready and the workload is already `STOPPED`, a new `STOP` request succeeds as an idempotent no-op. It creates its own operation for a new `idempotencyKey`, but does not broadcast disablement again. The lifecycle-operation conflict rule still applies while another lifecycle operation is non-terminal.
+A new STOP request broadcasts disablement and requires fresh disabled evidence from
+all expected runtime workers, even when cached workload intent is already STOPPED.
+An exact retry with the same idempotency key reuses the original operation.
+STOP requires Controller initialization, but does not require fresh heartbeats or
+completed bootstrap acknowledgements. See [Control during missing worker telemetry](#control-during-missing-worker-telemetry).
 
 **Response (202)**
 ```json
@@ -855,7 +885,7 @@ When the Controller is ready and the workload is already `STOPPED`, a new `STOP`
 { "idempotencyKey": "uuid-v4" }
 ```
 
-The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator verifies every Controller-reported compute and RabbitMQ target through the canonical observation ports, clears the Network Proxy Manager binding with the active operation identity and requires a subsequent canonical binding read to be absent, then removes and verifies Controller-specific runtime targets. It then deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
+The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator verifies every Controller-reported compute and messaging target through the canonical observation ports (Rabbit CONTROL and the selected WORK adapter), clears the Network Proxy Manager binding with the active operation identity and requires a subsequent canonical binding read to be absent, then removes and verifies Controller-specific runtime targets. It then deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
 
 **Response (202)**
 ```json
@@ -867,6 +897,38 @@ The Orchestrator first creates the immutable filesystem request under `<runtime-
   "timeoutMs": 180000
 }
 ```
+
+### 3.3.1 Catalogue-only removal
+
+`DELETE /api/swarms/{swarmId}/catalogue-entry`
+
+This operation forgets a registered swarm whose compute resources were
+removed manually. It is not `REMOVE` and does not claim that queues, network
+bindings or runtime files have been deleted.
+
+- Requires the same canonical swarm-management permission as REMOVE.
+- Requires an existing catalogue entry and no active lifecycle operation.
+- Reads the canonical compute inventory successfully and rejects the request if
+  any resource belongs to this swarm, regardless of its runId or running state;
+  the registered Controller runtime ID also blocks removal when present.
+  STALE telemetry is not evidence of infrastructure absence.
+- Removes only the exact catalogue entry inspected for this request. A concurrent
+  replacement or newly admitted lifecycle operation rejects the operation;
+  inventory IO must not run under the catalogue monitor.
+- Returns `204 No Content` after successful catalogue removal, `404` for an absent
+  entry, `409` for remaining compute resources, active operation or changed entry,
+  and `503` when inventory absence cannot be established. Authorization errors
+  retain the existing API policy.
+- Records the forgotten swarm/run/controller identity in the existing journal using
+  the captured runId after deletion. Journal failure is logged and does not turn
+  the completed catalogue mutation into an HTTP failure.
+  It does not emit a successful `swarm-remove` outcome.
+- Runtime files and messaging resources remain intact in this slice. Their
+  cleanup, and coordination with externally started compute resources, remain
+  separate work. This is an operator action after manual infrastructure deletion,
+  not automatic pruning or a distributed lock against external infrastructure changes.
+
+Approved explicitly by the user on 2026-09-26 under AGENTS.md §3.
 
 ## 4. Components
 
@@ -972,6 +1034,19 @@ no credentials and does not change the STOMP URL, broker authentication or event
 ### 5.2 Reset control-plane state (debug-only)
 `POST /api/control-plane/reset`
 
+Recovered entries expose `workloadIntent=UNKNOWN` until an accepted START/STOP command.
+This is missing command history, not a STOP request; diagnostics report INCOMPLETE
+without masking observed failures. UNKNOWN is never a requested START/STOP terminal state.
+
+RESET clears only the local swarm catalogue. Ordinary controller full statuses rebuild
+missing entries using verified runtime identity and the immutable startup artifact;
+unknown deltas request a full status. A controller-instance or runId conflict with an
+existing entry is an ERROR in the journal (including expected and received identities),
+and does not overwrite the entry or advance lifecycle operations. Missing discovery
+metadata is reported as an error rather than replaced with guessed defaults. RESET does
+not stop/delete runtimes or recover operations lost across an Orchestrator process restart.
+
+
 **Behavior**
 - Clears the orchestrator registry before issuing the same sync flow as refresh.
 - Intended for local recovery/testing only.
@@ -1000,3 +1075,47 @@ Cache-Control: max-age=300
 **Response (304)** — when `If-None-Match` matches the current `ETag`.
 
 Outcome and metric payloads follow the envelope rules in `docs/ARCHITECTURE.md`.
+
+## Swarm permission projection
+
+`GET /api/access/swarms` (public ingress: `/orchestrator/api/access/swarms`)
+returns a caller-specific, read-only projection of existing swarm authorization:
+
+```json
+{"swarms":[{"swarmId":"example","canRun":true,"canManage":false}]}
+```
+
+- The route is outside `/api/swarms/{swarmId}`; `access` remains a valid swarm ID.
+- Return only swarms visible under the existing read authorization; ordering by ID.
+- Resolve swarm template scope through the same owner used by lifecycle commands,
+  then call existing OrchestratorAuthorization checks. Extract the shared access
+  responsibility from SwarmController before exposing it; no copied scope resolver
+  or permission matrix in the new endpoint or UI.
+- Preserve current authorization, including behavior with authentication disabled.
+- Booleans describe permission only, not readiness, lifecycle eligibility, admission
+  or a promise of success. Commands always recheck authorization on execution.
+- `200` with `swarms: []` is an empty visible set. Failures retain their HTTP error
+  status, never a success-shaped fallback. Return `Cache-Control: no-store`.
+- UI matches by swarmId; missing/loading/failed projection keeps actions unavailable.
+  It must not infer permissions from a scenario catalogue or an unrelated grant.
+
+Approved F07 addition. It removes per-swarm UI permission
+inference; global navigation, scenario/bundle/folder and auth-admin projections
+remain subsequent scopes and must not be claimed completed by this endpoint.
+
+
+### Control during missing worker telemetry
+
+STOP remains admissible after Controller initialization even if some worker heartbeats
+are stale or bootstrap configuration acknowledgements are pending. STOP is an attempt:
+it succeeds only with new disabled status evidence from all expected workers; missing
+workers produce a bounded failure with non-converged targets. Repeating STOP with a
+new request identity resends disable, including when cached workload intent is STOPPED.
+
+A STOP targeting the same controller/run may be accepted while START awaits convergence.
+The Controller reports that START as FAILED (superseded by STOP). STOP has its own
+correlation and convergence evidence. Other overlapping lifecycle operations remain
+conflicts, including a second distinct STOP. In-flight config operations keep their
+own outcome; STOP does not fabricate configuration success or cancel bootstrap state.
+Controller config updates no longer require fresh heartbeat telemetry, but retain
+initialization, pending-bootstrap and workload-state restrictions. START remains strict.

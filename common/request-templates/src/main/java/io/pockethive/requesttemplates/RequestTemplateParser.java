@@ -16,14 +16,30 @@ import java.util.Objects;
  * Contract: RESP-REQUEST-TEMPLATE-PARSE — docs/architecture/runtime-responsibilities.md#resp-request-template-parse.
  */
 public final class RequestTemplateParser {
+    private static final List<String> COMMON_REQUIRED_FIELDS = List.of("protocol", "serviceId", "callId");
+    private static final List<String> HTTP_REQUIRED_FIELDS = List.of("method", "pathTemplate");
+    public static final String AUTH_REFERENCE_FIELD = "authRef";
+
+    /** Required fields use the same ordered definitions as parsing. */
+    public static List<String> requiredFields(RequestTemplateProtocol protocol) {
+        if (protocol == RequestTemplateProtocol.HTTP) {
+            return java.util.stream.Stream.concat(COMMON_REQUIRED_FIELDS.stream(), HTTP_REQUIRED_FIELDS.stream()).toList();
+        }
+        return COMMON_REQUIRED_FIELDS;
+    }
+
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
     public TemplateDefinition parse(Map<?, ?> document) {
         Objects.requireNonNull(document, "document");
         List<RequestTemplateProblem> problems = new ArrayList<>();
-        String protocolText = requiredText(document, "protocol", problems);
-        String serviceId = requiredText(document, "serviceId", problems);
-        String callId = requiredText(document, "callId", problems);
+        Map<String, String> required = new LinkedHashMap<>();
+        for (String field : COMMON_REQUIRED_FIELDS) {
+            required.put(field, requiredText(document, field, problems));
+        }
+        String protocolText = required.get("protocol");
+        String serviceId = required.get("serviceId");
+        String callId = required.get("callId");
         RequestTemplateProtocol protocol = null;
         if (protocolText != null) {
             try {
@@ -34,8 +50,9 @@ public final class RequestTemplateParser {
             }
         }
         if (protocol == RequestTemplateProtocol.HTTP) {
-            requiredText(document, "method", problems);
-            requiredText(document, "pathTemplate", problems);
+            for (String field : HTTP_REQUIRED_FIELDS) {
+                requiredText(document, field, problems);
+            }
         }
         problems.addAll(authProblems(document));
         if (!problems.isEmpty()) {
@@ -46,8 +63,8 @@ public final class RequestTemplateParser {
         normalized.put("protocol", protocol.name());
         normalized.put("serviceId", serviceId);
         normalized.put("callId", callId);
-        if (document.containsKey("authRef")) {
-            normalized.put("authRef", authReference(document.get("authRef")));
+        if (document.containsKey(AUTH_REFERENCE_FIELD)) {
+            normalized.put(AUTH_REFERENCE_FIELD, authReference(document.get(AUTH_REFERENCE_FIELD)));
         }
         Class<? extends TemplateDefinition> definitionType = switch (protocol) {
             case HTTP -> HttpTemplateDefinition.class;
@@ -69,9 +86,9 @@ public final class RequestTemplateParser {
             problems.add(new RequestTemplateProblem(RequestTemplateProblemKind.INLINE_AUTH,
                 "auth", "Request templates must use authRef instead of inline auth"));
         }
-        if (document.containsKey("authRef")) {
+        if (document.containsKey(AUTH_REFERENCE_FIELD)) {
             try {
-                authReference(document.get("authRef"));
+                authReference(document.get(AUTH_REFERENCE_FIELD));
             } catch (RequestTemplateException e) {
                 problems.addAll(e.problems());
             }

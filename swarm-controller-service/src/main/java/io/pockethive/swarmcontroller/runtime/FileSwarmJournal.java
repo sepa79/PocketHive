@@ -17,11 +17,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * File-backed implementation of {@link SwarmJournal}.
- * <p>
- * Writes append-only JSON lines into a per-swarm journal file located under
- * the configured runtime root directory. The initial format is intentionally
- * simple so it can later be reused for recording/replay.
+ * Responsibility: append swarm journal entries to the layout-owned file under a per-writer lock.
+ * Must not: resolve runtime roots, query journals or decide retention and swarm lifecycle.
+ * Contract: RESP-SWARM-FILE-JOURNAL — docs/architecture/runtime-responsibilities.md#resp-swarm-file-journal.
  */
 @Component
 @ConditionalOnProperty(name = "pockethive.journal.sink", havingValue = "file", matchIfMissing = true)
@@ -43,9 +41,8 @@ public class FileSwarmJournal implements SwarmJournal {
     this.swarmId = properties.getSwarmId();
     this.runId = requireNonBlank(runId, "runId");
     try {
-      Path dir = layout.swarmRunDirectory(swarmId, this.runId);
-      Files.createDirectories(dir);
-      this.journalFile = dir.resolve("journal.ndjson");
+      this.journalFile = layout.swarmJournalFile(swarmId, this.runId);
+      Files.createDirectories(journalFile.getParent());
       log.info("Swarm journal initialised at {}", journalFile);
     } catch (Exception e) {
       throw new IllegalStateException("Unable to initialise swarm journal", e);

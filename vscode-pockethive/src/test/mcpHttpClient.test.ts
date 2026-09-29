@@ -47,6 +47,7 @@ test('initializes exact protocol, binds session, and reads current capabilities'
   assert.equal(header(requests[1], 'Mcp-Session-Id'), 'session-123');
   assert.equal(header(requests[2], 'Mcp-Session-Id'), 'session-123');
   assert.equal(requests.every(request => request.init?.method === 'POST'), true);
+  assert.equal(requests.every(request => request.init?.redirect === 'error'), true);
   assert.equal(requests.every(request => request.init?.signal === controller.signal), true);
   assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
     jsonrpc: '2.0', id: 1, method: 'initialize', params: {
@@ -149,6 +150,7 @@ test('streams a ticket archive only to the exact selected MCP ingress', async ()
   const upload = requests[3];
   assert.equal(upload.url, 'https://nft-lab.example/mcp/uploads/uv-123e4567-e89b-12d3-a456-426614174000');
   assert.equal(upload.init?.method, 'PUT');
+  assert.equal(upload.init?.redirect, 'error');
   assert.equal(header(upload, 'Authorization'), 'Bearer user-access-token');
   assert.equal(header(upload, 'Content-Type'), 'application/zip');
   assert.equal(header(upload, 'Content-Length'), '3');
@@ -472,6 +474,7 @@ test('session close is idempotent, accepts owner absence, and retains retry afte
     const close = connected.requests[3];
     assert.equal(close.url, 'https://nft-lab.example/mcp');
     assert.equal(close.init?.method, 'DELETE');
+    assert.equal(close.init?.redirect, 'error');
     assert.equal(header(close, 'Mcp-Session-Id'), 'session-123');
     assert.equal(close.init?.body, undefined);
   }

@@ -16,6 +16,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
+ * Responsibility: project swarm journal events into the shared append writer.
+ * Must not: duplicate SQL insertion, archive creation or retention.
+ * Contract: RESP-JOURNAL-WRITES — docs/architecture/runtime-responsibilities.md#resp-journal-writes.
+ * <p>
  * Postgres-backed implementation of {@link SwarmJournal}.
  * <p>
  * Uses a bounded in-memory buffer with periodic batch inserts so journaling does not block

@@ -2,18 +2,13 @@ package io.pockethive.processor.transport;
 
 import io.pockethive.processor.TcpTransportConfig;
 
-public class TcpTransportFactory {
-    
-    public static TcpTransport create(String transportType) {
-        return switch (transportType.toLowerCase()) {
-            case "socket" -> new SocketTransport();
-            case "nio" -> new NioTransport();
-            case "netty" -> new NettyTransport();
-            default -> new SocketTransport();
-        };
-    }
-
-    public static TcpTransport create(TcpTransportConfig config) {
+/**
+ * Responsibility: construct the configured processor Socket/NIO/Netty transport.
+ * Must not: own pools, reload state, retry requests or interpret protocol results.
+ * Contract: RESP-PROCESSOR-TCP-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-processor-tcp-runtime.
+ */
+final class TcpTransportFactory {
+    static TcpTransport create(TcpTransportConfig config) {
         if (config == null || config.type() == null) {
             return new SocketTransport();
         }
@@ -25,7 +20,4 @@ public class TcpTransportFactory {
         };
     }
     
-    public static TcpTransport createPooled(String transportType) {
-        return TcpTransportPool.global().getOrCreate(transportType);
-    }
 }

@@ -1,78 +1,78 @@
 package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.work.api.WorkStep;
+import io.pockethive.redis.api.RedisListWriter;
+import io.pockethive.redis.api.RedisListClients;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.lettuce.core.RedisClient;
-import io.lettuce.core.RedisURI;
-import io.lettuce.core.api.StatefulRedisConnection;
-import io.lettuce.core.api.sync.RedisCommands;
 import io.pockethive.work.api.WorkItem;
-import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderer;
-import java.time.Duration;
 import io.pockethive.redis.config.RedisRoute;
 import io.pockethive.redis.config.RedisPayloadSource;
-import io.pockethive.redis.config.RedisPushDirection;
 import io.pockethive.redis.config.RedisConnectionSettings;
-import io.pockethive.redis.config.RedisWriteSettings;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Shared Redis push utility used by both output transports and side-output interceptors.
  * <p>
- * Responsibility: resolve configured payload/list routes and perform shared Redis push operations.
+ * Responsibility: resolve payload/list routes, delegate pushes and own terminal writer-cache shutdown.
  * Must not: parse/validate write settings or route declarations or turn diagnostic capture into business output.
  * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
  * Consumes RESP-WORK-REDIS-ROUTES, RESP-WORK-REDIS-WRITE-SETTINGS and RESP-REDIS-CONNECTION-SETTINGS.
  */
-public final class RedisPushSupport {
+public final class RedisPushSupport implements AutoCloseable {
+    // Operations may run concurrently; shutdown excludes operations and resource creation.
+    private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
+    private boolean closed;
+
 
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
     private static final Logger LOGGER = LoggerFactory.getLogger(RedisPushSupport.class);
 
-    private final RedisWriterFactory writerFactory;
+    private final java.util.function.Function<RedisConnectionSettings, RedisListWriter> writerFactory;
     private final TemplateRenderer templateRenderer;
-    private final Map<RedisConnectionSettings, RedisWriter> writers = new ConcurrentHashMap<>();
-
-    public RedisPushSupport() {
-        this(new LettuceRedisWriterFactory(), new PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()));
-    }
+    private final Map<RedisConnectionSettings, RedisListWriter> writers = new ConcurrentHashMap<>();
 
     public RedisPushSupport(TemplateRenderer templateRenderer) {
-        this(new LettuceRedisWriterFactory(), Objects.requireNonNull(templateRenderer, "templateRenderer"));
+        this(RedisListClients::writer, Objects.requireNonNull(templateRenderer, "templateRenderer"));
     }
 
-    public RedisPushSupport(RedisWriterFactory writerFactory, TemplateRenderer templateRenderer) {
+    public RedisPushSupport(java.util.function.Function<RedisConnectionSettings, RedisListWriter> writerFactory, TemplateRenderer templateRenderer) {
         this.writerFactory = Objects.requireNonNull(writerFactory, "writerFactory");
         this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     }
 
-    public boolean push(PushRequest request, WorkItem message) {
-        if (request == null || message == null) {
-            return false;
+    public boolean push(RedisPushRequest request, WorkItem message) {
+        lifecycle.readLock().lock();
+        try {
+            if (closed) throw new IllegalStateException("Redis resources are closed");
+            if (request == null || message == null) {
+                return false;
+            }
+            String payload = payloadFor(message, request.settings().sourceStep());
+            if (payload == null) {
+                return false;
+            }
+            String targetList = resolveTargetList(request, message, payload);
+            if (targetList == null || targetList.isBlank()) {
+                return false;
+            }
+            RedisListWriter writer = writers.computeIfAbsent(request.connection(), writerFactory::apply);
+            writer.push(targetList, payload, request.settings().pushDirection(), request.settings().maxLen());
+            return true;
+        } finally {
+            lifecycle.readLock().unlock();
         }
-        String payload = payloadFor(message, request.settings().sourceStep());
-        if (payload == null) {
-            return false;
-        }
-        String targetList = resolveTargetList(request, message, payload);
-        if (targetList == null || targetList.isBlank()) {
-            return false;
-        }
-        RedisWriter writer = writers.computeIfAbsent(request.connection(), writerFactory::create);
-        writer.push(targetList, payload, request.settings().pushDirection(), request.settings().maxLen());
-        return true;
     }
 
-    public String resolveTargetList(PushRequest request, WorkItem message, String payload) {
+    public String resolveTargetList(RedisPushRequest request, WorkItem message, String payload) {
         // NFF: this is an explicit precedence order within the Redis output configuration.
         // It is not a compatibility shim or "try random defaults"; it is a deliberate selection:
         // first matching route wins, otherwise template, otherwise an explicitly-configured defaultList.
@@ -186,55 +186,21 @@ public final class RedisPushSupport {
         return header != null && route.headerPattern().matcher(header.toString()).find();
     }
 
-    public record PushRequest(RedisConnectionSettings connection,
-                              RedisWriteSettings settings,
-                              List<RedisRoute> routes,
-                              String defaultList,
-                              String targetListTemplate) {
-
-        public PushRequest {
-            connection = Objects.requireNonNull(connection, "connection");
-            settings = Objects.requireNonNull(settings, "settings");
-            routes = routes == null ? List.of() : List.copyOf(routes);
-        }
-    }
-
-    public interface RedisWriter {
-        void push(String list, String payload, RedisPushDirection direction, int maxLen);
-    }
-
-    public interface RedisWriterFactory {
-        RedisWriter create(RedisConnectionSettings config);
-    }
-
-    public static final class LettuceRedisWriterFactory implements RedisWriterFactory {
-
-        @Override
-        public RedisWriter create(RedisConnectionSettings config) {
-            RedisURI.Builder builder = RedisURI.builder()
-                .withHost(config.host())
-                .withPort(config.port())
-                .withSsl(config.ssl());
-            if (config.username() != null && config.password() != null) {
-                builder.withAuthentication(config.username(), config.password().toCharArray());
-            } else if (config.password() != null) {
-                builder.withPassword(config.password().toCharArray());
+    @Override public void close() {
+        lifecycle.writeLock().lock();
+        try {
+            if (closed) return;
+            closed = true;
+            RuntimeException failure = null;
+            for (var writer : writers.values()) {
+                try { writer.close(); } catch (RuntimeException ex) {
+                    if (failure == null) failure = ex; else if (failure != ex) failure.addSuppressed(ex);
+                }
             }
-            RedisURI uri = builder.build();
-            RedisClient client = RedisClient.create(uri);
-            StatefulRedisConnection<String, String> connection = client.connect();
-            connection.setTimeout(Duration.ofSeconds(10));
-            RedisCommands<String, String> commands = connection.sync();
-            return (list, payload, direction, maxLen) -> {
-                if (direction == RedisPushDirection.LPUSH) {
-                    commands.lpush(list, payload);
-                } else {
-                    commands.rpush(list, payload);
-                }
-                if (maxLen > 0) {
-                    commands.ltrim(list, 0, maxLen - 1);
-                }
-            };
+            writers.clear();
+            if (failure != null) throw failure;
+        } finally {
+            lifecycle.writeLock().unlock();
         }
     }
 }

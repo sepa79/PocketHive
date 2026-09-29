@@ -58,10 +58,6 @@ config:
     required: true
     when:
       mode: template
-  - name: localTargetDir
-    type: string
-    liveMutable: true
-    required: true
   - name: localTempSuffix
     type: string
     liveMutable: true

@@ -2,8 +2,13 @@ package io.pockethive.sink.clickhouse;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Responsibility: own transaction sink configuration and its existing defaults/validation.
+ * Must not: issue HTTP requests or own buffered data.
+ * Contract: RESP-CLICKHOUSE-INSERT — docs/architecture/runtime-responsibilities.md#resp-clickhouse-insert.
+ */
 @ConfigurationProperties(prefix = "pockethive.sink.clickhouse")
-public class ClickHouseSinkProperties {
+public class ClickHouseSinkProperties implements ClickHouseConnectionSettings {
 
   private String endpoint = "";
   private String table = "";

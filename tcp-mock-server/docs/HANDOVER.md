@@ -1,12 +1,18 @@
 # TCP Mock Server - Handover Document
 
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
 ## 📦 Deliverables
 
-### Production Code
-- ✅ Complete Java backend with Netty TCP server
-- ✅ Enterprise-grade UI with all WireMock features
+### Historical implementation inventory
+- Java backend with Netty TCP server; qualification incomplete
+- Historical UI feature descriptions
 - ✅ 15 JavaScript modules for modular functionality
-- ✅ Comprehensive test coverage (85%)
+- Test coverage is unqualified; no percentage is asserted
 - ✅ Docker and Kubernetes deployment configs
 
 ### Documentation
@@ -25,7 +31,7 @@
 
 ## 🎯 System Status
 
-### Backend (100% Complete)
+### Backend — historical feature list
 - ✅ TCP server with Netty
 - ✅ Pattern-based message routing
 - ✅ Binary protocol support (ByteBuf)
@@ -38,7 +44,7 @@
 - ✅ Request storage (1000 max)
 - ✅ Metrics collection
 
-### Frontend (100% Complete)
+### Frontend — historical feature list
 - ✅ Request journal with filtering
 - ✅ Pagination (50 per page)
 - ✅ Export (JSON/CSV)
@@ -138,13 +144,12 @@ mvn verify
 3. Send test: `echo "ECHO test" | nc localhost 8080`
 4. Verify in UI Requests tab
 
-## 📊 Performance
+## Performance qualification
 
-- **Throughput**: 10,000+ requests/second
-- **Latency**: <5ms average
-- **Memory**: ~200MB baseline
-- **Storage**: 1000 requests max (FIFO)
-- **Concurrent Connections**: 1000+
+Throughput, latency, memory use, request-history capacity and concurrent
+connections are unqualified. Earlier numerical claims had no supporting
+measurement attached. Use [TCP capability qualification](WIREMOCK-PARITY.md)
+for the required evidence.
 
 ## 🔒 Security Considerations
 
@@ -162,13 +167,10 @@ mvn verify
 4. Set up monitoring/alerting
 5. Regular security audits
 
-## 🐛 Known Issues
+## Known gaps
 
-### None Critical
-All features tested and working. Minor items:
-- YAML import requires JSON format (YAML parser not included)
-- Metrics reset on server restart (in-memory)
-- Request history limited to 1000 (by design)
+See [TCP capability qualification](WIREMOCK-PARITY.md). The historical feature
+lists above do not establish that those workflows work on the TCP listener.
 
 ## 📞 Support Contacts
 
@@ -204,19 +206,11 @@ All features tested and working. Minor items:
 - Set up monitoring dashboards
 - Configure alerting rules
 
-## ✅ Acceptance Criteria
+## Acceptance
 
-All criteria met:
-- ✅ 100% WireMock feature parity
-- ✅ Binary protocol support
-- ✅ Enterprise UI with all features
-- ✅ Production-ready code quality
-- ✅ Comprehensive documentation
-- ✅ Example mappings provided
-- ✅ Docker/K8s deployment ready
-- ✅ Test coverage >80%
-- ✅ Performance validated
-- ✅ Security reviewed
+[TCP capability qualification](WIREMOCK-PARITY.md) owns the current acceptance
+requirements and gaps. This document does not record completed qualification,
+test coverage, performance validation or security sign-off.
 
 ## 🎓 Knowledge Transfer
 
@@ -235,28 +229,8 @@ All criteria met:
 - ✅ Example configurations
 - ✅ Test scenarios
 
-## 📝 Sign-Off
+## Sign-off
 
-### Development Team
-- **Backend**: ✅ Complete and tested
-- **Frontend**: ✅ Complete and tested
-- **Documentation**: ✅ Complete and reviewed
-- **Deployment**: ✅ Validated in test environment
-
-### Quality Assurance
-- **Functional Testing**: ✅ All features validated
-- **Performance Testing**: ✅ Meets requirements
-- **Security Testing**: ✅ No critical issues
-- **Usability Testing**: ✅ UI intuitive and responsive
-
-### Operations
-- **Deployment**: ✅ Ready for production
-- **Monitoring**: ✅ Metrics available
-- **Backup**: ✅ Configuration backed up
-- **Runbook**: ✅ Documented
-
----
-
-**Handover Date**: 2024
-**Status**: ✅ READY FOR PRODUCTION
-**Next Steps**: Deploy to production environment
+Qualification is incomplete. No runtime tests or performance measurements were
+run for this documentation update. Record actual evidence against
+[TCP capability qualification](WIREMOCK-PARITY.md) before issuing a new sign-off.

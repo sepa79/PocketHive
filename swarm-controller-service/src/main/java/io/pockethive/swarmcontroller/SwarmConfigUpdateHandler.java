@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: Apply accepted Swarm Controller config-update commands through canonical lifecycle owners.
  * Must not: Decode transport, decide routing acceptance, construct result contracts, or own lifecycle state.
- * Contract: Admission precedes mutation; successful mutations publish one canonical config result.
+ * Contract: RESP-SWARM-COMMAND-ADMISSION — docs/architecture/runtime-responsibilities.md#resp-swarm-command-admission.
  */
 final class SwarmConfigUpdateHandler {
 
@@ -63,7 +63,7 @@ final class SwarmConfigUpdateHandler {
     JsonNode data = mapper.valueToTree(signal.data());
     boolean networkContextOnly = networkContext.isOnlyNetworkContext(targetRole, data);
     SwarmCommandReadinessSnapshot snapshot = readiness.snapshot();
-    if (!snapshot.accepts(!networkContextOnly)) {
+    if (!snapshot.acceptsConfig(!networkContextOnly)) {
       reject(signal, swarmId, snapshot);
       return;
     }

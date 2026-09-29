@@ -313,7 +313,7 @@ class RedisUploaderInterceptorTest {
 
     private static WorkerInvocationContext invocationContext(Map<String, Object> rawConfig, WorkItem message) {
         WorkerState state = new WorkerState(DEFINITION);
-        state.updateRawConfig(rawConfig);
+        state.updateRuntimeConfiguration(WorkerRuntimeConfiguration.parse(rawConfig));
         state.setStatusPublisher(StatusPublisher.NO_OP);
         return new WorkerInvocationContext(DEFINITION, state, workerContext(), message);
     }
@@ -374,13 +374,16 @@ class RedisUploaderInterceptorTest {
         };
     }
 
-    private static final class RecordingWriterFactory implements RedisPushSupport.RedisWriterFactory {
+    private static final class RecordingWriterFactory implements java.util.function.Function<io.pockethive.redis.config.RedisConnectionSettings, io.pockethive.redis.api.RedisListWriter> {
 
         private final List<Push> pushes = new ArrayList<>();
 
         @Override
-        public RedisPushSupport.RedisWriter create(io.pockethive.redis.config.RedisConnectionSettings config) {
-            return (list, payload, direction, maxLen) -> pushes.add(new Push(list, payload));
+        public io.pockethive.redis.api.RedisListWriter apply(io.pockethive.redis.config.RedisConnectionSettings config) {
+            return new io.pockethive.redis.api.RedisListWriter() {
+                public void push(String list, String payload, io.pockethive.redis.config.RedisPushDirection direction, int maxLen) { pushes.add(new Push(list, payload)); }
+                public void close() { }
+            };
         }
     }
 

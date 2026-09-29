@@ -86,10 +86,9 @@ Path: `pockethive.worker.config.*`
 | `headerTemplate` | string | yes | `H|{{ now }}` | Template for file header line. |
 | `recordTemplate` | string | yes | `D|{{ steps.selected.payload }}` | Template for each record line. |
 | `footerTemplate` | string | yes | `T|{{ recordCount }}` | Template for file footer line. |
-| `localTargetDir` | string | yes | `/tmp/pockethive/clearing-out` | Directory for finalized files. |
 | `localTempSuffix` | string | no | `.tmp` | Temporary suffix used before atomic rename. |
 | `writeManifest` | boolean | no | `false` | Enables local JSONL manifest (one line per finalized file). |
-| `localManifestPath` | string | no | `reports/clearing/manifest.jsonl` | Manifest path. Relative paths are resolved under `localTargetDir`. |
+| `localManifestPath` | string | no | `reports/clearing/manifest.jsonl` | Manifest path. Must be relative to the runtime-owned output directory. |
 | `schemaRegistryRoot` | string | structured only | `/app/scenario/clearing-schemas` | Root directory for structured schemas. |
 | `schemaId` | string | structured only | `""` | Structured schema id to load from registry. |
 | `schemaVersion` | string | structured only | `""` | Structured schema version to load from registry. |
@@ -143,7 +142,6 @@ pockethive:
       headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
       recordTemplate: "D|{{ steps.selected.json.clearingId }}|{{ steps.selected.json.panMasked }}|{{ steps.selected.json.amountMinor }}|{{ steps.selected.json.currency }}|{{ steps.selected.json.responseCode }}"
       footerTemplate: "T|{{ recordCount }}"
-      localTargetDir: "/tmp/pockethive/clearing-out"
       localTempSuffix: ".tmp"
       writeManifest: true
       localManifestPath: "reports/clearing/manifest.jsonl"
@@ -171,7 +169,6 @@ pockethive:
       maxRecordsPerFile: 10
       flushIntervalMs: 1000
       maxBufferedRecords: 50000
-      localTargetDir: /tmp/pockethive/clearing-out
       localTempSuffix: .tmp
       writeManifest: false
 ```
@@ -315,3 +312,5 @@ If `writeManifest=true`, a manifest line is appended:
 - Writing one file per message (ignore batching rules).
 - Putting control-plane/runtime metadata into business templates.
 - Logging full PAN/sensitive content in status/errors.
+
+Output directory is mandatory runtime storage under the swarm/run/worker directory, resolved by RuntimeFilesystemLayout. It is not configurable through scenario or config-update; localTargetDir has been removed.

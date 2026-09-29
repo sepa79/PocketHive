@@ -1,0 +1,10 @@
+serviceId: default
+callId: acceptance-webauth
+protocol: TCP
+behavior: REQUEST_RESPONSE
+transport: socket
+endTag: OK
+maxBytes: 1024
+headersTemplate: {}
+bodyTemplate: |
+  {% if headers['x-ph-redis-list'] == 'REPLACE_LIST_5' %}{% set stage = 'BAL' %}{% elseif headers['x-ph-redis-list'] == 'REPLACE_LIST_6' %}{% set stage = 'TOP' %}{% else %}{% set stage = 'RED' %}{% endif %}<request version="1.0" type="{{ stage }}" origin="{{ payloadAsJson.Nonce }}" sourceList="{{ headers['x-ph-redis-list'] }}"><account no="{{ payloadAsJson.Customer }}" refer="{{ payloadAsJson.AccountNumber }}"/><value amt="{{ payloadAsJson.Amount }}" currency="GBP"/></request>

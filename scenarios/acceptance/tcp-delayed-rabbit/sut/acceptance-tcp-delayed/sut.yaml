@@ -1,0 +1,7 @@
+id: acceptance-tcp-delayed
+name: Acceptance tcp-delayed SUT
+type: tcp
+endpoints:
+  default:
+    kind: tcp
+    baseUrl: tcp://tcp-mock-server:9090

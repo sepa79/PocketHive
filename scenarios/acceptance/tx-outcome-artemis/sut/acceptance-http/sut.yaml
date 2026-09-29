@@ -1,0 +1,7 @@
+id: acceptance-http
+name: Acceptance HTTP stub
+type: http
+endpoints:
+  default:
+    kind: http
+    baseUrl: http://wiremock:8080

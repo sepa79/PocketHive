@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.work.api.HistoryPolicy;
 import io.pockethive.work.api.StatusPublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -15,7 +16,7 @@ import java.util.concurrent.atomic.LongAdder;
  * Tracks per-worker state for the runtime. Exposed indirectly via
  * {@link WorkerControlPlaneRuntime.WorkerStateSnapshot}.
  * <p>
- * Responsibility: store accepted worker configuration plus separately updated counters and status contributions.
+ * Responsibility: store accepted worker configuration and its parsed runtime policy, plus counters and status contributions.
  * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
  * Retains the immutable CSV startup baseline defined by RESP-WORK-CSV-SETTINGS separately from CP updates.
  * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
@@ -27,7 +28,8 @@ public final class WorkerState {
     private final AtomicReference<Object> configRef = new AtomicReference<>();
     private volatile boolean enabled;
     private volatile boolean enableConfigured;
-    private final AtomicReference<Map<String, Object>> rawConfigRef = new AtomicReference<>(Map.of());
+    private final AtomicReference<WorkerRuntimeConfiguration> runtimeConfigRef =
+        new AtomicReference<>(WorkerRuntimeConfiguration.parse(Map.of()));
     private final AtomicReference<Map<String, Object>> privateConfigRef = new AtomicReference<>(Map.of());
     private final AtomicReference<StatusPublisher> statusPublisherRef = new AtomicReference<>(StatusPublisher.NO_OP);
     private final AtomicReference<Map<String, Object>> statusDataRef = new AtomicReference<>(Map.of());
@@ -111,19 +113,15 @@ public final class WorkerState {
     }
 
     public Map<String, Object> rawConfig() {
-        Map<String, Object> raw = rawConfigRef.get();
-        if (raw == null || raw.isEmpty()) {
-            return Map.of();
-        }
-        return raw;
+        return runtimeConfigRef.get().rawConfig();
     }
 
-    public void updateRawConfig(Map<String, Object> rawConfig) {
-        if (rawConfig == null || rawConfig.isEmpty()) {
-            rawConfigRef.set(Map.of());
-        } else {
-            rawConfigRef.set(Map.copyOf(rawConfig));
-        }
+    HistoryPolicy historyPolicy() {
+        return runtimeConfigRef.get().historyPolicy();
+    }
+
+    void updateRuntimeConfiguration(WorkerRuntimeConfiguration configuration) {
+        runtimeConfigRef.set(Objects.requireNonNull(configuration, "configuration"));
     }
 
     public Map<String, Object> privateConfig() {

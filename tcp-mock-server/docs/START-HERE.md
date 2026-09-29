@@ -2,12 +2,19 @@
 
 This directory is the single source for TCP Mock Server documentation. Maven packages these files into `docs/` on the runtime classpath, and Docker also copies them to `/app/docs`.
 
+## Qualification status
+
+[TCP capability qualification](WIREMOCK-PARITY.md) is the authoritative capability
+assessment and acceptance checklist. Functional qualification is incomplete.
+Other module guides retain historical examples; they do not establish runtime
+support, WireMock API/SDK compatibility or production readiness.
+
 ## Choose a starting point
 
 - Developers: [README.md](README.md) and [CAPABILITIES.md](CAPABILITIES.md)
 - Operators: [DEPLOYMENT-CHECKLIST.md](DEPLOYMENT-CHECKLIST.md)
 - Scenario authors: [SCENARIO-SETUP.md](SCENARIO-SETUP.md)
-- WireMock migration: [MIGRATION-GUIDE.md](MIGRATION-GUIDE.md) and [WIREMOCK-PARITY.md](WIREMOCK-PARITY.md)
+- Historical migration examples: [MIGRATION-GUIDE.md](MIGRATION-GUIDE.md) and [WIREMOCK-PARITY.md](WIREMOCK-PARITY.md)
 - UI users: [UI-USER-GUIDE.md](UI-USER-GUIDE.md)
 - Short command/API reference: [QUICK-REFERENCE.md](QUICK-REFERENCE.md)
 - Full documentation map: [DOCUMENTATION-INDEX-FINAL.md](DOCUMENTATION-INDEX-FINAL.md)

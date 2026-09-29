@@ -22,6 +22,22 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 class AuthProfilePreparationTest {
+    @ParameterizedTest
+    @CsvSource({"true,true", "true,false", "false,false"})
+    void acceptsPasswordGrantClientCredentials(boolean hasClientId, boolean hasClientSecret) {
+        var profile = new AuthProfile();
+        profile.setType(AuthType.OAUTH2_PASSWORD_GRANT);
+        profile.getStorage().setMode(AuthStorageMode.REDIS);
+        profile.getStorage().setTokenKey("api:password");
+        profile.putProperty("tokenUrl", "http://auth/token");
+        profile.putProperty("username", "user");
+        profile.putProperty("password", "pass");
+        if (hasClientId) profile.putProperty("clientId", "client");
+        if (hasClientSecret) profile.putProperty("clientSecret", "secret");
+        assertThatCode(() -> AuthProfilePreparation.validateProfile("password", profile))
+            .doesNotThrowAnyException();
+    }
+
     private static final String PRIVATE_KEY = testPrivateKey();
     private static final String TOKEN_KEY = "signed-api";
     @TempDir Path temporary;

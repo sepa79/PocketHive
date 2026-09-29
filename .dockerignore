@@ -6,3 +6,6 @@ target
 **/.classpath
 **/.settings
 **/node_modules
+
+# Acceptance evidence survives Maven clean; exclude it from source/images.
+acceptance-tests/runs/

@@ -131,6 +131,19 @@ class ControlPlaneCodecTest {
         .hasMessageContaining("schema");
   }
 
+  @org.junit.jupiter.api.Test
+  void unknownIntentIsNotARequestedStartStopState() {
+    var terminal = new TerminalResult(TerminalStatus.SUCCEEDED, false, Map.of(
+        "target", Map.of("role", "swarm-controller", "instance", "controller-1"),
+        "requestedWorkloadState", "UNKNOWN", "observedWorkloadState", "RUNNING",
+        "nonConvergedWorkers", List.of()));
+    var result = CommandResult.create("swarm-start", "controller-1",
+        ControlScope.forInstance("swarm-1", "swarm-controller", "controller-1"), "corr", "idem",
+        Map.of("templateId", "template-1", "runId", "run-1"), terminal);
+    assertThatThrownBy(() -> codec.encode(result, "event.result.swarm-start.swarm-1.swarm-controller.controller-1"))
+        .isInstanceOf(ControlPlaneContractException.class);
+  }
+
   private static Stream<Arguments> canonicalEnvelopeFamilies() {
     ControlScope workerScope = ControlScope.forInstance("swarm-1", "generator", "worker-1");
     ControlScope orchestratorScope = ControlScope.forInstance("swarm-1", "orchestrator", "local");

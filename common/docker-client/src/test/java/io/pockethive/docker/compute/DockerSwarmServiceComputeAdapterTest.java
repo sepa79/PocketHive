@@ -59,6 +59,7 @@ class DockerSwarmServiceComputeAdapterTest {
     assertThat(spec.getName()).isEqualTo("auth-rollout-swarm-f46d24db-marshal-bee-stingy-puff-2625");
     assertThat(spec.getLabels()).containsEntry(
         "ph.logicalName", "auth-rollout-swarm-f46d24db-marshal-bee-stingy-puff-2625");
+    assertThat(spec.getLabels()).containsEntry("com.docker.stack.namespace", "ph-swarm-1");
     assertThat(spec.getLabels()).containsEntry("pockethive.managed", "true");
     assertThat(spec.getLabels()).containsEntry("pockethive.resourceKind", "manager");
     assertThat(spec.getLabels()).containsEntry("pockethive.owner", "orchestrator");
@@ -128,6 +129,7 @@ class DockerSwarmServiceComputeAdapterTest {
     verify(docker).createServiceCmd(specCaptor.capture());
     ServiceSpec spec = specCaptor.getValue();
 
+    assertThat(spec.getLabels()).containsEntry("com.docker.stack.namespace", "ph-swarm-1");
     assertThat(spec.getLabels()).containsEntry("pockethive.managed", "true");
     assertThat(spec.getLabels()).containsEntry("pockethive.resourceKind", "worker");
     assertThat(spec.getLabels()).containsEntry("pockethive.owner", "swarm-controller");

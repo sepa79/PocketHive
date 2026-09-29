@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.auth;
 
+import io.pockethive.redis.api.RedisTokenStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -49,7 +50,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -216,8 +216,6 @@ class OAuth2SecondPassWireTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_HOST", matches = ".+")
-    @EnabledIfEnvironmentVariable(named = "AUTH_REDIS_TEST_PORT", matches = "[0-9]+")
     void realRedisSynchronizedColdWarmAndForcedExpiredCallersShareValidatingEndpoint() throws Exception {
         String swarm = "second-pass-wire-" + java.util.UUID.randomUUID();
         try (Endpoint endpoint = new Endpoint(); RedisTokenStore redis = new RedisTokenStore(swarm,
@@ -233,7 +231,7 @@ class OAuth2SecondPassWireTest {
                 }
                 @Override public void store(TokenRecord token, RefreshClaim claim, Duration grace) { redis.store(token, claim, grace); }
                 @Override public void releaseClaim(String key, String fp, RefreshClaim claim) { redis.releaseClaim(key, fp, claim); }
-                @Override public List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease) { return redis.claimDueRefreshes(now, limit, lease); }
+                @Override public List<TokenDueRef> listDueRefreshes(Instant now, int limit) { return redis.listDueRefreshes(now, limit); }
                 @Override public void close() { }
             };
             AuthRuntime runtime = endpoint.runtime(TARGET, observed);
@@ -284,7 +282,7 @@ class OAuth2SecondPassWireTest {
         when(context.meterRegistry()).thenReturn(new SimpleMeterRegistry());
         when(context.logger()).thenReturn(LoggerFactory.getLogger(OAuth2SecondPassWireTest.class));
         when(context.statusPublisher()).thenReturn(mock(StatusPublisher.class));
-        var downstream = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
+        var downstream = new MutableHttpRequest("GET", "/accounts", Map.of(), "");
         runtime.applyHttp(REF, downstream, null, context);
         assertThat(downstream.headers().entrySet().stream().filter(e -> e.getKey().equalsIgnoreCase("Authorization")).toList()).hasSize(1);
         return downstream.headers().get("Authorization");
@@ -503,7 +501,7 @@ class OAuth2SecondPassWireTest {
         @Override public synchronized void releaseClaim(String key, String fingerprint, RefreshClaim claim) {
             if (claim.equals(owner)) { owner = null; }
         }
-        @Override public List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease) { return List.of(); }
+        @Override public List<TokenDueRef> listDueRefreshes(Instant now, int limit) { return List.of(); }
         @Override public void close() { }
     }
 }

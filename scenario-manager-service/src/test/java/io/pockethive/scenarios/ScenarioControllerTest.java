@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -49,6 +50,9 @@ class ScenarioControllerTest {
 
     @Autowired
     WebApplicationContext webApplicationContext;
+
+    @Value("${pockethive.release.version}")
+    String releaseVersion;
 
     @MockBean
     AuthServiceClient authServiceClient;
@@ -97,6 +101,10 @@ class ScenarioControllerTest {
                       {
                         "role": "worker",
                         "image": "worker-image:latest",
+                        "config": {
+                          "inputs": {"type": "RABBITMQ"},
+                          "outputs": {"type": "RABBITMQ"}
+                        },
                         "work": {
                           "in": {
                             "in": "a"
@@ -520,6 +528,27 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void uploadReturnsConflictAndPreservesOccupiedDestination() throws Exception {
+        Path target = Files.createDirectories(scenariosDir.resolve("bundles/new-id"));
+        String existing = """
+            protocolVersion: "2.0.0"
+            id: other-id
+            name: Existing
+            template:
+              image: ctrl-image:latest
+              bees: []
+            """;
+        Files.writeString(target.resolve("scenario.yaml"), existing);
+        Files.writeString(target.resolve("sentinel.txt"), "keep");
+        mvc.perform(post("/scenarios/reload")).andExpect(status().isNoContent());
+        mvc.perform(post("/scenarios/bundles").contentType("application/zip")
+                .content(bundleZip("scenario.yaml", existing.replace("other-id", "new-id"))))
+            .andExpect(status().isConflict());
+        org.assertj.core.api.Assertions.assertThat(target.resolve("scenario.yaml")).hasContent(existing);
+        org.assertj.core.api.Assertions.assertThat(target.resolve("sentinel.txt")).hasContent("keep");
+    }
+
+    @Test
     void dryRunBundleValidationDoesNotImportBundle() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 protocolVersion: "2.0.0"
@@ -602,7 +631,7 @@ class ScenarioControllerTest {
             .andExpect(jsonPath("$.ok").value(false))
             .andExpect(jsonPath("$.validation.scenarioProtocolVersion").value("1.3.0"))
             .andExpect(jsonPath("$.validation.supportedScenarioProtocolVersion").value("2.0.0"))
-            .andExpect(jsonPath("$.validation.scenarioManagerVersion").value("0.15.35"))
+            .andExpect(jsonPath("$.validation.scenarioManagerVersion").value(releaseVersion))
             .andExpect(jsonPath("$.validation.artifactDigest", org.hamcrest.Matchers.startsWith("sha256:")))
             .andExpect(jsonPath("$.findings[0].message", org.hamcrest.Matchers.containsString("incompatible")));
     }
@@ -3505,6 +3534,8 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.endpoints.validateTemplates").doesNotExist())
                 .andExpect(jsonPath("$.scenario.descriptorNames", hasSize(1)))
                 .andExpect(jsonPath("$.scenario.descriptorNames[0]").value("scenario.yaml"))
+                .andExpect(jsonPath("$.scenario.requiredTopLevelFields", org.hamcrest.Matchers.contains(
+                        "protocolVersion", "id", "name", "template")))
                 .andExpect(jsonPath("$.sut.root").value("sut/<sutId>/sut.yaml"))
                 .andExpect(jsonPath("$.cache.sessionCacheable").value(true));
 

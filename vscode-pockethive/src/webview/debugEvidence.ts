@@ -221,11 +221,11 @@ interface PocketHiveDebugEvidenceApi {
       view.send({ type: 'runDebug', action: 'Cleanup plan' }), 'secondary compact');
     const execute = view.iconButton('Execute cleanup', 'lock', () => undefined, 'secondary compact');
     execute.disabled = true;
-    execute.title = 'Cleanup execution requires HiveGate approval.';
+    execute.title = 'Cleanup execution is not available in the companion.';
     evidence.append(view.el('div', 'debug-cleanup-actions', [
       generate,
       execute,
-      view.iconText('lock', 'Requires HiveGate approval', 'debug-cleanup-lock muted'),
+      view.iconText('lock', 'Planning only', 'debug-cleanup-lock muted'),
     ]));
     return evidence;
   }

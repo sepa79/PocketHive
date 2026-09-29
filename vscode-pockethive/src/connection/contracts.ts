@@ -1,3 +1,5 @@
+import type { EndpointSecurityMode } from './endpointSecurityPolicy';
+
 export const MCP_PROTOCOL_REVISION = '2025-11-25' as const;
 export const EXPECTED_MCP_SERVER_NAME = 'pockethive-mcp' as const;
 export const POCKETHIVE_MCP_SCOPES = Object.freeze({
@@ -17,7 +19,7 @@ export const POCKETHIVE_COMPANION_SCOPES = Object.freeze([
   POCKETHIVE_MCP_SCOPES.PUBLISH,
 ] as const);
 
-export type EndpointSecurityMode = 'REMOTE_HTTPS' | 'LOCAL_LOOPBACK_HTTP';
+export type { EndpointSecurityMode } from './endpointSecurityPolicy';
 export type AuthenticationMode = 'OAUTH_AUTHORIZATION_CODE_PKCE';
 
 export interface McpConnectionProfile {
@@ -31,6 +33,7 @@ export interface McpConnectionProfile {
 
 export type ConnectionAttemptState =
   | 'EDITING'
+  | 'DISCOVERING'
   | 'AUTHENTICATING'
   | 'TESTING'
   | 'READY_TO_SAVE'
@@ -80,7 +83,7 @@ export interface OAuthSession {
 }
 
 export interface EndpointValidationPort {
-  validate(profile: McpConnectionProfile): Promise<ValidatedEndpoint>;
+  validate(profile: McpConnectionProfile, signal: AbortSignal): Promise<ValidatedEndpoint>;
 }
 
 export interface AuthenticationPort {

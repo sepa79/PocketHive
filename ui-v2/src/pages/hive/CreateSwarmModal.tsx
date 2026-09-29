@@ -1,3 +1,6 @@
+import { useScenarioCatalogue } from '../../lib/useScenarioCatalogue'
+import type { BundleTemplateEntry as ScenarioTemplate } from '../../lib/scenariosApi'
+import type { NetworkMode } from '../../lib/NetworkMode'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import YAML from 'yaml'
 import { MonacoEditorHost } from '../../components/MonacoEditorHost'
@@ -7,24 +10,6 @@ import { useAuth } from '../../lib/authContext'
 import { monacoLanguageForBundleFile } from '../../lib/bundleEditor'
 import { readBundleFile, readBundleTree, type BundleFilePayload, type BundleTreeNode } from '../../lib/scenariosApi'
 import { newUuid } from '../../lib/uuid'
-
-type BeeSummary = {
-  role: string
-  image: string | null
-}
-
-type ScenarioTemplate = {
-  bundleKey: string
-  bundlePath: string
-  id: string | null
-  name: string
-  folderPath: string | null
-  description: string | null
-  controllerImage: string | null
-  bees: BeeSummary[]
-  defunct: boolean
-  defunctReason: string | null
-}
 
 type VariablesProfile = {
   id: string
@@ -43,10 +28,8 @@ type VariablesMeta = {
   profiles: VariablesProfile[]
 }
 
-type NetworkMode = 'DIRECT' | 'PROXIED'
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
-const TEMPLATES_ENDPOINT = '/scenario-manager/api/templates'
 
 function createIdempotencyKey() {
   return `ph-${newUuid()}`
@@ -70,44 +53,6 @@ async function readErrorMessage(response: Response): Promise<string> {
   } catch {
     return `${response.status} ${response.statusText}`
   }
-}
-
-function normalizeTemplates(data: unknown): ScenarioTemplate[] {
-  if (!Array.isArray(data)) return []
-  return data
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') return null
-      const value = entry as Record<string, unknown>
-      const bundleKey = typeof value.bundleKey === 'string' ? value.bundleKey.trim() : ''
-      const bundlePath = typeof value.bundlePath === 'string' ? value.bundlePath.trim() : ''
-      const name = typeof value.name === 'string' ? value.name.trim() : ''
-      if (!bundleKey || !bundlePath || !name) return null
-      const id = typeof value.id === 'string' && value.id.trim().length > 0 ? value.id.trim() : null
-      const folderPath =
-        typeof value.folderPath === 'string' && value.folderPath.trim().length > 0 ? value.folderPath.trim() : null
-      const description =
-        typeof value.description === 'string' && value.description.trim().length > 0 ? value.description.trim() : null
-      const controllerImage =
-        typeof value.controllerImage === 'string' && value.controllerImage.trim().length > 0 ? value.controllerImage.trim() : null
-      const bees: BeeSummary[] = Array.isArray(value.bees)
-        ? value.bees
-            .map((bee) => {
-              if (!bee || typeof bee !== 'object') return null
-              const beeValue = bee as Record<string, unknown>
-              const role = typeof beeValue.role === 'string' ? beeValue.role.trim() : ''
-              if (!role) return null
-              const image =
-                typeof beeValue.image === 'string' && beeValue.image.trim().length > 0 ? beeValue.image.trim() : null
-              return { role, image }
-            })
-            .filter((bee): bee is BeeSummary => bee !== null)
-        : []
-      const defunct = value.defunct === true
-      const defunctReason =
-        typeof value.defunctReason === 'string' && value.defunctReason.trim().length > 0 ? value.defunctReason.trim() : null
-      return { bundleKey, bundlePath, id, name, folderPath, description, controllerImage, bees, defunct, defunctReason }
-    })
-    .filter((template): template is ScenarioTemplate => template !== null)
 }
 
 function templateMatchesNeedle(template: ScenarioTemplate, needle: string): boolean {
@@ -150,6 +95,11 @@ function extractVariablesMeta(yamlText: string): VariablesMeta {
   return { exists: true, hasGlobalVars, hasSutVars, profiles }
 }
 
+/**
+ * Responsibility: present swarm creation using the backend-filtered runnable catalogue.
+ * Must not: interpret per-bundle grant scopes or authorize backend mutations.
+ * Contract: RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (catalogue slice).
+ */
 export function CreateSwarmModal({
   open,
   onClose,
@@ -160,8 +110,8 @@ export function CreateSwarmModal({
   onCreated: () => void
 }) {
   const auth = useAuth()
-  const [templates, setTemplates] = useState<ScenarioTemplate[]>([])
-  const [templatesLoaded, setTemplatesLoaded] = useState(false)
+  const { entries: templates, loading: templatesLoading, error: catalogueError } = useScenarioCatalogue('run', auth.user, open)
+  const templatesLoaded = !templatesLoading
   const [templateFilter, setTemplateFilter] = useState('')
   const [selectedBundleKey, setSelectedBundleKey] = useState('')
   const [bundleTreeNodes, setBundleTreeNodes] = useState<BundleTreeNode[]>([])
@@ -192,20 +142,9 @@ export function CreateSwarmModal({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  const loadTemplates = useCallback(async () => {
-    if (templatesLoaded) return
+  const loadNetworkProfiles = useCallback(async () => {
     try {
-      const [templatesResponse, profilesResponse] = await Promise.all([
-        fetch(TEMPLATES_ENDPOINT, { headers: { Accept: 'application/json' } }),
-        fetch('/scenario-manager/network-profiles', { headers: { Accept: 'application/json' } }),
-      ])
-      if (!templatesResponse.ok) {
-        setTemplates([])
-        setTemplatesLoaded(true)
-        return
-      }
-      const payload = await templatesResponse.json()
-      setTemplates(normalizeTemplates(payload))
+      const profilesResponse = await fetch('/scenario-manager/network-profiles', { headers: { Accept: 'application/json' } })
       if (profilesResponse.ok) {
         const profilesPayload = (await profilesResponse.json()) as unknown
         const profiles = Array.isArray(profilesPayload)
@@ -231,18 +170,15 @@ export function CreateSwarmModal({
         setNetworkProfiles([])
         setNetworkProfileId('')
       }
-      setTemplatesLoaded(true)
     } catch {
-      setTemplates([])
       setNetworkProfiles([])
-      setTemplatesLoaded(true)
     }
-  }, [templatesLoaded])
+  }, [])
 
   useEffect(() => {
     if (!open) return
-    void loadTemplates()
-  }, [loadTemplates, open])
+    void loadNetworkProfiles()
+  }, [loadNetworkProfiles, open])
 
   useEffect(() => {
     if (!open) return
@@ -342,11 +278,7 @@ export function CreateSwarmModal({
     return templates.filter((template) => templateMatchesNeedle(template, needle))
   }, [templateFilter, templates])
 
-  const runnableTemplates = useMemo(
-    () =>
-      filteredTemplates.filter((template) => auth.canRunBundle(template.bundlePath, template.folderPath)),
-    [auth, filteredTemplates],
-  )
+  const runnableTemplates = filteredTemplates
 
   const selectedTemplate = useMemo(
     () => runnableTemplates.find((template) => template.bundleKey === selectedBundleKey) ?? null,
@@ -553,6 +485,7 @@ export function CreateSwarmModal({
           </button>
         </div>
 
+        {catalogueError ? <div className="card swarmMessage">{catalogueError}</div> : null}
         {error ? <div className="card swarmMessage">{error}</div> : null}
         {message ? <div className="card swarmMessage">{message}</div> : null}
 
@@ -662,7 +595,7 @@ export function CreateSwarmModal({
                   <div className="muted">Loading scenarios…</div>
                 ) : runnableTemplates.length === 0 ? (
                   <div className="muted">
-                    {auth.canRunPocketHive ? 'No runnable scenarios found.' : 'PocketHive RUN permission required.'}
+                    No runnable scenarios found.
                   </div>
                 ) : (
                   <>
@@ -780,7 +713,7 @@ export function CreateSwarmModal({
                 type="checkbox"
                 checked={autoPullImages}
                 onChange={(event) => setAutoPullImages(event.target.checked)}
-                disabled={busy || !auth.canRunPocketHive}
+                disabled={busy || !selectedTemplate || selectedTemplate.defunct || !selectedTemplate.id}
               />
               <span>Pull images</span>
             </label>

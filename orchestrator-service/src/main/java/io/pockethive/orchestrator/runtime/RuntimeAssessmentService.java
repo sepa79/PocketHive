@@ -160,6 +160,12 @@ public final class RuntimeAssessmentService {
                     "workloadState", expectedWorkloadState(swarm.getWorkloadIntent())),
                 controlPlaneState(swarm));
         }
+        if (swarm.getWorkloadIntent() == WorkloadIntent.UNKNOWN) {
+            return incomplete(AssessmentCheck.CONTROL_PLANE,
+                "The last accepted workload intent is unavailable after catalogue discovery.",
+                DifferenceKind.SOURCE_UNAVAILABLE, "workload-intent", swarm.getId(),
+                "accepted START/STOP intent", WorkloadIntent.UNKNOWN);
+        }
         return consistent(AssessmentCheck.CONTROL_PLANE,
             "Current control-plane observation is available and non-failed.");
     }
@@ -412,7 +418,11 @@ public final class RuntimeAssessmentService {
     }
 
     private static WorkloadState expectedWorkloadState(WorkloadIntent intent) {
-        return intent == WorkloadIntent.RUNNING ? WorkloadState.RUNNING : WorkloadState.STOPPED;
+        return switch (intent) {
+            case RUNNING -> WorkloadState.RUNNING;
+            case STOPPED -> WorkloadState.STOPPED;
+            case UNKNOWN -> WorkloadState.UNKNOWN;
+        };
     }
 
     private static AssessmentState overall(List<CheckResult> checks) {

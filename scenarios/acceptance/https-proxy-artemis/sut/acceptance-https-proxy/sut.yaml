@@ -1,0 +1,8 @@
+id: acceptance-https-proxy
+name: Acceptance https-proxy SUT
+type: https
+endpoints:
+  default:
+    kind: https
+    baseUrl: https://haproxy:18490
+    upstreamBaseUrl: https://wiremock:8443

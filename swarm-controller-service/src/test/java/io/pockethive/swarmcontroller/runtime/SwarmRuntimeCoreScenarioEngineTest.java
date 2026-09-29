@@ -17,9 +17,8 @@ import io.pockethive.swarmcontroller.WorkerStatusRequestCallback;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Docker;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Manager;
-import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Metrics;
+import io.pockethive.swarmcontroller.config.SwarmControllerMetricsProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.SwarmController;
-import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Traffic;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
@@ -71,8 +70,7 @@ class SwarmRuntimeCoreScenarioEngineTest {
         "ph.control",
         new Manager("swarm-controller"),
         new SwarmController(
-            new Traffic("ph.test.hive", "ph.test"),
-            new Metrics(
+            new SwarmControllerMetricsProperties(
                 PocketHiveMetricsAdapter.DISABLED,
                 Duration.ofSeconds(10),
                 ClickHouseMetricsSinkProperties.disabled()),

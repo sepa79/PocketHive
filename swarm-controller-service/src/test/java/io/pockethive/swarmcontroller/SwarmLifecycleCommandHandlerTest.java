@@ -85,21 +85,26 @@ class SwarmLifecycleCommandHandlerTest {
   }
 
   @Test
-  void rejectsStopWithoutMutationWhileStartAwaitsConvergence() {
+  void stopSupersedesStartAndIgnoresLateEnabledEvidenceAndConfigErrors() {
     ControlSignal start = signal(ControlPlaneSignals.SWARM_START, "correlation-start", "idempotency-start");
     ControlSignal stop = signal(ControlPlaneSignals.SWARM_STOP, "correlation-stop", "idempotency-stop");
     when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.STOPPED);
     when(lifecycle.nonConvergedWorkersAfter(START_REVISION, true)).thenReturn(List.of(WORKER));
-
+    when(lifecycle.nonConvergedWorkersAfter(START_REVISION, false)).thenReturn(List.of(WORKER), List.of(WORKER), List.of());
     handler.handle(start, ControlPlaneSignals.SWARM_START, TEST_SWARM_ID);
+    when(readiness.snapshot()).thenReturn(
+        new SwarmCommandReadinessSnapshot(true, false, true, WorkloadState.RUNNING));
     handler.handle(stop, ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID);
-
-    verify(lifecycle, never()).stop();
-    verify(results).publishFailure(
-        eq(stop),
-        eq(ControlPlaneSignals.SWARM_STOP),
-        argThat(failure -> failure instanceof IllegalStateException
-            && failure.getMessage().contains("awaiting convergence")));
+    verify(lifecycle).stop();
+    verify(results).publishFailure(eq(start), eq(ControlPlaneSignals.SWARM_START),
+        argThat(failure -> failure.getMessage().contains("superseded by STOP")));
+    handler.failPending("late bootstrap error");
+    verify(lifecycle, never()).fail(org.mockito.ArgumentMatchers.anyString());
+    handler.tryComplete();
+    verify(results, never()).publishLifecycle(stop, ControlPlaneSignals.SWARM_STOP, TerminalStatus.SUCCEEDED, List.of());
+    handler.tryComplete();
+    verify(results).publishLifecycle(stop, ControlPlaneSignals.SWARM_STOP, TerminalStatus.SUCCEEDED, List.of());
+    verify(results, never()).publishLifecycle(start, ControlPlaneSignals.SWARM_START, TerminalStatus.SUCCEEDED, List.of());
   }
 
   @Test
@@ -151,23 +156,27 @@ class SwarmLifecycleCommandHandlerTest {
         signal, ControlPlaneSignals.SWARM_START, TerminalStatus.REJECTED, List.of());
   }
 
-  @Test
-  void confirmsAlreadyAchievedStateWithoutRebroadcastingCommand() {
-    ControlSignal signal = signal(ControlPlaneSignals.SWARM_START, Map.of());
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.EnumSource(value = WorkloadState.class, names = {"RUNNING"})
+  void confirmsAlreadyAchievedStateWithoutRebroadcastingCommand(WorkloadState state) {
+    String operation = state == WorkloadState.RUNNING
+        ? ControlPlaneSignals.SWARM_START : ControlPlaneSignals.SWARM_STOP;
+    ControlSignal signal = signal(operation, Map.of());
+    when(lifecycle.getWorkloadState()).thenReturn(state);
 
-    handler.handle(signal, ControlPlaneSignals.SWARM_START, TEST_SWARM_ID);
+    handler.handle(signal, operation, TEST_SWARM_ID);
 
     verify(lifecycle, never()).start(org.mockito.ArgumentMatchers.anyString());
+    verify(lifecycle, never()).stop();
     verify(results).publishLifecycle(
-        signal, ControlPlaneSignals.SWARM_START, TerminalStatus.SUCCEEDED, List.of());
+        signal, operation, TerminalStatus.SUCCEEDED, List.of());
     verify(statusFullCoordinator, never()).queueAfterLifecycle(org.mockito.ArgumentMatchers.anyLong());
   }
 
   @Test
   void stopsAndWaitsForDisabledWorkerConvergence() {
     ControlSignal signal = signal(ControlPlaneSignals.SWARM_STOP, Map.of());
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+    org.mockito.Mockito.lenient().when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     when(lifecycle.nonConvergedWorkersAfter(START_REVISION, false)).thenReturn(List.of());
 
     handler.handle(signal, ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID);
@@ -181,7 +190,7 @@ class SwarmLifecycleCommandHandlerTest {
   void excludesStatusObservedDuringLifecycleMutationFromConvergence() {
     ControlSignal signal = signal(ControlPlaneSignals.SWARM_STOP, Map.of());
     AtomicLong revision = new AtomicLong(START_REVISION);
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+    org.mockito.Mockito.lenient().when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     when(lifecycle.workerStatusObservationRevision()).thenAnswer(ignored -> revision.get());
     doAnswer(ignored -> {
       revision.incrementAndGet();
@@ -236,6 +245,19 @@ class SwarmLifecycleCommandHandlerTest {
         eq(ControlPlaneSignals.SWARM_START),
         argThat(failure -> failure instanceof IllegalStateException
             && "worker rejected config".equals(failure.getMessage())));
+  }
+
+  @Test
+  void staleStopResendsEvenWithStoppedIntentAndTimesOutWithMissingWorkers() {
+    ControlSignal stop = signal(ControlPlaneSignals.SWARM_STOP, Map.of());
+    when(readiness.snapshot()).thenReturn(new SwarmCommandReadinessSnapshot(true, false, true, WorkloadState.STOPPED));
+    when(lifecycle.nonConvergedWorkersAfter(START_REVISION, false)).thenReturn(List.of(WORKER));
+    handler.handle(stop, ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID);
+    verify(lifecycle).stop();
+    verify(results, never()).publishLifecycle(stop, ControlPlaneSignals.SWARM_STOP, TerminalStatus.SUCCEEDED, List.of());
+    ticker.advance(Duration.ofSeconds(30));
+    handler.tryComplete();
+    verify(results).publishLifecycle(stop, ControlPlaneSignals.SWARM_STOP, TerminalStatus.FAILED, List.of(WORKER));
   }
 
   private static ControlSignal signal(String operation, Map<String, Object> data) {

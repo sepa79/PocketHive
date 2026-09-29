@@ -13,7 +13,10 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeReso
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RuntimeLogsRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RuntimeTargetRequest;
-import io.pockethive.orchestrator.runtime.RuntimeDebugPorts.ComputeRuntimeDebugPort;
+import io.pockethive.manager.ports.ComputeRuntimeDebugPort;
+import io.pockethive.manager.runtime.RuntimeInspection;
+import io.pockethive.manager.runtime.RuntimeInspectionState;
+import io.pockethive.manager.runtime.RuntimeMountInspection;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -207,21 +210,12 @@ class RuntimeDebugServiceTest {
     void inspectSanitizesBindMountSources() {
         FakeRuntime runtime = new FakeRuntime(List.of(
             runtime("worker-1", "container", "worker", "processor", "processor-1")));
-        runtime.inspect = Map.of(
-            "Created", "2026-01-01T00:00:00Z",
-            "RestartCount", 2,
-            "State", Map.of(
-                "Status", "exited",
-                "Running", false,
-                "ExitCode", 137,
-                "StartedAt", "2026-01-01T00:01:00Z",
-                "FinishedAt", "2026-01-01T00:02:00Z",
-                "Health", Map.of("Status", "unhealthy")),
-            "HostConfig", Map.of("RestartPolicy", Map.of("Name", "on-failure")),
-            "Mounts", List.of(
-                Map.of("Type", "bind", "Source", "/host/secret", "Destination", "/app", "RW", false),
-                Map.of("Type", "volume", "Name", "ph-data", "Source", "ph-data", "Destination", "/data", "RW", true)),
-            "NetworkSettings", Map.of("Networks", Map.of("bridge", Map.of(), "pockethive", Map.of())));
+        runtime.inspect = new RuntimeInspection(new RuntimeInspectionState("exited", false, 137, null,
+            "unhealthy", "2026-01-01T00:01:00Z", "2026-01-01T00:02:00Z"),
+            "2026-01-01T00:00:00Z", 2, "on-failure", List.of(
+                new RuntimeMountInspection("bind", null, "/host/secret", "/app", null, true, null, true),
+                new RuntimeMountInspection("volume", "ph-data", "ph-data", "/data", null, false, null, true)),
+            List.of("bridge", "pockethive"));
 
         var response = service(runtime).inspect(new RuntimeTargetRequest(
             "sw1",
@@ -236,22 +230,21 @@ class RuntimeDebugServiceTest {
         assertThat(response.mounts().get(0)).containsEntry("source", "[REDACTED]");
         assertThat(response.mounts().get(1)).containsEntry("name", "ph-data");
         assertThat(response.networks()).containsExactly("bridge", "pockethive");
+        assertThat(response.mounts().get(0)).containsEntry("propagation", null).containsEntry("rw", true);
+        assertThat(response.mounts().get(1)).containsEntry("source", "ph-data").containsEntry("rw", false);
+        assertThat(response.state()).containsEntry("error", null).containsEntry("running", false);
+        assertThat(response.source()).containsEntry("available", true);
     }
 
     @Test
     void serviceInspectSanitizesBindMountSourcesAndReportsNetworks() {
         FakeRuntime runtime = new FakeRuntime(List.of(
             runtime("service-1", "service", "worker", "processor", "processor-1")));
-        runtime.inspect = Map.of(
-            "CreatedAt", "2026-01-01T00:00:00Z",
-            "Spec", Map.of(
-                "TaskTemplate", Map.of(
-                    "ContainerSpec", Map.of(
-                        "Mounts", List.of(
-                            Map.of("Type", "bind", "Source", "/host/secret", "Target", "/app", "ReadOnly", true),
-                            Map.of("Type", "volume", "Source", "ph-data", "Target", "/data", "ReadOnly", false))),
-                    "RestartPolicy", Map.of("Condition", "on-failure"),
-                    "Networks", List.of(Map.of("Target", "net-worker")))));
+        runtime.inspect = new RuntimeInspection(new RuntimeInspectionState("service", true, null, null, null, null, null),
+            "2026-01-01T00:00:00Z", null, "on-failure", List.of(
+                new RuntimeMountInspection("bind", null, "/host/secret", "/app", "ro", false, null, false),
+                new RuntimeMountInspection("volume", "ph-data", "ph-data", "/data", "rw", true, null, false)),
+            List.of("net-worker"));
 
         var response = service(runtime).inspect(new RuntimeTargetRequest(
             "sw1",
@@ -266,6 +259,9 @@ class RuntimeDebugServiceTest {
         assertThat(response.mounts().get(0)).containsEntry("source", "[REDACTED]");
         assertThat(response.mounts().get(1)).containsEntry("name", "ph-data");
         assertThat(response.networks()).containsExactly("net-worker");
+        assertThat(response.mounts().get(0)).doesNotContainKey("propagation").containsEntry("mode", "ro");
+        assertThat(response.mounts().get(1)).containsEntry("source", "ph-data").containsEntry("rw", true);
+        assertThat(response.state()).containsEntry("exitCode", null).containsEntry("running", true);
     }
 
     private static RuntimeDebugService service(FakeRuntime runtime) {
@@ -328,7 +324,7 @@ class RuntimeDebugServiceTest {
         private int listCalls;
         private final List<String> logCalls = new ArrayList<>();
         private String logs = "";
-        private Map<String, Object> inspect = Map.of();
+        private RuntimeInspection inspect;
 
         private FakeRuntime(List<ComputeRuntimeResource> resources) {
             this.resources = resources;
@@ -341,7 +337,7 @@ class RuntimeDebugServiceTest {
         }
 
         @Override
-        public Map<String, Object> inspect(String runtimeId) {
+        public RuntimeInspection inspect(String runtimeId) {
             return inspect;
         }
 

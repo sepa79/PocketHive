@@ -1,8 +1,9 @@
 /**
  * Responsibility: Define and strictly decode the companion webview-to-extension command contract.
  * Must not: Execute commands, own UI state, or infer missing command fields.
- * Contract: vscode-pockethive/README.md and docs/mcp/README.md.
+ * Contract: RESP-COMPANION-COMMAND-INPUT — docs/architecture/runtime-responsibilities.md#resp-companion-command-input.
  */
+import { isEndpointSecurityMode } from '../connection/endpointSecurityPolicy';
 import { ConnectionContractError, EndpointSecurityMode } from '../connection/contracts';
 import { SWARM_OPERATIONS, SwarmOperation } from '../operations/swarmOperations';
 import { WEB_UI_DESTINATIONS, WebUiDestination } from './webUiNavigation';
@@ -101,7 +102,7 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
     case 'connect': {
       exact(object, ['type', 'displayName', 'mcpUrl', 'endpointSecurityMode']);
       const mode = string(object, 'endpointSecurityMode');
-      if (mode !== 'REMOTE_HTTPS' && mode !== 'LOCAL_LOOPBACK_HTTP') invalid();
+      if (!isEndpointSecurityMode(mode)) invalid();
       return {
         type,
         displayName: string(object, 'displayName'),

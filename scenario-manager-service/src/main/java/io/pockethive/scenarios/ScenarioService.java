@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.scenarios.validation.ScenarioBundleValidator;
+import io.pockethive.scenarios.validation.BundleValidationInput;
+import io.pockethive.scenarios.validation.BundleValidationSource;
+import io.pockethive.scenarios.validation.ValidationSeverity;
 import io.pockethive.scenarios.validation.ValidationFinding;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.RuntimeFilesystemContract;
@@ -22,8 +25,8 @@ import java.util.stream.Stream;
 
 /**
  * Responsibility: Own filesystem-backed scenario discovery, catalogue state, access projections, and descriptor lifecycle.
- * Must not: Edit bundle workspaces, resolve variables, manage bundle-local SUTs, publish ZIPs, or materialize runtimes.
- * Contract: docs/scenarios/SCENARIO_CONTRACT.md and docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ * Must not: Define bundle acceptance rules, edit bundle workspaces, resolve variables, manage bundle-local SUTs, publish ZIPs, or materialize runtimes.
+ * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate; docs/scenarios/SCENARIO_CONTRACT.md and docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
  */
 @Service
 public class ScenarioService {
@@ -368,12 +371,17 @@ public class ScenarioService {
         return path.isEmpty() ? null : path;
     }
 
-    private ScenarioRecord recordForLoaded(Scenario scenario, Path descriptorFile, Path bundleDir) {
+    private ScenarioRecord recordForLoaded(Scenario scenario, Path descriptorFile, Path bundleDir) throws IOException {
         Scenario resolved = bundleValidator.applyDefaultImageTag(scenario);
-        Optional<String> defunct = bundleValidator.defunctReason(resolved);
+        var validation = bundleValidator.validate(new BundleValidationInput(
+            BundleValidationSource.SCENARIO_MANAGER, bundleDir, null, null, null, List.of()));
+        String reason = validation.ok() ? null : validation.findings().stream()
+            .filter(finding -> finding.severity() == ValidationSeverity.ERROR)
+            .map(ValidationFinding::message)
+            .collect(java.util.stream.Collectors.joining("; "));
         Path descriptor = descriptorFile != null ? descriptorFile.toAbsolutePath().normalize() : null;
         Path bundle = bundleDir != null ? bundleDir.toAbsolutePath().normalize() : null;
-        return new ScenarioRecord(resolved, defunct.isPresent(), defunct.orElse(null), descriptor, bundle, folderPath(bundle));
+        return new ScenarioRecord(resolved, !validation.ok(), reason, descriptor, bundle, folderPath(bundle));
     }
 
     Path runtimeDir(String swarmId) {
@@ -471,7 +479,7 @@ public class ScenarioService {
         }
     }
 
-    private List<BundleCatalogEntry> buildBundleCatalog(List<ScannedBundle> discovered) {
+    private List<BundleCatalogEntry> buildBundleCatalog(List<ScannedBundle> discovered) throws IOException {
         List<BundleCatalogEntry> entries = new ArrayList<>(discovered.size());
         Map<String, List<Integer>> byScenarioId = new LinkedHashMap<>();
 
@@ -687,13 +695,10 @@ public class ScenarioService {
 
     ScenarioBundleValidationCandidate validationCandidate(String bundleKey) {
         BundleCatalogEntry entry = bundleEntry(bundleKey);
-        ScenarioRecord record = entry.scenarioRecord();
         return new ScenarioBundleValidationCandidate(
             entry.bundleKey(),
             entry.bundlePath(),
             entry.bundleDir(),
-            record != null ? record.scenario() : null,
-            entry.defunctReason(),
             catalogOnlyDefunctFindings(entry));
     }
 

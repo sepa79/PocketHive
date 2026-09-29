@@ -61,15 +61,18 @@ class MessageWorkInputFactoryTest {
         properties.setPrefetch(17);
         properties.setConcurrentConsumers(3);
         properties.setExclusive(false);
-        factory.create(definition, properties);
+        var input = (MessageWorkInput) factory.create(definition, properties);
+        when(listeners.state("processorListener")).thenReturn(io.pockethive.rabbit.api.RabbitListenerState.STOPPED);
+        input.startListener();
         ArgumentCaptor<Consumer<RabbitMessage>> callback = ArgumentCaptor.forClass(Consumer.class);
         verify(listeners).register(eq(new RabbitSubscription("processorListener", "jobs", 17, 3, false, false)), callback.capture());
         WorkItem item = WorkItem.text(new WorkerInfo("processor", "swarm", "instance", null, null), "payload")
             .observabilityContext(io.pockethive.observability.ObservabilityContextUtil.init("processor", "instance", "swarm")).build();
         callback.getValue().accept(RabbitMessage.json(new WorkItemJsonCodec().toJson(item), true));
         ArgumentCaptor<WorkItem> received = ArgumentCaptor.forClass(WorkItem.class);
-        verify(runtime).dispatch(eq("processor"), received.capture());
+        verify(runtime, timeout(2000)).dispatch(eq("processor"), received.capture());
         assertThat(received.getValue().asString()).isEqualTo("payload");
         verifyNoMoreInteractions(runtime);
+        input.close();
     }
 }

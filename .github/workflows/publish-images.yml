@@ -106,6 +106,9 @@ jobs:
     strategy:
       matrix:
         service:
+          - name: artemis
+            dockerfile: common/artemis-broker-extensions/Dockerfile
+            target: ""
           - name: auth-service
             dockerfile: auth-service/Dockerfile.runtime
             target: ""
@@ -177,6 +180,7 @@ jobs:
           rm -rf .local-jars
           mkdir -p .local-jars
           for module in \
+            common/artemis-broker-extensions \
             auth-service \
             pockethive-mcp-service \
             scenario-manager-service \
@@ -202,6 +206,7 @@ jobs:
               echo "Unable to locate packaged jar for ${module}" >&2
               exit 1
             fi
+            mkdir -p ".local-jars/$(dirname "${module}")"
             cp "${jar}" ".local-jars/${module}.jar"
             echo "Staged ${jar} -> .local-jars/${module}.jar"
             if [ "${module}" = "pockethive-mcp-service" ]; then

@@ -7,17 +7,15 @@ import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.work.api.transport.WorkDeliveryHandler;
 import io.pockethive.worker.sdk.input.WorkMessageDispatcher;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 
 /**
- * Responsibility: dispatch decoded Work input with the existing synchronous/asynchronous error policy.
- * Must not: settle Rabbit deliveries, publish results separately or change the established dispatch or callback-return behavior.
+ * Responsibility: submit decoded Work through bounded executor admission and report accepted-task failures.
+ * Must not: settle broker deliveries, dispatch inline, retry accepted work or publish results separately.
  * Contract: RESP-WORK-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-transport.
  */
-final class MessageWorkExecution implements WorkDeliveryHandler {
+final class MessageWorkExecution implements WorkDeliveryHandler, AutoCloseable {
     private final Logger log;
     private final String displayName;
     private final WorkerDefinition workerDefinition;
@@ -26,9 +24,7 @@ final class MessageWorkExecution implements WorkDeliveryHandler {
     private final WorkMessageDispatcher dispatcher;
     private final Consumer<Exception> dispatchErrorHandler;
     private final boolean emitWorkErrorAlerts;
-    private final AtomicInteger maxInFlight = new AtomicInteger(1);
-    private volatile ThreadPoolExecutor workExecutor;
-    private final Object executorLock = new Object();
+    private final MessageWorkExecutor workExecutor;
 
     MessageWorkExecution(MessageWorkInputBuilder builder) {
         this.log = builder.log;
@@ -39,83 +35,17 @@ final class MessageWorkExecution implements WorkDeliveryHandler {
         this.dispatcher = builder.dispatcher;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
         this.emitWorkErrorAlerts = builder.emitWorkErrorAlerts;
+        this.workExecutor = new MessageWorkExecutor(workerDefinition.beanName());
     }
 
-    void setMaxInFlight(int configured) {
-        int resolved = configured <= 1 ? 1 : configured;
-        int previous = maxInFlight.getAndSet(resolved);
-        if (resolved <= 1) {
-            // No async dispatch required; keep executor (if any) but ensure it does not grow.
-            ThreadPoolExecutor executor = workExecutor;
-            if (executor != null) {
-                executor.setCorePoolSize(1);
-                executor.setMaximumPoolSize(1);
-            }
-            return;
-        }
-        synchronized (executorLock) {
-            ThreadPoolExecutor executor = workExecutor;
-            if (executor == null) {
-                workExecutor = createExecutor(resolved);
-            } else if (resolved != previous) {
-                executor.setCorePoolSize(resolved);
-                executor.setMaximumPoolSize(resolved);
-            }
-        }
-    }
-
-    private ThreadPoolExecutor createExecutor(int max) {
-        SynchronousQueue<Runnable> queue = new SynchronousQueue<>();
-	        ThreadFactory threadFactory = runnable -> {
-	            Thread thread = new Thread(runnable);
-	            thread.setName("ph-worker-" + workerDefinition.beanName() + "-exec-" + thread.threadId());
-	            thread.setDaemon(true);
-	            return thread;
-	        };
-        ThreadPoolExecutor executor = new ThreadPoolExecutor(
-            max,
-            max,
-            60L,
-            TimeUnit.SECONDS,
-            queue,
-            threadFactory,
-            (task, pool) -> {
-                try {
-                    pool.getQueue().put(task);
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    throw new RejectedExecutionException("Interrupted while waiting for worker executor slot", ex);
-                }
-            }
-        );
-        // Keep core threads alive so per-thread resources (e.g. HTTP clients) can be reused.
-        executor.allowCoreThreadTimeOut(false);
-        return executor;
-    }
+    void setMaxInFlight(int configured) { workExecutor.setMaxInFlight(configured); }
+    void resume() { workExecutor.resume(); }
+    void pause() { workExecutor.pause(); }
+    @Override public void close() { workExecutor.close(); }
 
     @Override
     public void onWork(WorkItem workItem) {
-        ThreadPoolExecutor executor = workExecutor;
-        int currentMax = maxInFlight.get();
-        if (executor == null || currentMax <= 1) {
-            // Preserve existing synchronous behaviour when no concurrency cap is configured.
-            dispatchSynchronously(workItem);
-            return;
-        }
-        try {
-            executor.execute(() -> dispatchSynchronously(workItem));
-        } catch (RejectedExecutionException ex) {
-            log.warn("{} async dispatch rejected; falling back to synchronous processing", displayName, ex);
-            if (emitWorkErrorAlerts) {
-                try {
-                    controlPlaneRuntime.publishWorkError(workerDefinition.beanName(), workItem, ex);
-                } catch (Exception publishFailure) {
-                    log.warn("{} failed to publish async-dispatch rejection alert", displayName, publishFailure);
-                }
-            }
-            reportDispatchFailure(ex);
-            dispatchSynchronously(workItem);
-        }
+        workExecutor.execute(() -> dispatch(workItem));
     }
 
     @Override
@@ -148,7 +78,7 @@ final class MessageWorkExecution implements WorkDeliveryHandler {
         return WorkItem.text(info, payload).build();
     }
 
-    private void dispatchSynchronously(WorkItem workItem) {
+    private void dispatch(WorkItem workItem) {
         try {
             dispatcher.dispatch(workItem);
         } catch (Exception ex) {

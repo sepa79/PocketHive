@@ -118,6 +118,48 @@ class DebugTapServiceTest {
             .containsExactly(input.queue(), output.queue());
     }
 
+    @Test
+    void explicitCloseReportsAdapterFailureThroughHttp() throws Exception {
+        var transport = mock(io.pockethive.topology.work.WorkDebugTap.class);
+        var failure = new IllegalStateException("native resource deletion failed");
+        org.mockito.Mockito.doThrow(failure).when(transport).close();
+        var service = serviceWithTap(transport);
+        var tap = service.create(new DebugTapRequest("sw1", "processor", "OUT", "out", 1, 60));
+        var controller = new DebugTapController(service,
+            mock(io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization.class));
+        var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(controller).build();
+
+        var result = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .delete("/api/debug/taps/" + tap.tapId()))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isInternalServerError())
+            .andReturn();
+        assertThat(result.getResolvedException()).hasCause(failure);
+        org.mockito.Mockito.verify(transport, org.mockito.Mockito.times(1)).close();
+        assertThatThrownBy(() -> service.describe(tap.tapId())).isInstanceOfSatisfying(
+            ResponseStatusException.class, error -> assertThat(error.getStatusCode().value()).isEqualTo(404));
+    }
+
+    @Test
+    void explicitCloseSucceedsOnlyAfterAdapterCloseCompletes() {
+        var transport = mock(io.pockethive.topology.work.WorkDebugTap.class);
+        var service = serviceWithTap(transport);
+        var tap = service.create(new DebugTapRequest("sw1", "processor", "OUT", "out", 1, 60));
+        assertThat(service.close(tap.tapId()).tapId()).isEqualTo(tap.tapId());
+        org.mockito.Mockito.verify(transport, org.mockito.Mockito.times(1)).close();
+        assertThatThrownBy(() -> service.describe(tap.tapId())).isInstanceOfSatisfying(
+            ResponseStatusException.class, error -> assertThat(error.getStatusCode().value()).isEqualTo(404));
+    }
+
+    private static DebugTapService serviceWithTap(io.pockethive.topology.work.WorkDebugTap transport) {
+        var store = new SwarmStore();
+        var swarm = new Swarm("sw1", "instance", "controller", "run", NetworkMode.DIRECT);
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("template", "controller",
+            List.of(new Bee("processor", "image", Work.ofDefaults("in", "out"), Map.of()))));
+        store.register(swarm);
+        return new DebugTapService(store, (swarmId, role, tapId, source, ttl, limit) -> transport,
+            new io.pockethive.worker.sdk.testing.InMemoryWorkTopologyResolver());
+    }
+
     private static RabbitResources recordingRabbitResources(List<RabbitBindingSpec> bindings, List<String> deletedQueues) {
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(deletedQueues, "deletedQueues");

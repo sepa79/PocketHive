@@ -10,10 +10,21 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import org.springframework.stereotype.Component;
+import io.pockethive.controlplane.filesystem.RuntimeOutputDirectory;
+import java.util.Objects;
 
-@Component
+/**
+ * Responsibility: persist finalized and streaming exports inside the runtime-owned output directory.
+ * Must not: select output roots from worker configuration or own swarm cleanup.
+ * Contract: RESP-CLEARING-EXPORT — docs/architecture/runtime-responsibilities.md#resp-clearing-export.
+ */
 class LocalDirectoryClearingExportSink implements ClearingExportSink {
+
+  private final RuntimeOutputDirectory output;
+
+  LocalDirectoryClearingExportSink(RuntimeOutputDirectory output) {
+    this.output = Objects.requireNonNull(output, "output");
+  }
 
   private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
   private final Object manifestLock = new Object();
@@ -23,11 +34,12 @@ class LocalDirectoryClearingExportSink implements ClearingExportSink {
       ClearingExportWorkerConfig config,
       ClearingRenderedFile file
   ) throws Exception {
-    Path targetDir = Path.of(config.localTargetDir());
+    validateOutputPaths(config, file.fileName());
+    Path targetDir = output.path();
     Files.createDirectories(targetDir);
 
-    Path finalPath = targetDir.resolve(file.fileName());
-    Path tmpPath = targetDir.resolve(file.fileName() + config.localTempSuffix());
+    Path finalPath = output.file(file.fileName());
+    Path tmpPath = output.file(file.fileName() + config.localTempSuffix());
 
     Files.writeString(
         tmpPath,
@@ -66,9 +78,10 @@ class LocalDirectoryClearingExportSink implements ClearingExportSink {
       int recordCount,
       java.time.Instant createdAt
   ) throws Exception {
-    Path targetDir = Path.of(config.localTargetDir());
+    validateOutputPaths(config, fileName);
+    Path targetDir = output.path();
     Files.createDirectories(targetDir);
-    Path finalPath = targetDir.resolve(fileName);
+    Path finalPath = output.file(fileName);
     if (Files.exists(finalPath)) {
       return new ClearingExportSinkWriteResult(
           fileName,
@@ -78,7 +91,7 @@ class LocalDirectoryClearingExportSink implements ClearingExportSink {
           finalPath.toAbsolutePath().toString());
     }
 
-    Path tempPath = targetDir.resolve(fileName + config.localTempSuffix());
+    Path tempPath = output.file(fileName + config.localTempSuffix());
     if (!Files.exists(tempPath)) {
       throw new IllegalStateException("Streaming temp file is missing before finalize: " + tempPath);
     }
@@ -118,9 +131,10 @@ class LocalDirectoryClearingExportSink implements ClearingExportSink {
       String headerLine,
       String lineSeparator
   ) throws Exception {
-    Path targetDir = Path.of(config.localTargetDir());
+    validateOutputPaths(config, fileName);
+    Path targetDir = output.path();
     Files.createDirectories(targetDir);
-    Path tempPath = targetDir.resolve(fileName + config.localTempSuffix());
+    Path tempPath = output.file(fileName + config.localTempSuffix());
     Files.writeString(
         tempPath,
         headerLine + lineSeparator,
@@ -138,7 +152,7 @@ class LocalDirectoryClearingExportSink implements ClearingExportSink {
       String recordLine,
       String lineSeparator
   ) throws Exception {
-    Path tempPath = Path.of(config.localTargetDir()).resolve(fileName + config.localTempSuffix());
+    Path tempPath = output.file(fileName + config.localTempSuffix());
     if (!Files.exists(tempPath)) {
       throw new IllegalStateException("Streaming temp file is missing before append: " + tempPath);
     }
@@ -187,12 +201,14 @@ class LocalDirectoryClearingExportSink implements ClearingExportSink {
     }
   }
 
+  private void validateOutputPaths(ClearingExportWorkerConfig config, String fileName) {
+    output.file(fileName);
+    output.file(fileName + config.localTempSuffix());
+    if (config.writeManifest()) resolveManifestPath(config);
+  }
+
   private Path resolveManifestPath(ClearingExportWorkerConfig config) {
-    Path configured = Path.of(config.localManifestPath());
-    if (configured.isAbsolute()) {
-      return configured;
-    }
-    return Path.of(config.localTargetDir()).resolve(configured);
+    return output.file(config.localManifestPath());
   }
 
   private static void moveAtomically(Path source, Path target) throws IOException {

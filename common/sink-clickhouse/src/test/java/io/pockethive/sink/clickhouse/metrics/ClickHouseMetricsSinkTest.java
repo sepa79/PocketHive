@@ -134,6 +134,66 @@ class ClickHouseMetricsSinkTest {
     }
   }
 
+  @Test
+  void closeFlushesBufferedSamplesAndKeepsMetricsDiagnosticOnFailure() throws Exception {
+    try (TestClickHouseServer server = TestClickHouseServer.start()) {
+      var properties = properties(server.endpoint());
+      properties.setBatchSize(10);
+      var sink = new ClickHouseMetricsSink(properties, OBJECT_MAPPER);
+      sink.write(sample(Map.of("phase", "pending")));
+      assertThat(server.requests()).isEmpty();
+      server.enqueueResponse(500, " " + "x".repeat(501) + " ");
+      assertThatThrownBy(sink::close)
+          .hasMessage("ClickHouse metrics insert failed status=500 body=" + "x".repeat(500) + "...");
+      assertThat(sink.bufferedSamples()).isEqualTo(1);
+      sink.close();
+      assertThat(sink.bufferedSamples()).isZero();
+      assertThat(server.requests()).hasSize(2);
+      assertThat(server.requests().get(1).body()).isEqualTo(server.requests().getFirst().body());
+    }
+  }
+
+  @Test
+  void flushCommitsSuccessfulBatchesAndRequeuesOnlyRejectedBatch() throws Exception {
+    try (TestClickHouseServer server = TestClickHouseServer.start()) {
+      var properties = properties(server.endpoint());
+      properties.setBatchSize(10);
+      var sink = new ClickHouseMetricsSink(properties, OBJECT_MAPPER);
+      for (String phase : List.of("a", "b", "c", "d")) sink.write(sample(Map.of("phase", phase)));
+      properties.setBatchSize(2);
+      server.enqueueResponse(200, "ok");
+      server.enqueueResponse(500, "failed");
+      assertThatThrownBy(sink::flush).hasMessageContaining("status=500");
+      assertThat(sink.bufferedSamples()).isEqualTo(2);
+      sink.flush();
+      assertThat(sink.bufferedSamples()).isZero();
+      assertThat(server.requests()).hasSize(3);
+      assertThat(server.requests().get(2).body()).isEqualTo(server.requests().get(1).body())
+          .doesNotContain("\"phase\":\"a\"").doesNotContain("\"phase\":\"b\"");
+    }
+  }
+
+  @Test
+  void malformedUriLeavesQueuedSamplesInOriginalOrder() throws Exception {
+    try (TestClickHouseServer server = TestClickHouseServer.start()) {
+      var properties = properties(server.endpoint());
+      properties.setBatchSize(10);
+      var sink = new ClickHouseMetricsSink(properties, OBJECT_MAPPER);
+      sink.write(sample(Map.of("phase", "a")));
+      sink.write(sample(Map.of("phase", "b")));
+      properties.setEndpoint("http://bad host");
+      properties.setBatchSize(1);
+      assertThatThrownBy(sink::flush).isInstanceOf(IllegalArgumentException.class);
+      assertThat(sink.bufferedSamples()).isEqualTo(2);
+      assertThat(server.requests()).isEmpty();
+      properties.setEndpoint(server.endpoint());
+      sink.flush();
+      assertThat(server.requests()).hasSize(2);
+      assertThat(server.requests().getFirst().body()).contains("\"phase\":\"a\"");
+      assertThat(server.requests().getLast().body()).contains("\"phase\":\"b\"");
+    }
+  }
+
   private static ClickHouseMetricsSinkProperties properties(String endpoint) {
     ClickHouseMetricsSinkProperties properties = new ClickHouseMetricsSinkProperties();
     properties.setEndpoint(endpoint);

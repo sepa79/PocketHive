@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useAdminUsersLoader } from '../lib/useAdminUsersLoader'
 import {
-  listAdminUsers,
   replaceAdminUserGrants,
   upsertAdminUser,
   type AuthGrant,
@@ -99,9 +99,13 @@ const grantPresets = [
   },
 ]
 
+/**
+ * Responsibility: present user administration using the backend admin decision.
+ * Must not: derive permissions from grants or replace backend command authorization.
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (access presentation).
+ */
 export function UsersPage() {
   const auth = useAuth()
-  const [loading, setLoading] = useState(true)
   const [savingUser, setSavingUser] = useState(false)
   const [savingGrants, setSavingGrants] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -111,46 +115,19 @@ export function UsersPage() {
   const [draftUser, setDraftUser] = useState<EditableUser | null>(null)
   const [draftGrants, setDraftGrants] = useState<AuthGrant[]>([])
 
-  const reloadUsers = useCallback(async (preferredSelectedUserId: string | null = null) => {
-    try {
-      setLoading(true)
-      setError(null)
-      const loadedUsers = await listAdminUsers()
-      setUsers(loadedUsers)
-      const nextSelectedUser =
-        loadedUsers.find((entry) => entry.id === preferredSelectedUserId) ?? loadedUsers[0] ?? null
-      setSelectedUserId(nextSelectedUser?.id ?? null)
-      setDraftUser(nextSelectedUser ? toEditableUser(nextSelectedUser) : null)
-      setDraftGrants(nextSelectedUser ? cloneGrants(nextSelectedUser.grants) : [])
-    } finally {
-      setLoading(false)
-    }
+  const applyLoadedUsers = useCallback((loadedUsers: AuthenticatedUser[], preferredSelectedUserId: string | null) => {
+    setError(null)
+    setUsers(loadedUsers)
+    const nextSelectedUser = loadedUsers.find(entry => entry.id === preferredSelectedUserId) ?? loadedUsers[0] ?? null
+    setSelectedUserId(nextSelectedUser?.id ?? null)
+    setDraftUser(nextSelectedUser ? toEditableUser(nextSelectedUser) : null)
+    setDraftGrants(nextSelectedUser ? cloneGrants(nextSelectedUser.grants) : [])
   }, [])
-
-  useEffect(() => {
-    if (!auth.isAuthAdmin) {
-      setLoading(false)
-      return
-    }
-
-    let cancelled = false
-
-    async function load() {
-      try {
-        await reloadUsers()
-        if (cancelled) return
-      } catch (e) {
-        if (cancelled) return
-        setError(e instanceof Error ? e.message : 'Failed to load users')
-      }
-    }
-
-    void load()
-
-    return () => {
-      cancelled = true
-    }
-  }, [auth.isAuthAdmin, reloadUsers])
+  const { loading, error: loadError, initialized, reload: reloadUsers } = useAdminUsersLoader(
+    auth.status === 'authenticated' ? auth.user?.id ?? null : null,
+    auth.status === 'authenticated' ? auth.session?.accessToken ?? null : null,
+    auth.accessStatus, auth.isAuthAdmin, applyLoadedUsers,
+  )
 
   function selectUser(user: AuthenticatedUser) {
     setSelectedUserId(user.id)
@@ -234,6 +211,8 @@ export function UsersPage() {
     )
   }
 
+  if (auth.status === 'authenticated' && auth.accessStatus !== 'ready') return null
+
   if (!auth.isAuthAdmin) {
     return (
       <div className="page">
@@ -246,6 +225,13 @@ export function UsersPage() {
         </div>
       </div>
     )
+  }
+
+  if (!initialized) {
+    return <div className="page" role={loadError ? 'alert' : 'status'}>
+      {loadError ?? 'Loading users…'}
+      {loadError ? <button type="button" className="btnSecondary" onClick={() => void reloadUsers()}>Retry</button> : null}
+    </div>
   }
 
   return (
@@ -269,9 +255,9 @@ export function UsersPage() {
         </div>
       </div>
 
-      {error ? (
+      {error || loadError ? (
         <div className="card usersPageBanner usersPageBannerError" role="alert">
-          {error}
+          {error || loadError}
         </div>
       ) : null}
       {message ? <div className="card usersPageBanner usersPageBannerInfo">{message}</div> : null}
