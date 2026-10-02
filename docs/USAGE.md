@@ -561,3 +561,89 @@ cleanup; a broken evidence destination still makes the test fail.
 
 See the [coverage ledger](ci/acceptance-coverage.md) before claiming the new system
 replaces the old suite. The first HTTP journey and failure cleanup do not close all groups.
+
+## ISO8583 MIP test server
+
+Processor can act as the accepted-connection side of a MIP test link. Select it
+explicitly with `baseUrl: mip://<bind-host>:<port>`. Pacasso connects to this
+listener; Work requests send on that connection. `tcp://` and `tcps://` continue
+to select the existing outbound client. The MIP adapter currently uses plain TCP,
+a four-digit ASCII MTI, binary bitmap and a two-byte big-endian payload length.
+There is no automatic protocol detection or TLS/sign-on negotiation. The target
+environment must provide Pacasso a network route to the declared listener; merely
+setting baseUrl does not publish a Docker port or change a deployment manifest.
+
+Supply the complete worker configuration at startup. The example
+[processor-config.json](examples/iso8583-mip/processor-config.json) declares the
+bind target and required `privateConfig.mipServer` settings: `schemaRef`,
+`maxPending`, and `networkManagement`. The canonical accepted worker config starts
+the listener before Work intake. A missing pack, missing MTI guide, invalid layout
+or failed bind fails initialization explicitly. One Pacasso connection is accepted;
+a second simultaneous connection is rejected.
+
+Schema files are external. Both Request Builder and Processor must receive the
+same immutable pack under
+`<schemaRegistryRoot>/<schemaId>/<schemaVersion>/<schemaFile>`. Paths stay within
+the selected pack; pack symlinks, schema headers, DOCTYPE and external XML entities
+are rejected. A pack version is loaded once per codec instance; deploy a new version
+and restart the worker to change it. No filesystem reads occur on subsequent frames.
+
+The repository includes a **synthetic demonstration pack**, not a Mastercard/CIS
+specification, at
+[synthetic-j8583.xml](../processor-service/src/test/resources/iso8583/schema-registry/synthetic/1/synthetic-j8583.xml).
+For that demonstration, expose
+`processor-service/src/test/resources/iso8583/schema-registry` as `/schemas` in both
+workers, or explicitly change `schemaRegistryRoot` in their configurations/templates.
+Select the Request Builder template root from
+[the example templates](examples/iso8583-mip/templates/synthetic/authorization.json),
+set `serviceId: synthetic`, and choose `x-ph-call-id: authorization` or `echo` on
+the incoming Work item. Example seed payload:
+
+```json
+{"transmissionDate":"1002123045","stan":"000001"}
+```
+
+The templates use the existing `payloadAsJson` renderer context. Authorization
+builds `0100`, and the [echo template](examples/iso8583-mip/templates/synthetic/echo.json)
+builds `0800`. Request Builder renders the field list and packs it into the existing
+`RAW_HEX` ISO request envelope. Use a new six-digit STAN for every locally initiated
+request on a connection, including across authorization and network-management
+requests. The demo's authorization fields are deliberately minimal; use the
+company's actual layouts and pack before connecting to Pacasso.
+
+`0110` and locally requested `0810` complete only the matching MTI/STAN on the same
+connection. Both require DE39; `0810` must also echo the request's DE70. Timeout
+covers waiting for a peer, writing and awaiting the response; pacing is measured
+separately. There is no MIP authorization retry. Disconnect and shutdown fail pending
+calls. Duplicate, unrelated and late replies cannot complete a newer request.
+After reconnect, a new connection has its own STAN namespace.
+
+Incoming `0800` is handled independently while authorizations wait. The explicit
+network-management layout supplies allowed DE70 values, required fields to copy,
+and static response fields. It must copy DE11/DE70 and explicitly set DE39.
+Copy fields must exist in both `0800` and `0810` guides. The demonstration allows
+`270` echo and `081`/`082` host activation/deactivation, copies DE7/11/70 and sets
+DE39 to `00`. Unsupported types/codes and malformed messages close the peer.
+It does not automatically initiate periodic echo or infer a host activation state.
+
+Results keep the existing raw `responseHex`. Decoded response values are read-only
+inputs to existing `resultRules`, named `iso8583.de.<number>` and `iso8583.mti` under
+`RESPONSE_HEADER`. The example extracts DE39 and treats `00` as business success.
+A correlated response with transport status 200 can still be a business decline.
+Work history/correlation metadata follow the existing ISO result path.
+
+Changing the MIP bind target, schema, capacity or network layout retires and closes
+the listener immediately, including while Work intake is disabled. Restart the
+worker to activate changed MIP settings. Timeout/pacing may change live. An explicit
+switch to an existing HTTP/TCP client URI retires MIP and permits that client's
+existing behavior; activating MIP again requires restart. Disabling Work alone
+retains echo responses, so the Pacasso link can remain up.
+
+For the original `mcsim` pack, inspect its field definitions against the company
+specification and add an explicit `0810` parse guide to a separately versioned pack
+before use. Its original XML has `0100`, inherited `0110` and `0800`, but no `0810`.
+No original PANs, sample authorization records or Pacasso addresses are included in
+these examples. Existing processor ISO MAC application appends bytes rather than
+packing a MAC field; use authored pack fields for this first slice. Mastercard MAC,
+current CIS conformance and real Pacasso interoperability are not verified by the
+in-memory tests.

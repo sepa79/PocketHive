@@ -28,6 +28,7 @@
     <module>common/templating-api</module>
     <module>common/observability-core</module>
     <module>common/work-api</module>
+    <module>common/iso8583-codec</module>
     <module>common/work-config</module>
     <module>common/redis-config</module>
     <module>common/redis-adapter</module>

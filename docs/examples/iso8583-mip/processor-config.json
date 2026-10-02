@@ -1,0 +1,36 @@
+{
+  "baseUrl": "mip://0.0.0.0:6036",
+  "mode": "THREAD_COUNT",
+  "threadCount": 8,
+  "connectionReuse": "GLOBAL",
+  "keepAlive": true,
+  "timeoutMs": 30000,
+  "sslVerify": false,
+  "privateConfig": {
+    "mipServer": {
+      "schemaRef": {
+        "schemaRegistryRoot": "/schemas",
+        "schemaId": "synthetic",
+        "schemaVersion": "1",
+        "schemaAdapter": "J8583_XML",
+        "schemaFile": "synthetic-j8583.xml"
+      },
+      "maxPending": 8,
+      "networkManagement": {
+        "supportedCodes": [
+          "270",
+          "081",
+          "082"
+        ],
+        "copyFields": [
+          7,
+          11,
+          70
+        ],
+        "responseFields": {
+          "39": "00"
+        }
+      }
+    }
+  }
+}

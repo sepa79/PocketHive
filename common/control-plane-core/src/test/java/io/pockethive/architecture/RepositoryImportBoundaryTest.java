@@ -26,6 +26,10 @@ class RepositoryImportBoundaryTest {
 
   // Current owners, not the final migration layout. Narrow these module scopes with each slice.
   private static final List<Rule> RULES = List.of(
+      rule("iso-schema-library-owner", outside("common/iso8583-codec"),
+          "com\\.solab\\.iso8583\\..*"),
+      rule("iso-codec-no-worker-or-service-implementation", "common/iso8583-codec",
+          "io\\.pockethive\\.(worker\\.sdk|processor|requestbuilder)\\..*"),
       rule("acceptance-no-legacy-or-service-implementation", "acceptance-tests",
           "io\\.pockethive\\.(e2e|orchestrator|scenarios|rabbit|artemis)\\..*"),
       rule("core-no-infrastructure",
@@ -116,6 +120,9 @@ class RepositoryImportBoundaryTest {
 
   @Test
   void importRulesRejectViolationsAndAllowTheirOwners() {
+    assertThat(violations("processor-service", "import com.solab.iso8583.MessageFactory;"))
+        .containsExactly("1 [iso-schema-library-owner] com.solab.iso8583.MessageFactory");
+    assertThat(violations("common/iso8583-codec", "import com.solab.iso8583.MessageFactory;")).isEmpty();
     assertThat(violations("postprocessor-service", "import java.net.http.HttpClient;"))
         .containsExactly("1 [postprocessor-no-http-client] java.net.http.HttpClient");
     assertThat(violations("common/sink-clickhouse", "import java.net.http.HttpClient;")).isEmpty();

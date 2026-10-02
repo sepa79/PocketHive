@@ -1773,7 +1773,7 @@ WorkerContext supplies accepted configuration; runtime controls intake and outpu
 
 **Current module(s):** `request-builder-service`.
 
-RequestBuilderWorkerImpl owns request construction; Iso8583SchemaPackRegistry loads/caches selected ISO schema packs and J8583FieldListXmlCodec encodes their field-list XML.
+RequestBuilderWorkerImpl owns request construction. ISO schema loading and field-list encoding delegate to RESP-ISO8583-CODEC; the builder does not keep a second schema parser or resolver.
 
 Shared request/transport contracts and TemplateRenderer carry values; schema loading is a distinct local infrastructure responsibility.
 
@@ -1791,7 +1791,14 @@ Shared request/transport contracts and TemplateRenderer carry values; schema loa
 
 ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition. TCP/ISO8583 pool replacement and selection delegate to RESP-PROCESSOR-TCP-RUNTIME with separate protocol instances. Worker destruction closes its handlers; TCP/ISO handlers retire their runtimes, while Spring closes the separately owned HTTP client bean.
 
-Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket effects and produce observations consumed downstream.
+Request/result DTOs come from work-api. ISO envelope/payload parsing delegates to
+Iso8583EnvelopeCodec, authentication to Iso8583PayloadAuthentication, outbound byte
+exchange to Iso8583ClientExchange and result construction to Iso8583ResultBuilder.
+Iso8583Endpoint and Iso8583WireProfile own URI selection and length framing.
+Iso8583ProtocolHandler retains one execution path for both explicit client and MIP
+adapters; it delegates accepted-connection effects to RESP-PROCESSOR-MIP-SESSION.
+Iso8583ResponseHeaders is a read-only decoded-field projection; existing
+ResultRulesExtractor remains the sole business-result-rule evaluator.
 
 **Forbidden:** provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
 
@@ -4112,3 +4119,83 @@ reservation under that same monitor. External inventory and journal IO remain ou
 these monitors. `SwarmCatalogueController` maps HTTP and reuses `SwarmAccessService`.
 The authorized contract is ORCHESTRATOR-REST §3.3.1. No queues, files or network bindings
 are removed, and no successful lifecycle REMOVE outcome is emitted.
+
+
+## RESP-ISO8583-CODEC
+
+**Current module:** `common/iso8583-codec`.
+
+Iso8583SchemaPackRegistry owns explicit pack path resolution and per-thread J8583
+factory caching. The shared codec owns field-list XML encoding and ISO byte
+encoding/decoding against those guides. J8583 is the sole guide/inheritance parser.
+Request Builder and Processor consume the same codec; the old builder-local
+registry/codec are removed in this transfer. Schema refs remain the work-api
+contract. Packs are external, immutable for a version and validated on load.
+
+**Forbidden:** network effects, session state, business request templates, Work
+terminal outcomes or a second independent schema guide parser.
+
+**Required effect:** a selected external pack produces/decodes the same wire
+fields in both services; missing/escaping packs and invalid fields fail loudly.
+
+**Verification entrypoints:** shared codec tests and RequestBuilderWorkerImplTest.
+
+## RESP-PROCESSOR-MIP-CONFIG
+
+**Current module:** `processor-service`.
+
+MipServerConfigResolver owns resolving the explicit mip URI and required
+privateConfig.mipServer settings into an immutable local configuration. Spring
+composition starts the configured runtime before Work intake. Startup and Work
+invocations use this same resolver. MipServerComposition observes accepted typed
+WorkerControlPlaneRuntime snapshots before intake; it does not merge config or
+become a configuration writer. MipServerRuntime closes and retires the MIP listener
+immediately when its settings change or configuration is removed, including when
+no Work request is running. Live timeout/pacing changes do not replace the listener.
+Enabling MIP after an initially configured client requires restart. An explicit
+change from MIP to an existing HTTP/TCP client target retires MIP and permits that
+client's existing execution path; MIP cannot subsequently restart in that worker.
+The URI is the sole bind address; no inferred adapter or default response layout.
+
+**Forbidden:** connection/session mutation, another worker configuration writer,
+public Work contract changes or concealed defaults for MIP settings.
+
+**Verification entrypoints:** configuration rejection tests and source composition review.
+
+## RESP-PROCESSOR-MIP-SESSION
+
+**Current module:** `processor-service`.
+
+MipSession owns the single accepted peer, connection identity, pending
+request reservation/correlation and terminal response/failure postconditions.
+A transport port supplies asynchronous writes and close. Listener adapters only
+frame/decode and dispatch. Expected MTI plus DE11 and connection identity determine
+correlation. Both replies require DE39; an 0810 must also match the outgoing
+0800's DE70. MipMessageType owns each family's required field declaration;
+startup checks those fields against all four external guides. A STAN cannot be reused within one connection. Deadline,
+write failure, interruption, disconnect and shutdown settle outstanding calls once.
+NettyMipServer owns actual bind/event-loop resource effects through the MipListener
+and MipListenerFactory ports. NettyMipPeer owns channel writes and close; initializer,
+framing encoder and inbound handler only compose/translate/dispatch. MipSession
+owns the shared STAN/capacity validations and MipFields names the relevant DEs.
+The configured capacity and finite STAN bitset bound retained correlation state.
+
+**Forbidden:** business-field construction, schema parsing, result-rule evaluation,
+Work publication, retries of uncertain authorizations or blocking Netty on Work.
+
+**Verification entrypoints:** session state tests and EmbeddedChannel framing tests.
+
+## RESP-PROCESSOR-MIP-NETWORK
+
+**Current module:** `processor-service`.
+
+MipNetworkManagement alone maps a decoded 0800 and the explicit
+copy/static-field layout to an encoded 0810 through RESP-ISO8583-CODEC. Supported
+DE70 codes and copied-field presence are validated; no generic echo code is inferred.
+The MIP execution handler exposes decoded response fields to ResultRulesExtractor
+and builds the existing ISO result via existing response facilities.
+
+**Forbidden:** own authorization data, peer/correlation state, another business-success
+calculator or proprietary field layouts in PocketHive source.
+
+**Verification entrypoints:** interleaved network-management and result extraction tests.

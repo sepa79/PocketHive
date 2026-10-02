@@ -1,6 +1,7 @@
 package io.pockethive.requestbuilder;
 
 import io.pockethive.worker.sdk.auth.MutableHttpRequest;
+import io.pockethive.iso8583.Iso8583Codec;
 
 import io.pockethive.work.api.HttpRequest;
 import io.pockethive.work.api.Iso8583Request;
@@ -60,8 +61,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private final TemplateLoader templateLoader;
   private final RedisSequenceProperties redisProperties;
   private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
-  private final J8583FieldListXmlCodec fieldListXmlCodec =
-      new J8583FieldListXmlCodec(new Iso8583SchemaPackRegistry());
+  private final Iso8583Codec fieldListXmlCodec = new Iso8583Codec();
   private volatile Map<String, TemplateDefinition> templates;
   private volatile String lastTemplateConfigKey;
   private final LongAdder errorCount = new LongAdder();

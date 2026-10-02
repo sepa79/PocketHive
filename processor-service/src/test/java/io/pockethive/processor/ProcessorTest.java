@@ -984,15 +984,21 @@ class ProcessorTest {
             throw new IllegalStateException(protocol + " handler not registered");
         }
 
-        Field runtimeField = tcpHandler.getClass().getDeclaredField("transportRuntime");
+        Object transportOwner = tcpHandler;
+        if ("ISO8583".equals(protocol)) {
+            Field clientExchange = tcpHandler.getClass().getDeclaredField("clientExchange");
+            clientExchange.setAccessible(true);
+            transportOwner = clientExchange.get(tcpHandler);
+        }
+        Field runtimeField = transportOwner.getClass().getDeclaredField("transportRuntime");
         runtimeField.setAccessible(true);
-        var runtime = (io.pockethive.processor.transport.TcpTransportRuntime) runtimeField.get(tcpHandler);
+        var runtime = (io.pockethive.processor.transport.TcpTransportRuntime) runtimeField.get(transportOwner);
         runtime.close();
         var constructor = io.pockethive.processor.transport.TcpTransportRuntime.class
             .getDeclaredConstructor(java.util.function.Function.class);
         constructor.setAccessible(true);
         java.util.function.Function<TcpTransportConfig, TcpTransport> factory = ignored -> transport;
-        runtimeField.set(tcpHandler, constructor.newInstance(factory));
+        runtimeField.set(transportOwner, constructor.newInstance(factory));
     }
 
     private static <T> T withScenarioRoot(Path scenarioRoot, ThrowingSupplier<T> action) throws Exception {

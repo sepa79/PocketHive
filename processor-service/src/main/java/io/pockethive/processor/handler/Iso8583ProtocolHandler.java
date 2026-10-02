@@ -1,331 +1,116 @@
 package io.pockethive.processor.handler;
 
-import io.pockethive.work.api.Iso8583Metrics;
-import io.pockethive.work.api.Iso8583Outcome;
-import io.pockethive.work.api.Iso8583Request;
-import io.pockethive.work.api.Iso8583RequestInfo;
-
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.ObjectReader;
-import io.pockethive.processor.ProcessorWorkerConfig;
 import io.pockethive.processor.ProcessorPacer;
-import io.pockethive.processor.TcpTransportConfig;
-import io.pockethive.processor.ResultRulesExtractor;
+import io.pockethive.processor.ProcessorWorkerConfig;
 import io.pockethive.processor.exception.ProcessorCallException;
 import io.pockethive.processor.metrics.CallMetrics;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
-import io.pockethive.processor.response.ResponseBuilder;
-import io.pockethive.processor.transport.TcpBehavior;
-import io.pockethive.processor.transport.TcpRequest;
-import io.pockethive.processor.transport.TcpResponse;
-import io.pockethive.processor.transport.TcpTransportLease;
+import io.pockethive.processor.mip.MipReply;
 import io.pockethive.processor.transport.TcpTransportRuntime;
-import io.pockethive.worker.sdk.auth.AuthApplyAs;
-import io.pockethive.worker.sdk.auth.AuthRef;
-import io.pockethive.worker.sdk.auth.AuthRuntime;
+import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.work.api.Iso8583RequestEnvelope;
-import io.pockethive.work.api.Iso8583ResultEnvelope;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.api.TemplateRenderer;
-import java.net.URI;
 import java.time.Clock;
-import java.util.HashMap;
-import java.util.HexFormat;
-import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * Responsibility: execute ISO8583 exchanges and construct ISO result observations.
- * Must not: own transport pools or pacing state, provision topology or reinterpret another protocol's result.
+ * Responsibility: coordinate canonical ISO request preparation, pacing, explicit byte execution and result construction.
+ * Must not: own schema parsing, session transitions, transport pools or pacing state.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute;
- * transport lifetime delegates to RESP-PROCESSOR-TCP-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-processor-tcp-runtime;
- * pacing delegates to RESP-PROCESSOR-PACING — docs/architecture/runtime-responsibilities.md#resp-processor-pacing.
+ * delegates transport lifetime, pacing and MIP sessions to their distinct responsibility owners.
  */
 public class Iso8583ProtocolHandler implements ProtocolHandler {
-  private final ObjectMapper mapper;
-  private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
   private final ProcessorPacer pacer;
-  private final TemplateRenderer templateRenderer;
-  private final RedisSequenceProperties redisProperties;
-  private final TcpTransportRuntime transportRuntime = new TcpTransportRuntime();
+  private final Iso8583EnvelopeCodec envelopeCodec;
+  private final Iso8583PayloadAuthentication authentication;
+  private final Iso8583ResultBuilder resultBuilder;
+  private final Iso8583ClientExchange clientExchange = new Iso8583ClientExchange(new TcpTransportRuntime());
+  private final Iso8583ServerExchange serverExchange;
 
-  public Iso8583ProtocolHandler(ObjectMapper mapper,
-                                Clock clock,
-                                CallMetricsRecorder metricsRecorder,
-                                ProcessorPacer pacer,
-                                TemplateRenderer templateRenderer,
+  public Iso8583ProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder,
+                                ProcessorPacer pacer, TemplateRenderer templateRenderer,
                                 RedisSequenceProperties redisProperties) {
-    this.mapper = mapper;
-    this.strictEnvelopeReader = mapper.readerFor(Iso8583RequestEnvelope.class)
-        .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-    this.clock = clock;
-    this.metricsRecorder = metricsRecorder;
-    this.pacer = java.util.Objects.requireNonNull(pacer, "pacer");
-    this.templateRenderer = templateRenderer;
-    this.redisProperties = redisProperties;
+    this(mapper, clock, metricsRecorder, pacer, templateRenderer, redisProperties,
+        Iso8583ServerExchange.clientOnly());
+  }
+
+  public Iso8583ProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder,
+                                ProcessorPacer pacer, TemplateRenderer templateRenderer,
+                                RedisSequenceProperties redisProperties, Iso8583ServerExchange serverExchange) {
+    this.clock = Objects.requireNonNull(clock, "clock");
+    this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
+    this.pacer = Objects.requireNonNull(pacer, "pacer");
+    this.envelopeCodec = new Iso8583EnvelopeCodec(mapper);
+    this.authentication = new Iso8583PayloadAuthentication(templateRenderer, redisProperties);
+    this.resultBuilder = new Iso8583ResultBuilder(mapper);
+    this.serverExchange = Objects.requireNonNull(serverExchange, "serverExchange");
   }
 
   @Override
   public WorkItem invoke(WorkItem message, JsonNode envelope, ProcessorWorkerConfig config, WorkerContext context)
       throws Exception {
-    Iso8583RequestEnvelope requestEnvelope;
+    Iso8583RequestEnvelope request;
+    Iso8583Endpoint endpoint;
     try {
-      requestEnvelope = parseEnvelope(envelope);
+      request = envelopeCodec.decodeEnvelope(envelope);
+      endpoint = Iso8583Endpoint.parse(config.baseUrl());
     } catch (IllegalArgumentException ex) {
-      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, Map.of("transport", "iso8583"));
-    }
-    Iso8583Request request = requestEnvelope.request();
-
-    Endpoint endpoint;
-    try {
-      endpoint = parseEndpoint(config.baseUrl());
-    } catch (IllegalArgumentException ex) {
-      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, Map.of("transport", "iso8583"));
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex,
+          Map.of("transport", Iso8583ResultBuilder.TRANSPORT));
     }
 
-    WireProfile wireProfile;
-    byte[] payloadBytes;
-    Map<String, Object> authTransportOptions = Map.of();
+    Iso8583WireProfile profile;
+    Iso8583AuthenticatedPayload authenticated;
     try {
-      wireProfile = WireProfile.fromId(request.wireProfileId());
-      payloadBytes = decodePayload(request);
-      if (request.authApplications() != null && !request.authApplications().isEmpty()) {
-        try (AuthRuntime authRuntime = AuthRuntime.forApplications(
-            request.authApplications(), Map.of(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
-          String payloadHex = HexFormat.of().withUpperCase().formatHex(payloadBytes);
-          for (AuthRef authRef : request.authApplications()) {
-            if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
-              authTransportOptions = authRuntime.transportOptions(authRef, context);
-            } else {
-              payloadHex = authRuntime.applyIsoPayloadHex(authRef, payloadHex, message, context);
-            }
-          }
-          payloadBytes = HexFormat.of().parseHex(payloadHex);
-        }
-      }
+      profile = Iso8583WireProfile.fromId(request.request().wireProfileId());
+      authenticated = authentication.prepare(envelopeCodec.decodePayload(request.request()),
+          request.request(), endpoint, message, config, context);
+      profile.validatePayload(authenticated.payload());
     } catch (IllegalArgumentException ex) {
-      throw new ProcessorCallException(
-          CallMetrics.failure(0L, 0L, -1),
-          ex,
-          requestMetadata(endpoint, request, null));
+      throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex,
+          resultBuilder.requestMetadata(endpoint, request));
     }
-
-    TcpTransportConfig desired = Objects.requireNonNull(
-        config.tcpTransport(),
-        "processor tcpTransport config must be provided by runtime config");
 
     long start = clock.millis();
     long pacingMillis = 0L;
-    TcpTransportLease transport = null;
     try {
       pacingMillis = pacer.await(config);
-
-      transport = transportRuntime.acquire(desired);
-      TcpTransportConfig transportConfig = transport.config();
-      byte[] framedPayload = wireProfile.frame(payloadBytes);
-      Map<String, Object> options = new HashMap<>();
-      options.put("connectTimeoutMs", transportConfig.connectTimeoutMs());
-      options.put("readTimeoutMs", transportConfig.readTimeoutMs());
-      options.put("maxBytes", transportConfig.maxBytes());
-      options.put("ssl", "tcps".equals(endpoint.scheme()));
-      options.put("sslVerify", transportConfig.sslVerify());
-      options.putAll(authTransportOptions);
-      TcpRequest tcpRequest = new TcpRequest(endpoint.host(), endpoint.port(), framedPayload, options);
-
-
-      TcpResponse response = null;
-      Exception lastException = null;
-      for (int attempt = 0; attempt <= transportConfig.maxRetries(); attempt++) {
-        try {
-          response = transport.execute(tcpRequest, TcpBehavior.LENGTH_PREFIX_2B);
-          break;
-        } catch (Exception ex) {
-          lastException = ex;
-          if (attempt < transportConfig.maxRetries()) {
-            context.logger().warn("ISO8583 attempt {} failed, retrying: {}", attempt + 1, ex.getMessage());
-            Thread.sleep(100L * (attempt + 1));
-          }
-        }
+      byte[] payload = authenticated.payload();
+      byte[] response;
+      Map<String, String> responseHeaders;
+      if (endpoint.mipServer()) {
+        MipReply reply = serverExchange.exchange(payload, config);
+        response = reply.payload();
+        responseHeaders = Iso8583ResponseHeaders.project(reply.decoded());
+      } else {
+        response = clientExchange.exchange(payload, profile, endpoint, config,
+            authenticated.transportOptions(), context);
+        responseHeaders = Map.of();
       }
-      if (response == null) {
-        throw lastException;
-      }
-
-      long end = clock.millis();
-      long totalDuration = Math.max(0L, end - start);
-      long callDuration = Math.max(0L, totalDuration - pacingMillis);
-      long connectionLatency = Math.max(0L, pacingMillis);
-      CallMetrics metrics = CallMetrics.success(callDuration, connectionLatency, 200);
+      long callDuration = Math.max(0L, clock.millis() - start - pacingMillis);
+      CallMetrics metrics = CallMetrics.success(callDuration, Math.max(0L, pacingMillis),
+          Iso8583ResultBuilder.RESPONSE_STATUS);
+      WorkItem result = resultBuilder.build(message, request, endpoint, profile, payload.length,
+          response, responseHeaders, metrics, context.info());
       metricsRecorder.record(metrics);
-
-      Iso8583ResultEnvelope resultEnvelope = Iso8583ResultEnvelope.of(
-          new Iso8583RequestInfo(
-              "iso8583",
-              endpoint.scheme(),
-              "SEND",
-              endpoint.endpoint(),
-              wireProfile.id(),
-              request.payloadAdapter(),
-              payloadBytes.length
-          ),
-          new Iso8583Outcome(
-              Iso8583ResultEnvelope.OUTCOME_ISO8583_RESPONSE,
-              200,
-              HexFormat.of().withUpperCase().formatHex(response.body()),
-              null
-          ),
-          new Iso8583Metrics(metrics.durationMs(), metrics.connectionLatencyMs())
-      );
-
-      ObjectNode result = mapper.valueToTree(resultEnvelope);
-      String responseHex = resultEnvelope.outcome().responseHex();
-      Map<String, Object> extractionHeaders = ResultRulesExtractor.extract(
-          requestEnvelope.resultRules(),
-          request.payload(),
-          request.headers(),
-          responseHex,
-          Map.of()
-      );
-
-      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics, extractionHeaders);
-      WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
-      return updated.toBuilder().contentType(responseItem.contentType()).build();
+      return result;
     } catch (Exception ex) {
-      long end = clock.millis();
-      long totalDuration = Math.max(0L, end - start);
-      long callDuration = Math.max(0L, totalDuration - pacingMillis);
-      long connectionLatency = Math.max(0L, pacingMillis);
-      CallMetrics metrics = CallMetrics.failure(callDuration, connectionLatency, -1);
+      long callDuration = Math.max(0L, clock.millis() - start - pacingMillis);
+      CallMetrics metrics = CallMetrics.failure(callDuration, Math.max(0L, pacingMillis), -1);
       metricsRecorder.record(metrics);
-      throw new ProcessorCallException(metrics, ex, requestMetadata(endpoint, request, wireProfile));
-    } finally {
-      if (transport != null) {
-        transport.close();
-      }
+      throw new ProcessorCallException(metrics, ex, resultBuilder.requestMetadata(endpoint, request));
     }
   }
 
-  private Iso8583RequestEnvelope parseEnvelope(JsonNode envelope) {
-    try {
-      return strictEnvelopeReader.readValue(envelope);
-    } catch (Exception ex) {
-      // Intentionally fail-loud: malformed envelope/resultRules must not be silently ignored.
-      throw new IllegalArgumentException("Invalid ISO8583 request envelope", ex);
-    }
-  }
-
-  private byte[] decodePayload(Iso8583Request request) {
-    return switch (request.payloadAdapter()) {
-      case "RAW_HEX" -> decodeRawHexPayload(request.payload());
-      default -> throw new IllegalArgumentException("Unsupported ISO8583 payloadAdapter: " + request.payloadAdapter());
-    };
-  }
-
-  private byte[] decodeRawHexPayload(String payload) {
-    if (payload == null || payload.isBlank()) {
-      throw new IllegalArgumentException("RAW_HEX payload must not be blank");
-    }
-    // Intentionally fail-loud: do not normalise/strip whitespace from payloads.
-    // If callers need readability, they must pre-process upstream and pass clean RAW_HEX.
-    for (int i = 0; i < payload.length(); i++) {
-      if (Character.isWhitespace(payload.charAt(i))) {
-        throw new IllegalArgumentException("RAW_HEX payload must not contain whitespace");
-      }
-    }
-    if ((payload.length() & 1) != 0) {
-      throw new IllegalArgumentException("Invalid RAW_HEX payload length");
-    }
-    return HexFormat.of().parseHex(payload);
-  }
-
-  private Endpoint parseEndpoint(String baseUrl) {
-    if (baseUrl == null || baseUrl.isBlank()) {
-      throw new IllegalArgumentException("invalid ISO8583 baseUrl");
-    }
-    URI uri;
-    try {
-      uri = URI.create(baseUrl.trim());
-    } catch (Exception ex) {
-      throw new IllegalArgumentException("invalid ISO8583 baseUrl", ex);
-    }
-    String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-    if (!"tcp".equals(scheme) && !"tcps".equals(scheme)) {
-      throw new IllegalArgumentException("invalid ISO8583 baseUrl");
-    }
-    String host = uri.getHost();
-    int port = uri.getPort();
-    if (host == null || host.isBlank() || port <= 0) {
-      throw new IllegalArgumentException("invalid ISO8583 baseUrl");
-    }
-    return new Endpoint(scheme, host, port);
-  }
-
-  private Map<String, Object> requestMetadata(Endpoint endpoint,
-                                              Iso8583Request request,
-                                              WireProfile profile) {
-    Map<String, Object> requestMeta = new LinkedHashMap<>();
-    requestMeta.put("transport", "iso8583");
-    requestMeta.put("endpoint", endpoint.endpoint());
-    requestMeta.put("scheme", endpoint.scheme());
-    requestMeta.put("payloadAdapter", request.payloadAdapter());
-    requestMeta.put("wireProfileId", profile == null ? request.wireProfileId() : profile.id());
-    return requestMeta;
-  }
-
-  private record Endpoint(String scheme, String host, int port) {
-    private String endpoint() {
-      return scheme + "://" + host + ":" + port;
-    }
-  }
-
-  private enum WireProfile {
-    MC_2BYTE_LEN_BIN_BITMAP("MC_2BYTE_LEN_BIN_BITMAP");
-
-    private final String id;
-
-    WireProfile(String id) {
-      this.id = id;
-    }
-
-    static WireProfile fromId(String id) {
-      if (id == null || id.isBlank()) {
-        throw new IllegalArgumentException("wireProfileId must not be blank");
-      }
-      String normalized = id.trim().toUpperCase(Locale.ROOT);
-      for (WireProfile profile : values()) {
-        if (profile.id.equals(normalized)) {
-          return profile;
-        }
-      }
-      throw new IllegalArgumentException("Unsupported ISO8583 wireProfileId: " + id);
-    }
-
-    byte[] frame(byte[] payload) {
-      if (payload.length > 65535) {
-        throw new IllegalArgumentException("ISO8583 payload exceeds 65535 bytes");
-      }
-      byte[] framed = new byte[2 + payload.length];
-      framed[0] = (byte) ((payload.length >> 8) & 0xFF);
-      framed[1] = (byte) (payload.length & 0xFF);
-      System.arraycopy(payload, 0, framed, 2, payload.length);
-      return framed;
-    }
-
-    String id() {
-      return id;
-    }
-  }
-
-  @Override public void close() {
-    transportRuntime.close();
+  @Override
+  public void close() {
+    clientExchange.close();
   }
 }

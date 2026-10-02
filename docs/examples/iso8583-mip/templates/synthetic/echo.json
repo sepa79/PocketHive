@@ -1,0 +1,32 @@
+{
+  "serviceId": "synthetic",
+  "callId": "echo",
+  "protocol": "ISO8583",
+  "wireProfileId": "MC_2BYTE_LEN_BIN_BITMAP",
+  "payloadAdapter": "FIELD_LIST_XML",
+  "bodyTemplate": "<iso8583 mti=\"0800\"><field num=\"7\" value=\"{{ payloadAsJson.transmissionDate }}\"/><field num=\"11\" value=\"{{ payloadAsJson.stan }}\"/><field num=\"70\" value=\"270\"/></iso8583>",
+  "headersTemplate": {},
+  "schemaRef": {
+    "schemaRegistryRoot": "/schemas",
+    "schemaId": "synthetic",
+    "schemaVersion": "1",
+    "schemaAdapter": "J8583_XML",
+    "schemaFile": "synthetic-j8583.xml"
+  },
+  "resultRules": {
+    "businessCode": {
+      "source": "RESPONSE_HEADER",
+      "pattern": "^(.+)$",
+      "header": "iso8583.de.39"
+    },
+    "successRegex": "^00$",
+    "dimensions": [
+      {
+        "name": "stan",
+        "source": "RESPONSE_HEADER",
+        "pattern": "^(.+)$",
+        "header": "iso8583.de.11"
+      }
+    ]
+  }
+}

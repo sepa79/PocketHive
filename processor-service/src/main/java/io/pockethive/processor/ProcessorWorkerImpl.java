@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.processor.handler.ProtocolHandler;
 import io.pockethive.processor.handler.HttpProtocolHandler;
 import io.pockethive.processor.handler.Iso8583ProtocolHandler;
+import io.pockethive.processor.handler.Iso8583ServerExchange;
 import io.pockethive.processor.handler.TcpProtocolHandler;
+import io.pockethive.processor.mip.MipServerRuntime;
+import io.pockethive.processor.mip.MipServerComposition;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
 import io.pockethive.processor.http.ProcessorHttpClient;
 import io.pockethive.processor.exception.ProcessorCallException;
@@ -57,7 +60,7 @@ import org.springframework.stereotype.Component;
  * Must not: construct HTTP clients, implement pacing policy, provision topology or reinterpret a protocol result.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
  */
-@Component("processorWorker")
+@Component(MipServerComposition.PROCESSOR_BEAN)
 @PocketHiveWorker(
     capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},
     config = ProcessorWorkerConfig.class
@@ -74,8 +77,9 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
   ProcessorWorkerImpl(ObjectMapper mapper,
                       ProcessorHttpClient httpClient,
                       TemplateRenderer templateRenderer,
-                      RedisSequenceProperties redisProperties) {
-    this(mapper, httpClient, Clock.systemUTC(), templateRenderer, redisProperties);
+                      RedisSequenceProperties redisProperties,
+                      MipServerRuntime mipRuntime) {
+    this(mapper, httpClient, Clock.systemUTC(), templateRenderer, redisProperties, mipRuntime::exchange);
   }
 
   ProcessorWorkerImpl(ObjectMapper mapper,
@@ -83,6 +87,15 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
                       Clock clock,
                       TemplateRenderer templateRenderer,
                       RedisSequenceProperties redisProperties) {
+    this(mapper, httpClient, clock, templateRenderer, redisProperties, Iso8583ServerExchange.clientOnly());
+  }
+
+  private ProcessorWorkerImpl(ObjectMapper mapper,
+                      ProcessorHttpClient httpClient,
+                      Clock clock,
+                      TemplateRenderer templateRenderer,
+                      RedisSequenceProperties redisProperties,
+                      Iso8583ServerExchange serverExchange) {
     this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     ProcessorPacer pacer = new ProcessorPacer();
@@ -95,13 +108,8 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             pacer),
         "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, pacer,
             templateRenderer, redisProperties),
-        "ISO8583", new Iso8583ProtocolHandler(
-            mapper,
-            clock,
-            metricsRecorder,
-            pacer,
-            templateRenderer,
-            redisProperties)
+        "ISO8583", new Iso8583ProtocolHandler(mapper, clock, metricsRecorder, pacer, templateRenderer,
+            redisProperties, serverExchange)
     );
   }
 

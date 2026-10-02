@@ -1,0 +1,21 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>io.pockethive</groupId><artifactId>pockethive-mvp</artifactId><version>${revision}</version>
+    <relativePath>../..</relativePath>
+  </parent>
+  <artifactId>iso8583-codec</artifactId>
+  <name>PocketHive ISO8583 Codec</name>
+  <description>Canonical external schema resolution and ISO8583 field encoding and decoding.</description>
+  <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-api</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>net.sf.j8583</groupId><artifactId>j8583</artifactId><version>2.0.0</version></dependency>
+    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.10.2</version><scope>test</scope></dependency>
+    <dependency><groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><version>3.25.3</version><scope>test</scope></dependency>
+  </dependencies>
+  <build><plugins><plugin>
+    <groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.11.0</version>
+    <configuration><release>21</release></configuration>
+  </plugin></plugins></build>
+</project>

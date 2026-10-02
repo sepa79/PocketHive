@@ -25,6 +25,11 @@
   <dependencies>
     <dependency>
       <groupId>io.pockethive</groupId>
+      <artifactId>iso8583-codec</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
       <artifactId>work-test-fixtures</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
