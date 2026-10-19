@@ -289,6 +289,9 @@ Identity composition consumes the generated value; it is not a Work queue/exchan
 
 PebbleTemplateRenderer owns rendering and syntax validation through the API ports; its SpEL/weighted-selection helpers implement the engine's expression facilities.
 
+SpelTemplateEvaluator registers the three new crypto functions through
+CryptoSpelFunctions; their boundaries and byte operations are owned below.
+
 SDK and service consumers supply templates/context. Sequence calls use the injected SequenceAccess. SpelFunctions includes clock/random helpers; it is not mathematically pure.
 
 **Forbidden:** select sequence connections, resolve application beans or expose an alternative engine contract.
@@ -298,6 +301,61 @@ SDK and service consumers supply templates/context. Sequence calls use the injec
 **Verification entrypoints:** `PebbleTemplateRendererTest`, `SequencePortRenderingTest`.
 
 **Migration status:** Port extraction current; retained engine behavior is not newly certified as a complete sandbox.
+
+## RESP-TEMPLATE-CRYPTO-ADAPTER
+
+**Module/owner:** `common/templating`, CryptoSpelFunctions.
+
+Owns the three string-based SpEL boundaries, argument validation, hex decoding
+and uppercase encoding under the [crypto function contract](../contracts/template-capabilities.md#composable-emv-and-mac-functions).
+SpelTemplateEvaluator registers these functions. Each delegates to its byte operation.
+
+**Forbidden:** implement derivation/MAC algorithms, interpret transaction fields,
+select profiles, log arguments or read keys from infrastructure.
+
+**Required effect:** invalid input fails explicitly; valid input delegates once and
+returns the documented encoding. Decoded and result key arrays are cleared after use;
+this does not promise erasure of immutable strings or library-internal copies.
+
+**Verification:** CryptoSpelFunctionsTest, EmvCryptoRenderingTest,
+EmvCryptoMessageTemplateTest. Local proof does not certify deployed issuer acceptance.
+
+## RESP-EMV-ICC-KEY
+
+**Module/owner:** `common/templating`, EmvIccMasterKeyDerivation.
+
+Owns Option A diversification from validated issuer-key bytes, PAN and PSN. Calls
+EmvKeyDerivationCipher to produce the card-key bytes. Consumers: CryptoSpelFunctions.
+**Forbidden:** select Option B, decode external hex, calculate session keys or inspect TLV.
+**Required effect/verification:** Option A key matches EmvIccMasterKeyDerivationTest vectors.
+
+## RESP-EMV-SESSION-KEY
+
+**Module/owner:** `common/templating`, EmvCommonSessionKeyDerivation.
+
+Owns the F0/0F diversification of validated eight-byte input. Calls
+EmvKeyDerivationCipher to produce session-key bytes. Consumers: CryptoSpelFunctions.
+**Forbidden:** construct ATC/UN input, select profiles, decode hex or compute a MAC.
+**Required effect/verification:** session key matches EmvCommonSessionKeyDerivationTest vectors.
+
+## RESP-EMV-KEY-CIPHER
+
+**Module/owner:** `common/templating`, EmvKeyDerivationCipher.
+
+Owns the shared two-block TDES encryption and odd-parity adjustment used by the
+ICC and session-key derivations. Bouncy Castle supplies the underlying primitives.
+**Forbidden:** construct diversification inputs, select profiles or retain cipher state between calls.
+**Required effect/verification:** both derivation suites verify resulting keys and parity through their public operations.
+
+## RESP-ISO9797-MAC
+
+**Module/owner:** `common/templating`, Iso9797Algorithm3Mac.
+
+Owns the byte-oriented Algorithm 3 MAC operation with explicit method-2 padding,
+using Bouncy Castle. Consumers: CryptoSpelFunctions.
+**Forbidden:** derive keys, decode hex, impose EMV data layout or retain MAC state between calls.
+**Required effect/verification:** eight-byte output matches Iso9797Algorithm3MacTest,
+including empty data and full-block padding.
 
 ## RESP-TEMPLATE-SEQUENCE
 
