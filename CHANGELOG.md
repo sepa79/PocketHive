@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.37] - 2026-10-19
+
+- Add composable SpEL functions `#emv_icc_mk_a`, `#emv_common_sk` and
+  `#iso9797_alg3_mac_m2` for EMV Option A key derivation, common session key
+  derivation and ISO 9797-1 Algorithm 3 MACs with method-2 padding. Includes
+  generic template examples, input validation and known-answer/rendering tests.
+
 ## [0.15.36] - 2026-09-29
 
 - Remove obsolete boundary scan snapshots, superseded design packs and closed

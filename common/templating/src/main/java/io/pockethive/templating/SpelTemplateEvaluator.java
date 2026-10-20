@@ -53,6 +53,16 @@ final class SpelTemplateEvaluator {
   private static final ExpressionParser PARSER = new SpelExpressionParser();
   private static final TypeLocator BLOCKING_TYPE_LOCATOR = new BlockingTypeLocator();
 
+  private static final Method EMV_ICC_MK_A_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(CryptoSpelFunctions.class, "emvIccMkA", String.class, String.class, String.class),
+    "EMV ICC key method missing");
+  private static final Method EMV_COMMON_SK_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(CryptoSpelFunctions.class, "emvCommonSk", String.class, String.class),
+    "EMV session key method missing");
+  private static final Method ISO9797_MAC_M2_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(CryptoSpelFunctions.class, "iso9797Alg3MacM2", String.class, String.class),
+    "ISO 9797 MAC method missing");
+
   private static final Method RAND_INT_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(SpelFunctions.class, "randInt", int.class, int.class),
     "randInt method missing");
@@ -128,6 +138,9 @@ final class SpelTemplateEvaluator {
     context.registerFunction("base64_encode", BASE64_ENCODE_METHOD);
     context.registerFunction("base64_decode", BASE64_DECODE_METHOD);
     context.registerFunction("hmac_sha256_hex", HMAC_SHA256_METHOD);
+    context.registerFunction(CryptoSpelFunctions.ICC_MK_A_NAME, EMV_ICC_MK_A_METHOD);
+    context.registerFunction(CryptoSpelFunctions.COMMON_SK_NAME, EMV_COMMON_SK_METHOD);
+    context.registerFunction(CryptoSpelFunctions.MAC_M2_NAME, ISO9797_MAC_M2_METHOD);
     context.registerFunction("regex_match", REGEX_MATCH_METHOD);
     context.registerFunction("regex_extract", REGEX_EXTRACT_METHOD);
     context.registerFunction("json_path", JSON_PATH_METHOD);
