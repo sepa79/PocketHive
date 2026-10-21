@@ -21,7 +21,7 @@ supported behavior and [the delivery index](inProgress/README.md) for remaining 
 
 ## Usage
 - [Usage Guide](USAGE.md)
-- [HiveForge Deployment](HIVEFORGE.md)
+- [PocketHive installation with HiveForge](HIVEFORGE.md)
 - Legacy UI helpers are archived under `archive/legacy-ui/`.
 
 ## Guides

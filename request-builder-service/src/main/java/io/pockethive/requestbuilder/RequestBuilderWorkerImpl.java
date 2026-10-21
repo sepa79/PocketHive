@@ -25,6 +25,7 @@ import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
+import io.pockethive.worker.sdk.templating.RenderedMessage;
 import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
@@ -123,7 +124,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
               .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
               .build();
 
-          MessageTemplateRenderer.RenderedMessage rendered =
+          RenderedMessage rendered =
               messageTemplateRenderer.render(template, effectiveSeed);
 
           Map<String, String> headers = new HashMap<>(rendered.headers());
@@ -157,7 +158,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
               .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
               .build();
 
-          MessageTemplateRenderer.RenderedMessage rendered =
+          RenderedMessage rendered =
               messageTemplateRenderer.render(template, effectiveSeed);
 
           Map<String, String> headers = new HashMap<>(rendered.headers());
@@ -322,7 +323,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         .bodyTemplate(isoDef.bodyTemplate())
         .headerTemplates(isoDef.headersTemplate() == null ? Map.of() : isoDef.headersTemplate())
         .build();
-    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
+    RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 
     Map<String, String> headers = new HashMap<>(rendered.headers());
     List<AuthRef> authApplications = isoDef.authRef() == null

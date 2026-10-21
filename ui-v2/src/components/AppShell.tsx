@@ -1,6 +1,7 @@
+import { AppShell as PocketAppShell } from '@pockethive/ui'
 import { AuthAccessNotice } from './AuthAccessNotice'
 import { Outlet } from 'react-router-dom'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SideNav } from './SideNav'
 import { TopBar } from './TopBar'
 import { ToolsBarProvider } from './ToolsBarContext'
@@ -25,14 +26,13 @@ function getInitialNavState(): NavState {
 }
 
 /**
- * Responsibility: compose navigation, global access status and routed page content.
- * Must not: derive permissions from grants or replace backend command authorization.
- * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (access presentation).
+ * Responsibility: compose PH navigation preferences, access status and routed content.
+ * Must not: own shared shell presentation or derive backend permissions.
+ * Contract: RESP-POCKET-UI-SHELL — docs/architecture/runtime-responsibilities.md#resp-pocket-ui-shell; RESP-UI-GLOBAL-ACCESS (access presentation).
  */
 export function AppShell() {
   const [nav, setNav] = useState<NavState>(() => getInitialNavState())
   const navExpanded = nav === 'expanded'
-  const shellClass = useMemo(() => (navExpanded ? 'appShell appShellNavExpanded' : 'appShell'), [navExpanded])
 
   useEffect(() => {
     try {
@@ -44,21 +44,15 @@ export function AppShell() {
 
   return (
     <ToolsBarProvider>
-      <div className={shellClass}>
-        <header className="topBar">
-          <TopBar />
-        </header>
-        <aside className="sideNav">
-          <SideNav expanded={navExpanded} onToggle={() => setNav((v) => (v === 'expanded' ? 'collapsed' : 'expanded'))} />
-        </aside>
-        <main className="appContent">
-          <PageToolsBar />
-          <div className="pageContent">
-            <AuthAccessNotice />
-            <Outlet />
-          </div>
-        </main>
-      </div>
+      <PocketAppShell
+        navigationExpanded={navExpanded}
+        header={<TopBar />}
+        navigation={<SideNav expanded={navExpanded} onExpandedChange={(expanded) => setNav(expanded ? 'expanded' : 'collapsed')} />}
+        toolbar={<PageToolsBar />}
+      >
+        <AuthAccessNotice />
+        <Outlet />
+      </PocketAppShell>
     </ToolsBarProvider>
   )
 }

@@ -1,11 +1,12 @@
 package io.pockethive.httpsequence;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
+import io.pockethive.requesttemplates.PortableHttpCall;
 import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.templatedata.JsonDocumentReader;
+import io.pockethive.templating.PortableHttpRequest;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
@@ -19,6 +20,7 @@ import io.pockethive.templating.api.TemplateRenderer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.LinkedHashMap;
@@ -29,7 +31,7 @@ import java.util.concurrent.atomic.LongAdder;
 
 /**
  * Responsibility: execute configured HTTP steps with delegated request rendering and scoped auth resources.
- * Must not: own another service's lifecycle or reimplement the shared template engine.
+ * Must not: own another service's lifecycle, parse documents or implement request/response semantics.
  * Delegates capture projection and SDK resource ownership through RESP-HTTP-SEQUENCE-DEBUG-CAPTURE.
  * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
  */
@@ -39,6 +41,8 @@ final class HttpSequenceRunner implements AutoCloseable {
   private final Clock clock;
   private final TemplateRenderer templateRenderer;
   private final HttpSequenceRequestRenderer requestRenderer;
+  private final HttpSequenceNativeResults nativeResults;
+  private final HttpSequencePortableCalls portableCalls;
   private final TemplateLoader templateLoader;
   private final HttpCallExecutor httpExecutor;
   private final HttpSequenceTargetResolver targetResolver;
@@ -67,6 +71,8 @@ final class HttpSequenceRunner implements AutoCloseable {
     this.clock = Objects.requireNonNull(clock, "clock");
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     this.requestRenderer = new HttpSequenceRequestRenderer(templateRenderer);
+    this.nativeResults = new HttpSequenceNativeResults(templateRenderer);
+    this.portableCalls = new HttpSequencePortableCalls();
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
     this.httpExecutor = Objects.requireNonNull(httpExecutor, "httpExecutor");
     this.targetResolver = Objects.requireNonNull(targetResolver, "targetResolver");
@@ -84,10 +90,7 @@ final class HttpSequenceRunner implements AutoCloseable {
     journeys.increment();
     WorkerInfo info = context.info();
 
-    Map<String, Object> payload = parsePayloadAsMap(seed.payload());
-    if (payload == null) {
-      payload = new java.util.LinkedHashMap<>();
-    }
+    Map<String, Object> payload = new LinkedHashMap<>(new JsonDocumentReader().readObject(seed.payload()));
     if (!config.vars().isEmpty()) {
       Map<String, Object> headers = new java.util.LinkedHashMap<>(seed.headers());
       headers.putIfAbsent("vars", config.vars());
@@ -100,27 +103,29 @@ final class HttpSequenceRunner implements AutoCloseable {
     try {
       List<HttpSequenceTargetResolver.BaseTarget> baseTargets = targetResolver.resolveBases(config);
       reloadTemplatesIfNeeded(config);
+      List<TemplateDefinition> admitted = admitSteps(config);
       try (AuthRuntime authRuntime = AuthRuntime.forTemplates(
           config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
         for (int i = 0; i < config.steps().size(); i++) {
           HttpSequenceWorkerConfig.Step step = config.steps().get(i);
-          if (step.callId() == null) {
-            throw new IllegalArgumentException("Missing callId for sequence step index " + i);
-          }
-
           String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
-          String key = io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, step.callId());
-          TemplateDefinition definition = templates.get(key);
-          if (!(definition instanceof HttpTemplateDefinition httpDef)) {
-            throw new IllegalArgumentException("Missing HTTP template for " + key);
+          TemplateDefinition definition = admitted.get(i);
+          RenderedCall rendered;
+          HttpSequenceTargetResolver.ResolvedTarget target;
+          if (definition instanceof PortableHttpCall portable) {
+            HttpSequenceTargetResolver.BaseTarget base = baseTargets.get(i);
+            PortableHttpRequest request = portableCalls.render(portable, base.baseUri(), payload, config.vars());
+            String query = request.uri().getRawQuery() == null ? "" : "?" + request.uri().getRawQuery();
+            rendered = new RenderedCall(request.method(), request.uri().getRawPath() + query,
+                request.body(), request.headers());
+            target = new HttpSequenceTargetResolver.ResolvedTarget(request.uri(), base.source(), base.sutEndpointId());
+          } else {
+            rendered = requestRenderer.render((HttpTemplateDefinition) definition, payload, current, context, authRuntime);
+            target = targetResolver.resolve(baseTargets.get(i), rendered.path());
           }
 
-          HttpCallExecutor.RenderedCall rendered =
-              requestRenderer.render(httpDef, payload, current, context, authRuntime);
-          HttpSequenceTargetResolver.ResolvedTarget target = targetResolver.resolve(baseTargets.get(i), rendered.path());
-
-          HttpCallAttempt attempt = executeWithRetry(step, target, rendered);
-          HttpCallExecutor.HttpCallResult result = attempt.result();
+          HttpCallAttempt attempt = executeWithRetry(step, target, rendered, definition instanceof PortableHttpCall);
+          HttpCallResult result = attempt.result();
 
           long durationMs = attempt.totalDurationMs();
           int attempts = attempt.attempts();
@@ -149,11 +154,16 @@ final class HttpSequenceRunner implements AutoCloseable {
             }
           }
 
-          boolean extractedOk = applyExtracts(step, payload, result, context);
-          if (!extractedOk) {
-            throw new IllegalStateException("Required extract missing for callId=" + step.callId());
+          if (definition instanceof PortableHttpCall portable) {
+            payload.putAll(portableCalls.extract(portable, result));
+          } else {
+            nativeResults.extract(step, result).forEach(update -> putPath(payload, update.path(), update.value()));
           }
-          applySetters(step, payload, current, context);
+          for (HttpSequenceWorkerConfig.SetValue setter : step.set()) {
+            if (setter.to() != null && setter.template() != null) {
+              putPath(payload, setter.to(), nativeResults.renderSetter(setter, payload, current));
+            }
+          }
 
           current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs,
               attempts, sha256, debugRef, bodyPreview, target, null);
@@ -193,6 +203,27 @@ final class HttpSequenceRunner implements AutoCloseable {
     }
   }
 
+  private List<TemplateDefinition> admitSteps(HttpSequenceWorkerConfig config) {
+    List<TemplateDefinition> admitted = new ArrayList<>();
+    Map<String, TemplateDefinition> available = templates;
+    for (int index = 0; index < config.steps().size(); index++) {
+      HttpSequenceWorkerConfig.Step step = config.steps().get(index);
+      if (step.callId() == null) {
+        throw new IllegalArgumentException("Missing callId for sequence step index " + index);
+      }
+      String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
+      String key = io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, step.callId());
+      TemplateDefinition definition = available.get(key);
+      if (definition instanceof PortableHttpCall portable) {
+        portableCalls.validate(step, portable);
+      } else if (!(definition instanceof HttpTemplateDefinition)) {
+        throw new IllegalArgumentException("Missing HTTP template for " + key);
+      }
+      admitted.add(definition);
+    }
+    return List.copyOf(admitted);
+  }
+
   private void publishStatus(WorkerContext context, HttpSequenceWorkerConfig config) {
     context.statusPublisher().update(status -> status
         .data("baseUrl", config.baseUrl())
@@ -218,7 +249,8 @@ final class HttpSequenceRunner implements AutoCloseable {
 
   private HttpCallAttempt executeWithRetry(HttpSequenceWorkerConfig.Step step,
                                            HttpSequenceTargetResolver.ResolvedTarget target,
-                                           HttpCallExecutor.RenderedCall rendered) {
+                                           RenderedCall rendered,
+                                           boolean portable) {
     HttpSequenceWorkerConfig.Retry retry = step.retry();
     int maxAttempts = retry == null ? 1 : retry.maxAttempts();
     if (maxAttempts <= 0) {
@@ -226,12 +258,12 @@ final class HttpSequenceRunner implements AutoCloseable {
     }
 
     long start = clock.millis();
-    HttpCallExecutor.HttpCallResult last = null;
+    HttpCallResult last = null;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        last = httpExecutor.execute(target.uri(), rendered);
+        last = portable ? httpExecutor.executeOnce(target.uri(), rendered) : httpExecutor.execute(target.uri(), rendered);
       } catch (Exception ex) {
-        last = new HttpCallExecutor.HttpCallResult(-1, Map.of(), "", ex.toString());
+        last = new HttpCallResult(-1, Map.of(), "", ex.toString());
       }
 
       boolean shouldRetry = attempt < maxAttempts && shouldRetry(retry, last);
@@ -255,7 +287,7 @@ final class HttpSequenceRunner implements AutoCloseable {
     return new HttpCallAttempt(maxAttempts, totalMs, last);
   }
 
-  private boolean shouldRetry(HttpSequenceWorkerConfig.Retry retry, HttpCallExecutor.HttpCallResult result) {
+  private boolean shouldRetry(HttpSequenceWorkerConfig.Retry retry, HttpCallResult result) {
     if (retry == null || retry.on().isEmpty() || result == null) {
       return false;
     }
@@ -325,85 +357,6 @@ final class HttpSequenceRunner implements AutoCloseable {
     return !value.isEmpty();
   }
 
-  private boolean applyExtracts(HttpSequenceWorkerConfig.Step step,
-                                Map<String, Object> payload,
-                                HttpCallExecutor.HttpCallResult result,
-                                WorkerContext context) {
-    if (step.extracts().isEmpty()) {
-      return true;
-    }
-
-    JsonNode body = null;
-    for (HttpSequenceWorkerConfig.Extract extract : step.extracts()) {
-      Object value = null;
-      if (extract.fromStatus()) {
-        value = result.statusCode();
-      } else if (extract.fromHeader() != null) {
-        String key = extract.fromHeader().toLowerCase(Locale.ROOT);
-        java.util.List<String> values = result.headers().get(key);
-        if (values != null && !values.isEmpty()) {
-          value = values.size() == 1 ? values.getFirst() : values;
-        }
-      } else if (extract.fromJsonPointer() != null) {
-        if (body == null) {
-          body = tryParseJson(result.body());
-        }
-        if (body != null) {
-          JsonNode selected = body.at(extract.fromJsonPointer());
-          if (selected != null && !selected.isMissingNode() && !selected.isNull()) {
-            value = jsonValue(selected);
-          }
-        }
-      }
-
-      if (value == null) {
-        if (extract.required()) {
-          context.logger().warn("Required extract missing for callId={} to={}", step.callId(), extract.to());
-          return false;
-        }
-        continue;
-      }
-      if (extract.to() != null) {
-        putPath(payload, extract.to(), value);
-      }
-    }
-    return true;
-  }
-
-  private void applySetters(HttpSequenceWorkerConfig.Step step,
-                            Map<String, Object> payload,
-                            WorkItem workItem,
-                            WorkerContext context) {
-    if (step.set().isEmpty()) {
-      return;
-    }
-    Map<String, Object> ctx = new java.util.HashMap<>();
-    ctx.put("payload", payload);
-    ctx.put("payloadAsJson", payload);
-    ctx.put("ctx", payload);
-    ctx.put("headers", workItem.headers());
-    Object vars = workItem.headers().get("vars");
-    if (vars != null) {
-      ctx.put("vars", vars);
-    }
-    ctx.put("workItem", workItem);
-
-    for (HttpSequenceWorkerConfig.SetValue setValue : step.set()) {
-      if (setValue.to() == null || setValue.template() == null) {
-        continue;
-      }
-      String rendered = templateRenderer.render(setValue.template(), ctx);
-      Object finalValue = rendered;
-      if (setValue.parseJson()) {
-        Object parsed = tryParseObject(rendered);
-        if (parsed != null) {
-          finalValue = parsed;
-        }
-      }
-      putPath(payload, setValue.to(), finalValue);
-    }
-  }
-
   private static void putPath(Map<String, Object> payload, String dottedPath, Object value) {
     String[] parts = dottedPath.split("\\.");
     Map<String, Object> current = payload;
@@ -430,7 +383,7 @@ final class HttpSequenceRunner implements AutoCloseable {
                                    Map<String, Object> payload,
                                    String serviceId,
                                    String callId,
-                                   HttpCallExecutor.HttpCallResult result,
+                                   HttpCallResult result,
                                    long durationMs,
                                    int attempts,
                                    String sha256,
@@ -475,7 +428,7 @@ final class HttpSequenceRunner implements AutoCloseable {
     try {
       return mapper.writeValueAsString(payload == null ? Map.of() : payload);
     } catch (Exception ex) {
-      return "{}";
+      throw new IllegalStateException("Failed to serialize HTTP sequence record", ex);
     }
   }
 
@@ -487,58 +440,6 @@ final class HttpSequenceRunner implements AutoCloseable {
       templates = loaded;
       lastTemplateConfigKey = key;
     }
-  }
-
-  private Map<String, Object> parsePayloadAsMap(String payload) {
-    if (payload == null || payload.isBlank()) {
-      return null;
-    }
-    try {
-      Object obj = mapper.readValue(payload, Object.class);
-      if (obj instanceof Map<?, ?> map) {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> cast = (Map<String, Object>) map;
-        return new java.util.LinkedHashMap<>(cast);
-      }
-      return null;
-    } catch (Exception ignored) {
-      return null;
-    }
-  }
-
-  private JsonNode tryParseJson(String body) {
-    if (body == null || body.isBlank()) {
-      return null;
-    }
-    try {
-      return mapper.readTree(body);
-    } catch (Exception ignored) {
-      return null;
-    }
-  }
-
-  private Object tryParseObject(String rendered) {
-    if (rendered == null || rendered.isBlank()) {
-      return null;
-    }
-    try {
-      return mapper.readValue(rendered, Object.class);
-    } catch (Exception ignored) {
-      return null;
-    }
-  }
-
-  private Object jsonValue(JsonNode node) {
-    if (node.isTextual()) return node.asText();
-    if (node.isNumber()) return node.numberValue();
-    if (node.isBoolean()) return node.asBoolean();
-    if (node.isObject() || node.isArray()) {
-      try {
-        return mapper.treeToValue(node, Object.class);
-      } catch (Exception ignored) {
-      }
-    }
-    return node.asText();
   }
 
   private static boolean shouldCapture(HttpSequenceWorkerConfig.DebugCapture capture, boolean isError) {
@@ -589,6 +490,6 @@ final class HttpSequenceRunner implements AutoCloseable {
     }
   }
 
-  private record HttpCallAttempt(int attempts, long totalDurationMs, HttpCallExecutor.HttpCallResult result) {
+  private record HttpCallAttempt(int attempts, long totalDurationMs, HttpCallResult result) {
   }
 }

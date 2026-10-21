@@ -267,6 +267,37 @@ class TemplateLoaderTest {
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("existing directory");
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"{}", "true", "trailing"})
+  void rejectsTrailingJsonInput(String trailing) throws Exception {
+    Path root = Files.createTempDirectory("trailing-template-json");
+    Files.writeString(root.resolve("call.json"), """
+        {"protocol":"HTTP","serviceId":"svc","callId":"call","method":"GET","pathTemplate":"/"}
+        """ + trailing);
+    assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("Failed to parse template");
+  }
+
+  @Test
+  void acceptsTrailingJsonWhitespace() throws Exception {
+    Path root = Files.createTempDirectory("template-json-whitespace");
+    Files.writeString(root.resolve("call.json"), """
+        {"protocol":"HTTP","serviceId":"svc","callId":"call","method":"GET","pathTemplate":"/"}
+         \t\r\n
+        """);
+    assertThat(new TemplateLoader().load(root.toString())).containsKey("svc::call");
+  }
+
+  @Test
+  void rejectsDuplicateJsonKeys() throws Exception {
+    Path root = Files.createTempDirectory("duplicate-template-json");
+    Files.writeString(root.resolve("call.json"), """
+        {"protocol":"HTTP","serviceId":"svc","callId":"one","callId":"two","method":"GET","pathTemplate":"/"}
+        """);
+    assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("Failed to parse template");
+  }
+
   @Test
   void rejectsDuplicateTemplateKeys() throws Exception {
     Path root = Files.createTempDirectory("duplicate-templates");

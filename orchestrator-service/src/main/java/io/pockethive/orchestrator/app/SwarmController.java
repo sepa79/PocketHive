@@ -969,21 +969,11 @@ public class SwarmController {
     private record ErrorResponse(String message) {}
 
     /**
-     * GET {@code /api/swarms} — list swarms from cached swarm-controller status-full snapshots.
+     * GET {@code /api/swarms} — list readable registered swarms as {@link SwarmStateView} projections.
      * <p>
-     * This endpoint intentionally reflects the orchestrator cache only: swarms without a cached
-     * swarm-controller status-full snapshot are omitted.
-     * <pre>{@code
-     * [
-     *   {
-     *     "id": "demo",
-     *     "status": "RUNNING",
-     *     "templateId": "baseline-demo",
-     *     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
-     *     "bees": [ { "role": "generator", "image": "ghcr.io/..." } ]
-     *   }
-     * ]
-     * }</pre>
+     * Each projection joins Orchestrator intent and operation state with the latest Controller
+     * observation context. Swarms without status are included with an empty observation object,
+     * null observedAt and observationStale=true. Results are sorted by swarm id.
      */
     @GetMapping
     public ResponseEntity<List<SwarmStateView>> list() {
@@ -1000,7 +990,10 @@ public class SwarmController {
     }
 
     /**
-     * GET {@code /api/swarms/{swarmId}} — fetch the latest cached swarm-controller status-full snapshot.
+     * GET {@code /api/swarms/{swarmId}} — fetch the registered swarm's {@link SwarmStateView} projection.
+     * <p>
+     * The observation field contains cached Controller context, not a raw status envelope. Before
+     * status arrives it is an empty object, observedAt is null and observationStale is true.
      */
     @GetMapping("/{swarmId}")
     public ResponseEntity<SwarmStateView> view(@PathVariable String swarmId) {

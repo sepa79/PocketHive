@@ -27,8 +27,8 @@ final class HttpSequenceDebugCapture {
 
     String project(HttpSequenceTargetResolver.ResolvedTarget target,
                    String serviceId, String callId,
-                   HttpCallExecutor.RenderedCall request,
-                   HttpCallExecutor.HttpCallResult result,
+                   RenderedCall request,
+                   HttpCallResult result,
                    HttpSequenceWorkerConfig.DebugCapture capture) {
       ObjectNode node = mapper.createObjectNode();
       node.put("serviceId", serviceId);

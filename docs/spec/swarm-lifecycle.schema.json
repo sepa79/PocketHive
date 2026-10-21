@@ -313,12 +313,7 @@
           "type": "array",
           "items": { "$ref": "#/$defs/WorkerSummary" }
         },
-        "observation": {
-          "oneOf": [
-            { "type": "object" },
-            { "type": "null" }
-          ]
-        }
+        "observation": { "type": "object" }
       },
       "allOf": [
         {

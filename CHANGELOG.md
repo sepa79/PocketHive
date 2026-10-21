@@ -4,7 +4,100 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Require structural reference documentation to derive from canonical contracts,
+  with manual review for explanatory content instead of documentation-conformance
+  tests. Policy update only; no documentation generator or runtime change.
+
+- Cover Hive runtime tuning through the rendered UI using the actual capability
+  catalogue: generator scheduler/Redis rates, processor concurrency and rate mode,
+  exact numeric patches, confirmed config rereads, invalid fractional thread counts
+  and read-only permissions. Isolated API fixtures; no operational swarm changes.
+- Exclude UI-only synthetic fixtures from production TypeScript inputs so the
+  isolated UI image build does not depend on backend test resources.
+
+- Tighten review evidence for structured-data readers and UI hydration: trace
+  producer → projection → consumer, validate successful runtime fixtures against
+  canonical schemas, manually review documentation agreement, verify visible values and
+  permission-aware controls, and block unresolved affected-path contract drift.
+  Review/checklist guidance only; no runtime or public contract change.
+
+- Expand control-envelope/status and Orchestrator REST field tables, required/null
+  semantics, full/delta retention and timestamp/freshness guidance. Correct stale
+  examples and mark superseded UI documentation. Documentation agreement remains
+  a manual review responsibility; no documentation tests or build hooks.
+
+- Fix blank Hive swarm details and missing runtime/config controls: read the
+  current Orchestrator state response, including per-instance worker observations,
+  instead of the removed status-full envelope wrapper. Show server observation
+  freshness and retain the exact run in journal links. Isolate detail request
+  lifecycle and cover the rendered flow with UI regression tests.
+
+- Validate Hive detail responses with the packaged canonical runtime schemas;
+  require an object observation (`{}` before first status). Reuse producer-owned
+  serialized fixtures in consumer tests. Bind authored scenario reads to the
+  selected swarm/run/template and caller, discard obsolete replies, and expose
+  runtime failures/retry on every detail tab without retaining worker controls.
+
+- Document deferred UI follow-ups: duplicate Cancel/oversized Remove-swarm
+  confirmation and missing actionable startup failure details. No implementation
+  or release change for these reports.
+
+- Move PH's own UI sign-in to the shared Pocket device-confirmation mechanism.
+  Local preview ports no longer need a registered callback. Keep the original
+  page/run link, existing permissions, bounded polling and CSRF-protected central
+  logout; remove the displaced UI PKCE consumer rather than relaxing redirects.
+- Include the referenced portable HTTP template contract in the built documentation.
+
+- Add portable-v1 calls shared by HTTP Sequence and PocketData, with one request/response contract and explicit record/params/endpoint binding. Reject unsupported capabilities and portable retry/extract policies before auth/HTTP effects.
+- Centralize strict JSON/XML, JSON Pointer/XPath, escaping and SOAP version/Fault/header rules in template-data. SDK/Redis/interceptor/clearing projections delegate without interpreting WorkItem payloads at transport boundaries.
+- Expose strict json_path, xml_path and explicit escaping in direct Pebble and SpEL adapters. Portable calls use a bounded compiler-admitted expression subset without eval/sequence, loops, imports or Java methods; native PH entrypoints remain available.
+- Verify portable SOAP11/12 calls through the local official ingress and actual HTTP Sequence workers; preserve opaque history, typed extra fields, whitespace and leading zeroes. HTTP-200 Fault produces one request and no retry, next step or output in a finite synthetic journey. No payment-system traffic or release.
+
+- Add the bounded no-redirect JVM device client, strict typed responses and safe
+  protocol failures. PocketData consumes shared identity/device clients instead
+  of its own PKCE/HTTP implementation. No shared-library publication.
+- Add `@pockethive/browser-auth` for PH-tab device confirmation, bounded polling,
+  cancellation, tab-scoped tokens and explicit sign-out; PocketData adopts it.
+
+- Add callback-free central logout for registered Pocket device clients, with
+  canonical logout URL discovery, CSRF-protected confirmation and a fixed PH
+  completion page. Existing exact-redirect browser logout is unchanged.
+
+- Extract the shared Pocket React shell/theme into `@pockethive/ui`; PH consumes
+  focused header, layout and controlled navigation components. Keep PH state,
+  routes, permissions and domain content in PH. No copied common styles.
+- Add first-party callback-free device authorization for PocketPlanner/PocketData
+  using the existing Spring OAuth stores, identity scope and token pipeline.
+  Confirmation is in PH with CSRF protection; PocketData adopts it and Planner
+  remains on its explicit current adapter. Existing PH redirect/PKCE security is
+  unchanged. Local only, no release.
+
+- Register PocketData as an independent first-party browser client (`pocketdata-web`)
+  through the existing PH SSO owner; configure its exact callback with
+  `POCKETHIVE_AUTH_WEB_PD_REDIRECT_URI` (`POCKETDATA_BROWSER_CALLBACK` in Compose).
+  Reuse central login, PKCE, identity and logout without adding credentials or issuers.
+
+- Add registered first-party PH/PP browser clients to PH Auth, with PKCE, exact callbacks, central browser login, revocation-aware REST identity resolution and authenticated journal deep links across tabs/tools. No release or remote deployment.
+
+- PocketPlanner integration (local): consume the authenticated master catalogue;
+  select Plan/Stream/Activity during swarm creation and on an existing run; persist
+  `testPlan` and append Activity tags immediately after confirmed creation. Preserve
+  notes and prior associations under concurrent edits; reject stale selections,
+  different plans and tag capacity overflow. Retry failed association without
+  repeating an accepted CREATE. No automatic Activity lifecycle or progress changes.
+
+- Docs: consolidate the current HiveForge installation procedure, complete
+  Swarm profile configuration and public-ingress verification; correct unsupported
+  profile/stack-name claims and require deployment-input guidance before releases.
+
 ## [0.15.36] - 2026-09-29
+
+- HiveForge operator configuration: upgrading from 0.15.34 or 0.15.35 requires
+  explicit `POCKETHIVE_WORK_TYPE`, `POCKETHIVE_PUBLIC_INGRESS`,
+  `POCKETHIVE_PUBLIC_HOST` and `POCKETHIVE_ALLOW_REMOTE_HTTP`. See the
+  [migration index](docs/UPGRADING.md#hiveforge-deployment-inputs-from-01534-or-01535)
+  and [current installation guide](docs/HIVEFORGE.md) for complete profile
+  configuration, WORK/CONTROL selection and shared Auth/MCP public identity.
 
 - Remove obsolete boundary scan snapshots, superseded design packs and closed
   review reports; simplify the delivery index and retain current acceptance evidence.

@@ -1,0 +1,14 @@
+{
+  "profile": "portable-v1",
+  "requires": ["json_path", "json_string"],
+  "request": {
+    "serviceId": "accounts", "callId": "create", "protocol": "HTTP",
+    "method": "POST", "pathTemplate": "{{ endpoint.path }}",
+    "headersTemplate": {"Content-Type": "application/json"},
+    "bodyTemplate": "{\"customerId\":{{ json_string(json_path(record, '/customerId')) }},\"productClass\":{{ json_string(params.productClass) }}}"
+  },
+  "response": {
+    "kind": "JSON", "soapAction": "", "expectedStatus": 201,
+    "extract": {"accountNumber": "/accountNumber"}, "namespaces": {}
+  }
+}

@@ -6,6 +6,8 @@ by the UI under `/docs/...` as part of the runtime image.
 
 ## Operator / Running PocketHive
 
+- `docs/HIVEFORGE.md` – current Swarm installation, complete profile configuration,
+  HiveForge MCP deployment and public-ingress verification.
 - `docs/UPGRADING.md` – required version-to-version migration actions.
 - `docs/USAGE.md` – how to run the stack, use the UI, create/start
   swarms, and interpret buffer guards.

@@ -1,7 +1,8 @@
-import { normalizeUser, normalizeSession, readStoredAuthSession, writeStoredAuthSession, readStoredAccessToken } from './authSession'
-import type { AuthGrant, AuthenticatedUser, AuthSession } from './authSession'
-export { readStoredAuthSession, writeStoredAuthSession, readStoredAccessToken, clearAuthSession, replaceSessionUser } from './authSession'
-export type { AuthGrant, AuthenticatedUser, AuthSession } from './authSession'
+import { readStoredAccessToken } from './authSession'
+import { normalizeUser } from './authIdentity'
+import type { AuthGrant, AuthenticatedUser } from './authIdentity'
+export { readStoredAccessToken } from './authSession'
+export type { AuthGrant, AuthenticatedUser } from './authIdentity'
 
 export type UserUpsertRequest = {
   username: string
@@ -16,7 +17,7 @@ export type UserGrantsReplaceRequest = {
 type ApiError = Error & { status?: number }
 
 const AUTH_PREFIXES = ['/scenario-manager/', '/orchestrator/', '/network-proxy-manager/', '/auth-service/']
-const AUTH_EXCLUDED_PATHS = new Set(['/auth-service/api/auth/dev/login'])
+const AUTH_EXCLUDED_PATHS = new Set(['/auth-service/api/auth/dev/login', '/auth-service/oauth/token', '/auth-service/oauth/revoke', '/auth-service/oauth/device_authorization'])
 
 let authenticatedFetchInstalled = false
 
@@ -43,33 +44,6 @@ async function ensureOk(response: Response, fallback: string) {
   const error: ApiError = new Error(message || fallback)
   error.status = response.status
   throw error
-}
-
-export async function loginDevUser(username: string): Promise<AuthSession> {
-  const trimmed = username.trim()
-  const response = await fetch('/auth-service/api/auth/dev/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ username: trimmed }),
-  })
-  await ensureOk(response, 'Dev login failed')
-  const session = normalizeSession(await response.json())
-  if (!session) throw new Error('Auth service returned invalid session payload')
-  writeStoredAuthSession(session)
-  return session
-}
-
-export async function fetchCurrentUser(accessToken: string): Promise<AuthenticatedUser> {
-  const response = await fetch('/auth-service/api/auth/me', {
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
-  await ensureOk(response, 'Failed to resolve current user')
-  const user = normalizeUser(await response.json())
-  if (!user) throw new Error('Auth service returned invalid user payload')
-  return user
 }
 
 export async function listAdminUsers(): Promise<AuthenticatedUser[]> {

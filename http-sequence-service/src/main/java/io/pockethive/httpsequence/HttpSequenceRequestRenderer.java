@@ -26,7 +26,7 @@ final class HttpSequenceRequestRenderer {
         this.renderer = Objects.requireNonNull(renderer, "renderer");
     }
 
-    HttpCallExecutor.RenderedCall render(HttpTemplateDefinition definition, Map<String, Object> payload,
+    RenderedCall render(HttpTemplateDefinition definition, Map<String, Object> payload,
         WorkItem workItem, WorkerContext context, AuthRuntime authRuntime) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("payload", payload);
@@ -55,7 +55,7 @@ final class HttpSequenceRequestRenderer {
             path = request.path();
         }
         String upper = method == null || method.isBlank() ? "GET" : method.toUpperCase(Locale.ROOT);
-        return new HttpCallExecutor.RenderedCall(upper, path, body, Map.copyOf(headers));
+        return new RenderedCall(upper, path, body, Map.copyOf(headers));
     }
 
     private String render(String label, String template, Map<String, Object> variables) {

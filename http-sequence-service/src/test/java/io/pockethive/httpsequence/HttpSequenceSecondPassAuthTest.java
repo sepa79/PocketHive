@@ -288,7 +288,7 @@ class HttpSequenceSecondPassAuthTest {
       var redis = new RedisSequenceProperties();
       redis.setHost(System.getenv("AUTH_REDIS_TEST_HOST"));
       redis.setPort(Integer.parseInt(System.getenv("AUTH_REDIS_TEST_PORT")));
-      var executor = new ApacheHttpCallExecutor(transport);
+      var executor = new ApacheHttpCallExecutor(transport, transport);
       runner = new HttpSequenceRunner(new ObjectMapper().findAndRegisterModules(), Clock.systemUTC(),
           (template, ignored) -> template == null ? "" : template, new TemplateLoader(),
           (target, call) -> {

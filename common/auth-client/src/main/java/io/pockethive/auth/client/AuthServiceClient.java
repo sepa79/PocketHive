@@ -9,8 +9,8 @@ import java.time.Duration;
 import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
@@ -27,17 +27,10 @@ public final class AuthServiceClient {
         Objects.requireNonNull(connectTimeout, "connectTimeout");
         Objects.requireNonNull(readTimeout, "readTimeout");
 
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Math.toIntExact(connectTimeout.toMillis()));
-        requestFactory.setReadTimeout(Math.toIntExact(readTimeout.toMillis()));
-
-        this.restClient = RestClient.builder()
-            .baseUrl(baseUrl.toString())
-            .requestFactory(requestFactory)
-            .build();
+        this.restClient = AuthServiceRestClients.create(baseUrl, connectTimeout, readTimeout);
     }
 
-    public AuthServiceClient(RestClient restClient) {
+    AuthServiceClient(RestClient restClient) {
         this.restClient = Objects.requireNonNull(restClient, "restClient");
     }
 
@@ -53,7 +46,9 @@ public final class AuthServiceClient {
                 .retrieve()
                 .body(AuthenticatedUserDto.class);
         } catch (RestClientResponseException e) {
-            throw new AuthServiceClientException("Auth service resolve failed", e.getStatusCode().value(), e);
+            throw new AuthServiceClientException("Auth service resolve failed", e.getStatusCode().value(), null);
+        } catch (RestClientException failure) {
+            throw new AuthServiceClientException("Auth service resolve unavailable", 503, null);
         }
     }
 
@@ -67,7 +62,9 @@ public final class AuthServiceClient {
                 .retrieve()
                 .body(SessionResponseDto.class);
         } catch (RestClientResponseException e) {
-            throw new AuthServiceClientException("Auth service dev login failed", e.getStatusCode().value(), e);
+            throw new AuthServiceClientException("Auth service dev login failed", e.getStatusCode().value(), null);
+        } catch (RestClientException failure) {
+            throw new AuthServiceClientException("Auth service dev login unavailable", 503, null);
         }
     }
 
@@ -82,7 +79,9 @@ public final class AuthServiceClient {
                 .retrieve()
                 .body(SessionResponseDto.class);
         } catch (RestClientResponseException e) {
-            throw new AuthServiceClientException("Auth service service login failed", e.getStatusCode().value(), e);
+            throw new AuthServiceClientException("Auth service service login failed", e.getStatusCode().value(), null);
+        } catch (RestClientException failure) {
+            throw new AuthServiceClientException("Auth service service login unavailable", 503, null);
         }
     }
 
@@ -94,7 +93,9 @@ public final class AuthServiceClient {
                 .retrieve()
                 .body(AuthenticatedUserDto.class);
         } catch (RestClientResponseException e) {
-            throw new AuthServiceClientException("Auth service request failed for " + path, e.getStatusCode().value(), e);
+            throw new AuthServiceClientException("Auth service request failed for " + path, e.getStatusCode().value(), null);
+        } catch (RestClientException failure) {
+            throw new AuthServiceClientException("Auth service identity unavailable", 503, null);
         }
     }
 

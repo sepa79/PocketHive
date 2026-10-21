@@ -238,7 +238,7 @@ class HttpSequenceOAuthCompatibilityTest {
       redis.setPort(Integer.parseInt(System.getenv("AUTH_REDIS_TEST_PORT")));
       runner = new HttpSequenceRunner(new ObjectMapper().findAndRegisterModules(), Clock.systemUTC(),
           (template, ignored) -> template == null ? "" : template, new TemplateLoader(),
-          new ApacheHttpCallExecutor(transport), new DefaultHttpSequenceTargetResolver(), redis);
+          new ApacheHttpCallExecutor(transport, transport), new DefaultHttpSequenceTargetResolver(), redis);
       config = new HttpSequenceWorkerConfig("http://127.0.0.1:" + resource.getAddress().getPort(), templates.toString(), "default", 1,
           List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
           new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1), Map.of());

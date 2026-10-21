@@ -3,31 +3,20 @@ import type { BundleTemplateEntry as ScenarioTemplate } from '../../lib/scenario
 import type { NetworkMode } from '../../lib/NetworkMode'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import YAML from 'yaml'
-import { MonacoEditorHost } from '../../components/MonacoEditorHost'
-import { BundleFileTree } from '../../components/scenarios/BundleFileTree'
-import { ScenarioTree } from '../../components/scenarios/ScenarioTree'
 import { useAuth } from '../../lib/authContext'
-import { monacoLanguageForBundleFile } from '../../lib/bundleEditor'
 import { readBundleFile, readBundleTree, type BundleFilePayload, type BundleTreeNode } from '../../lib/scenariosApi'
 import { newUuid } from '../../lib/uuid'
+import { parseControlResponse } from '@pockethive/swarm-lifecycle-contract'
+import { usePlannerSelection } from '../../components/planner/usePlannerSelection'
+import { PlannerPicker } from '../../components/planner/PlannerPicker'
+import { plannerRequest } from '../../components/planner/plannerApi'
+import { completePlannerCreation } from '../../components/planner/completePlannerCreation'
+import type { PlannerCreation } from '../../components/planner/PlannerCreation'
+import styles from './CreateSwarmDialog.module.css'
 
-type VariablesProfile = {
-  id: string
-  name: string | null
-}
-
-type NetworkProfileOption = {
-  id: string
-  name: string | null
-}
-
-type VariablesMeta = {
-  exists: boolean
-  hasGlobalVars: boolean
-  hasSutVars: boolean
-  profiles: VariablesProfile[]
-}
-
+import { CreateSwarmDialog } from './CreateSwarmDialog'
+import type { SwarmVariablesMeta as VariablesMeta } from './SwarmVariablesMeta'
+import type { SwarmNetworkProfileOption as NetworkProfileOption } from './SwarmNetworkProfileOption'
 
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 
@@ -68,7 +57,7 @@ function extractVariablesMeta(yamlText: string): VariablesMeta {
   }
   const obj = parsed as Record<string, unknown>
 
-  const profiles: VariablesProfile[] = Array.isArray(obj.profiles)
+  const profiles: VariablesMeta['profiles'] = Array.isArray(obj.profiles)
     ? obj.profiles
         .map((raw) => {
           if (!raw || typeof raw !== 'object') return null
@@ -78,7 +67,7 @@ function extractVariablesMeta(yamlText: string): VariablesMeta {
           const name = typeof rec.name === 'string' && rec.name.trim().length > 0 ? rec.name.trim() : null
           return { id, name }
         })
-        .filter((p): p is VariablesProfile => p !== null)
+        .filter((p): p is VariablesMeta['profiles'][number] => p !== null)
     : []
 
   const defs: unknown[] = Array.isArray(obj.definitions) ? obj.definitions : []
@@ -141,6 +130,9 @@ export function CreateSwarmModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [linkPlanner, setLinkPlanner] = useState(false)
+  const [pendingCreation, setPendingCreation] = useState<PlannerCreation | null>(null)
+  const planner = usePlannerSelection(open && linkPlanner)
 
   const loadNetworkProfiles = useCallback(async () => {
     try {
@@ -378,7 +370,6 @@ export function CreateSwarmModal({
     return open
   }, [selectedTemplate?.folderPath, templateFilter])
 
-  const hasBundleSuts = sutIds.length > 0
   const requiresProfile = variablesMeta.exists && (variablesMeta.hasGlobalVars || variablesMeta.hasSutVars)
   const requiresSut = variablesMeta.exists && variablesMeta.hasSutVars
 
@@ -388,6 +379,25 @@ export function CreateSwarmModal({
       if (busy) return
       setError(null)
       setMessage(null)
+
+      if (pendingCreation) {
+        if (!planner.selection) {
+          setError('Choose the intended Activity again before retrying the association.')
+          return
+        }
+        setBusy(true)
+        try {
+          await completePlannerCreation(pendingCreation, planner.selection)
+          setPendingCreation(null)
+          setSwarmId('')
+          onCreated()
+          onClose()
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : 'Cannot link the accepted creation')
+          setMessage(`CREATE was already accepted for ${pendingCreation.swarmId}. Only the association is retried.`)
+        } finally { setBusy(false) }
+        return
+      }
 
       const trimmedSwarmId = swarmId.trim()
       const selectedTemplate = runnableTemplates.find((template) => template.bundleKey === selectedBundleKey) ?? null
@@ -427,9 +437,17 @@ export function CreateSwarmModal({
         return
       }
 
+      if (linkPlanner && !planner.selection) {
+        setError('Choose a PocketPlanner Plan, Stream and Activity. Reload plans after a conflict.')
+        return
+      }
+
       setBusy(true)
       try {
-        const response = await fetch(`${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(trimmedSwarmId)}/create`, {
+        let creation: PlannerCreation | null = null
+        if (!creation) {
+          if (linkPlanner && planner.selection) await plannerRequest('/validate', planner.selection)
+          const response = await fetch(`${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(trimmedSwarmId)}/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -441,9 +459,18 @@ export function CreateSwarmModal({
             networkMode,
             networkProfileId: networkMode === 'PROXIED' ? trimmedNetworkProfileId : null,
           }),
-        })
-        if (!response.ok) {
-          throw new Error(await readErrorMessage(response))
+          })
+          if (!response.ok) throw new Error(await readErrorMessage(response))
+          if (linkPlanner) {
+            creation = { swarmId: trimmedSwarmId, accepted: parseControlResponse(await response.json()) }
+            setPendingCreation(creation)
+          }
+        }
+        if (creation) {
+          if (!planner.selection) throw new Error('Select the intended Activity before retrying the association')
+          setMessage(`CREATE accepted for ${creation.swarmId}. Confirming creation and saving the Planner association. If linking fails, retry only the association.`)
+          await completePlannerCreation(creation, planner.selection)
+          setPendingCreation(null)
         }
         setMessage(`Create request accepted for ${trimmedSwarmId}.`)
         setSwarmId('')
@@ -467,262 +494,65 @@ export function CreateSwarmModal({
         setBusy(false)
       }
     },
-    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, runnableTemplates, selectedBundleKey, swarmId, sutId, variablesProfileId],
+    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, runnableTemplates, selectedBundleKey, swarmId, sutId, variablesProfileId, linkPlanner, planner.selection, pendingCreation],
   )
 
   if (!open) return null
 
   return (
-    <div className="modalBackdrop" role="presentation" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-        <div className="modalHeader">
-          <div>
-            <div className="h2">Create swarm</div>
-            <div className="muted">Provision a controller from a scenario bundle.</div>
-          </div>
-          <button type="button" className="actionButton actionButtonGhost" onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        {catalogueError ? <div className="card swarmMessage">{catalogueError}</div> : null}
-        {error ? <div className="card swarmMessage">{error}</div> : null}
-        {message ? <div className="card swarmMessage">{message}</div> : null}
-
-        <form className="modalSection modalSectionGrow" onSubmit={handleCreate}>
-          <div className="formGrid">
-            <label className="field">
-              <span className="fieldLabel">Swarm ID</span>
-              <input className="textInput" value={swarmId} onChange={(event) => setSwarmId(event.target.value)} placeholder="demo" />
-            </label>
-
-            <label className="field">
-              <span className="fieldLabel">Network mode</span>
-              <select
-                className="textInput"
-                value={networkMode}
-                onChange={(event) => {
-                  const nextMode: NetworkMode = event.target.value === 'PROXIED' ? 'PROXIED' : 'DIRECT'
-                  setNetworkMode(nextMode)
-                  if (nextMode === 'DIRECT') {
-                    setNetworkProfileId('')
-                  } else if (networkProfiles.length === 1) {
-                    setNetworkProfileId(networkProfiles[0].id)
-                  }
-                }}
-              >
-                <option value="DIRECT">Direct</option>
-                <option value="PROXIED">Proxied</option>
-              </select>
-            </label>
-
-            <label className="field">
-              <span className="fieldLabel">Bundle SUT{requiresSut ? ' (required)' : ''}</span>
-              <select
-                className="textInput"
-                value={sutId}
-                onChange={(event) => setSutId(event.target.value)}
-                disabled={!hasBundleSuts}
-              >
-                <option value="">{hasBundleSuts ? '(none)' : '(none available)'}</option>
-                {sutIds.map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {networkMode === 'PROXIED' ? (
-              <label className="field">
-                <span className="fieldLabel">Network profile (required)</span>
-                <select
-                  className="textInput"
-                  value={networkProfileId}
-                  onChange={(event) => setNetworkProfileId(event.target.value)}
-                  disabled={networkProfiles.length === 0}
-                >
-                  <option value="">{networkProfiles.length === 0 ? '(no profiles available)' : '(select)'}</option>
-                  {networkProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name ? `${profile.name} (${profile.id})` : profile.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <div />
-            )}
-
-            {variablesMeta.exists ? (
-              <label className="field">
-                <span className="fieldLabel">Variables profile{requiresProfile ? ' (required)' : ''}</span>
-                <select
-                  className="textInput"
-                  value={variablesProfileId}
-                  onChange={(event) => setVariablesProfileId(event.target.value)}
-                >
-                  <option value="">(select)</option>
-                  {variablesMeta.profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name ? `${profile.name} (${profile.id})` : profile.id}
-                    </option>
-                  ))}
-                </select>
-                <div className="muted" style={{ marginTop: 6 }}>
-                  vars: {variablesMeta.hasGlobalVars ? 'global' : '—'} · {variablesMeta.hasSutVars ? 'sut' : '—'}
-                </div>
-              </label>
-            ) : (
-              <div />
-            )}
-          </div>
-
-          <div className="swarmTemplatePicker swarmTemplatePickerGrow" style={{ marginTop: 12 }}>
-            <div className="swarmTemplateList">
-              <div className="swarmTemplateListHeader">
-                <span>Scenarios</span>
-                <input
-                  className="textInput textInputCompact"
-                  value={templateFilter}
-                  onChange={(event) => setTemplateFilter(event.target.value)}
-                  placeholder="Filter scenarios"
-                  aria-label="Scenario filter"
-                />
-              </div>
-              <div className="swarmTemplateListBody">
-                {!templatesLoaded ? (
-                  <div className="muted">Loading scenarios…</div>
-                ) : runnableTemplates.length === 0 ? (
-                  <div className="muted">
-                    No runnable scenarios found.
-                  </div>
-                ) : (
-                  <>
-                    {runnableTemplates.some((template) => template.defunct) ? (
-                      <div className="muted" style={{ fontSize: 11, padding: '4px 0' }}>
-                        {runnableTemplates.filter((template) => template.defunct).length} bundle(s) are defunct and shown as non-runnable
-                      </div>
-                    ) : null}
-                    <ScenarioTree
-                      items={runnableTemplates}
-                      selectedBundleKey={selectedBundleKey}
-                      onSelectBundle={setSelectedBundleKey}
-                      searchTerm={templateFilter}
-                      openPaths={openFolderPaths}
-                      rowHeight={30}
-                      emptyMessage="No scenarios found."
-                    />
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="swarmTemplateDetail">
-              {selectedTemplate ? (
-                <>
-                  <div className={selectedTemplate.defunct ? 'swarmTemplateTitle swarmTemplateTitleDefunct' : 'swarmTemplateTitle'}>
-                    {selectedTemplate.name}
-                  </div>
-                  <div className="swarmTemplateId">
-                    {selectedTemplate.bundlePath}
-                  </div>
-                  <div className="muted">
-                    {selectedTemplate.defunct
-                      ? (selectedTemplate.defunctReason ?? 'This bundle is unavailable.')
-                      : (selectedTemplate.description ?? 'No description provided.')}
-                  </div>
-                  {selectedTemplate.defunct ? (
-                    <div className="card swarmMessage" style={{ marginTop: 12 }}>
-                      <div className="pill pillBad">DEFUNCT</div>
-                      <div className="muted" style={{ marginTop: 8 }}>{selectedTemplate.defunctReason ?? 'Reason unavailable.'}</div>
-                    </div>
-                  ) : null}
-                  <div className="swarmTemplateMeta">
-                    <div>
-                      <span className="fieldLabel">Controller image</span>
-                      <div className="swarmTemplateValue">{selectedTemplate.controllerImage ?? '—'}</div>
-                    </div>
-                    <div>
-                      <span className="fieldLabel">Bees</span>
-                      <div className="swarmTemplateValue">
-                        {selectedTemplate.bees.length === 0 ? '—' : selectedTemplate.bees.map((bee) => bee.role).join(', ')}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="swarmTemplateMeta bundleWorkspacePreviewGrid">
-                    <div>
-                      <span className="fieldLabel">Bundle files</span>
-                      {bundleTreeLoading ? (
-                        <div className="muted" style={{ marginTop: 8 }}>Loading files…</div>
-                      ) : bundleTreeError ? (
-                        <div className="warningText" style={{ marginTop: 8 }}>{bundleTreeError}</div>
-                      ) : (
-                        <BundleFileTree
-                          nodes={bundleTreeNodes}
-                          selectedPath={selectedFilePath}
-                          onSelectFile={setSelectedFilePath}
-                          height={190}
-                        />
-                      )}
-                    </div>
-                    <div className="scenarioFilePreview">
-                      <div className="scenarioFilePreviewHeader">
-                        <div className="scenarioTreeTitle">{selectedFilePath ?? 'No file selected'}</div>
-                        {selectedFile ? <div className="pill pillInfo">{selectedFile.editorKind}</div> : null}
-                      </div>
-                      {selectedFileLoading ? (
-                        <div className="scenarioFileUnsupported">Loading file…</div>
-                      ) : selectedFileError ? (
-                        <div className="scenarioFileUnsupported warningText">{selectedFileError}</div>
-                      ) : selectedFile && selectedFile.content !== null ? (
-                        <div className="scenarioFilePreviewBody">
-                          <MonacoEditorHost
-                            className="monacoSurface"
-                            value={selectedFile.content}
-                            language={monacoLanguageForBundleFile(selectedFile.editorKind)}
-                            theme="vs-dark"
-                            options={{
-                              readOnly: true,
-                              automaticLayout: true,
-                              minimap: { enabled: false },
-                              scrollBeyondLastLine: false,
-                              wordWrap: 'on',
-                              fontSize: 12,
-                            }}
-                          />
-                        </div>
-                      ) : selectedFile ? (
-                        <div className="scenarioFileUnsupported">
-                          This file is not editable or previewable in New Swarm.
-                        </div>
-                      ) : (
-                        <div className="scenarioFileUnsupported">Select a file to preview it.</div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="muted">Select a scenario to see details.</div>
-              )}
-            </div>
-          </div>
-
-          <div className="swarmCreateActions" style={{ marginTop: 12 }}>
-            <label className={autoPullImages ? 'swarmCreateToggle swarmCreateToggleChecked' : 'swarmCreateToggle'}>
-              <input
-                type="checkbox"
-                checked={autoPullImages}
-                onChange={(event) => setAutoPullImages(event.target.checked)}
-                disabled={busy || !selectedTemplate || selectedTemplate.defunct || !selectedTemplate.id}
-              />
-              <span>Pull images</span>
-            </label>
-            <button type="submit" className="actionButton" disabled={busy || !selectedTemplate || selectedTemplate.defunct}>
-              {busy ? 'Creating…' : 'Create'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <CreateSwarmDialog
+      creationPending={pendingCreation !== null}
+      plannerControls={<div className={styles.planner}>
+        <label><input type="checkbox" checked={linkPlanner} onChange={event => setLinkPlanner(event.target.checked)} disabled={busy || pendingCreation !== null} />Link to PocketPlanner</label>
+        {linkPlanner && <PlannerPicker state={planner} disabled={busy} />}
+      </div>}
+      swarmId={swarmId}
+      networkMode={networkMode}
+      sutIds={sutIds}
+      sutId={sutId}
+      networkProfiles={networkProfiles}
+      networkProfileId={networkProfileId}
+      variablesMeta={variablesMeta}
+      variablesProfileId={variablesProfileId}
+      requiresSut={requiresSut}
+      requiresProfile={requiresProfile}
+      templates={runnableTemplates}
+      templatesLoaded={templatesLoaded}
+      templateFilter={templateFilter}
+      selectedBundleKey={selectedBundleKey}
+      selectedTemplate={selectedTemplate}
+      openFolderPaths={openFolderPaths}
+      bundleTreeNodes={bundleTreeNodes}
+      bundleTreeLoading={bundleTreeLoading}
+      bundleTreeError={bundleTreeError}
+      selectedFilePath={selectedFilePath}
+      selectedFile={selectedFile}
+      selectedFileLoading={selectedFileLoading}
+      selectedFileError={selectedFileError}
+      autoPullImages={autoPullImages}
+      busy={busy}
+      catalogueError={catalogueError}
+      error={error}
+      message={message}
+      onClose={() => {
+        if (busy) return
+        if (pendingCreation) { setPendingCreation(null); onCreated() }
+        onClose()
+      }}
+      onSubmit={handleCreate}
+      onSwarmIdChange={setSwarmId}
+      onNetworkModeChange={(nextMode) => {
+        setNetworkMode(nextMode)
+        if (nextMode === 'DIRECT') setNetworkProfileId('')
+        else if (networkProfiles.length === 1) setNetworkProfileId(networkProfiles[0].id)
+      }}
+      onSutIdChange={setSutId}
+      onNetworkProfileIdChange={setNetworkProfileId}
+      onVariablesProfileIdChange={setVariablesProfileId}
+      onTemplateFilterChange={setTemplateFilter}
+      onSelectBundle={setSelectedBundleKey}
+      onSelectFile={setSelectedFilePath}
+      onAutoPullImagesChange={setAutoPullImages}
+    />
   )
 }

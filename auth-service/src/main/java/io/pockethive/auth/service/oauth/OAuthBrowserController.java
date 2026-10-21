@@ -78,6 +78,7 @@ public final class OAuthBrowserController {
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
+        if (request.getSession(false) != null) request.changeSessionId();
         contexts.saveContext(context, request, response);
         var saved = new org.springframework.security.web.savedrequest.HttpSessionRequestCache()
             .getRequest(request, response);

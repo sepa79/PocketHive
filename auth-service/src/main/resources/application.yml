@@ -4,6 +4,14 @@ spring:
 
 server:
   forward-headers-strategy: framework
+  servlet:
+    session:
+      timeout: ${POCKETHIVE_AUTH_SERVICE_SESSION_TTL:PT8H}
+      cookie:
+        name: ${POCKETHIVE_AUTH_SSO_COOKIE_NAME:PH_AUTH_SSO}
+        path: /auth-service
+        http-only: true
+        same-site: lax
 
 management:
   endpoints:
@@ -20,6 +28,7 @@ pockethive:
       issuer: ${POCKETHIVE_AUTH_OAUTH_ISSUER:http://localhost:8080/auth-service}
       resource: ${POCKETHIVE_AUTH_OAUTH_RESOURCE:http://localhost:8080/mcp}
       authorization-code-ttl: ${POCKETHIVE_AUTH_OAUTH_CODE_TTL:PT2M}
+      device-code-ttl: ${POCKETHIVE_AUTH_OAUTH_DEVICE_CODE_TTL:PT5M}
       access-token-ttl: ${POCKETHIVE_AUTH_OAUTH_ACCESS_TOKEN_TTL:PT8H}
       refresh-token-ttl: ${POCKETHIVE_AUTH_OAUTH_REFRESH_TOKEN_TTL:P30D}
       dynamic-client-ttl: ${POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL:P31D}
@@ -29,6 +38,10 @@ pockethive:
       vscode-redirect-uri: ${POCKETHIVE_AUTH_OAUTH_VSCODE_REDIRECT_URI:http://127.0.0.1/callback}
       introspection-client-id: pockethive-mcp
       introspection-client-secret: ${POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET:pockethive-mcp-local-introspection-secret}
+      pocket-hive-browser-redirect-uri: ${POCKETHIVE_AUTH_WEB_PH_REDIRECT_URI:}
+      pocket-planner-browser-redirect-uri: ${POCKETHIVE_AUTH_WEB_PP_REDIRECT_URI:}
+      pocket-data-browser-redirect-uri: ${POCKETHIVE_AUTH_WEB_PD_REDIRECT_URI:}
+
     users:
       - id: 11111111-1111-1111-1111-111111111111
         username: local-admin

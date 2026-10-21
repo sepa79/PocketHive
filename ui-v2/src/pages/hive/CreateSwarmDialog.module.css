@@ -1,0 +1,159 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 500;
+}
+
+.dialog {
+  width: min(1840px, 96vw);
+  height: calc(92vh - 8px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  font-size: 14px;
+}
+
+.dialog, .dialog * { box-sizing: border-box; }
+.dialog [hidden] { display: none; }
+.dialog :global(.textInput) { min-width: 0; width: 100%; font-size: 14px; }
+.dialog :global(.actionButton), .dialog :global(.btnPrimary) { font-size: 14px; }
+
+.header {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 16px;
+}
+
+.header h2 { margin: 0; font-size: 20px; }
+.subtitle { margin-top: 4px; font-size: 14px; color: var(--muted); }
+.messages { flex: none; overflow: auto; max-height: 16vh; overflow-wrap: anywhere; }
+.messages:empty { display: none; }
+.messages > div { padding: 8px 24px; }
+.form { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.form > fieldset { border: 0; margin: 0; }
+.planner { flex: none; max-height: 30vh; overflow-y: auto; padding: 0 24px 12px; }
+.planner > label { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+
+.config {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 16px;
+  padding: 0 24px 20px;
+}
+
+.field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.field > span { color: var(--muted); font-size: 12px; }
+.field :global(.textInput) { height: 40px; }
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(300px, 20vw, 360px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 24px 20px;
+}
+
+.scenarioPicker, .detail {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel2);
+  overflow: hidden;
+}
+
+.pickerHeader { flex: none; padding: 16px; border-bottom: 1px solid var(--border); }
+.pickerHeader h3 { margin: 0 0 12px; font-size: 14px; }
+.scenarioList { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
+.dialog :global(.scenarioTreeRowWrap) { height: 100%; padding-top: 2px; padding-bottom: 2px; }
+.dialog :global(.scenarioTreeRow) { height: 100%; padding: 4px 8px; }
+.dialog :global(.scenarioTreeTitle) { font-size: 14px; }
+.dialog :global(.scenarioTreeToggle) { flex: 0 0 18px; }
+/* Arborist sets an inline max-content minimum; rows must fit this dialog's panes. */
+.dialog [role='treeitem'] { min-width: 0 !important; }
+.scenarioPicker :global(.scenarioTreeTitle) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 18px;
+}
+
+.detailHeader { flex: none; padding: 16px 20px 0; }
+.scenarioName { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.scenarioPath { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; margin-top: 4px; }
+.defunctMessage { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; overflow-wrap: anywhere; }
+.tabs { display: flex; gap: 24px; margin-top: 12px; border-bottom: 1px solid var(--border); }
+.tab { border: 0; border-bottom: 2px solid transparent; padding: 10px 0 12px; color: var(--muted); background: transparent; font: inherit; }
+.tab[aria-selected='true'] { color: inherit; border-bottom-color: var(--accent); }
+.overview { flex: 1; min-height: 0; overflow: auto; padding: 24px 20px; overflow-wrap: anywhere; }
+.overview h4 { font-size: 14px; margin: 0 0 10px; }
+.overview p { color: var(--muted); line-height: 1.6; margin: 0 0 28px; max-width: 80ch; }
+.metadata { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 24px; }
+.metadata dt { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.metadata dd { margin: 0; overflow-wrap: anywhere; }
+
+.filesPanel {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(200px, 16vw, 260px) minmax(0, 1fr);
+}
+
+.fileTreePane { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: auto; padding: 12px 8px; border-right: 1px solid var(--border); }
+.fileTreeLabel { flex: none; margin: 0 8px 12px; color: var(--muted); font-size: 12px; }
+.filePreview { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--panel); }
+.filePreviewHeader { flex: none; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.filePath { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.readOnly { flex: none; color: var(--muted); white-space: nowrap; }
+.filePreviewBody { flex: 1; min-height: 0; }
+.filePreviewBody :global(.monacoSurface), .filePreviewBody :global(.monacoFallback) { height: 100%; border-radius: 0; border: 0; }
+.emptyState { min-height: 0; display: flex; align-items: center; justify-content: center; padding: 24px; color: var(--muted); overflow: auto; overflow-wrap: anywhere; text-align: center; }
+.filePreview > .emptyState { flex: 1; }
+
+.footer { flex: none; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 24px; border-top: 1px solid var(--border); }
+.pullImages { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.pullImages input { margin: 0; accent-color: var(--accent); }
+.variablesHint { color: var(--muted); font-size: 12px; }
+.actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+@media (max-width: 1180px) {
+  .workspace { grid-template-columns: 280px minmax(0, 1fr); gap: 12px; padding: 0 16px 16px; }
+  .header { padding: 16px; }
+  .config { padding: 0 16px 16px; gap: 12px; }
+  .filesPanel { grid-template-columns: 180px minmax(0, 1fr); }
+  .detailHeader { padding: 14px 14px 0; }
+}
+
+@media (max-width: 800px) {
+  .dialog { width: 96vw; height: 94vh; }
+  .form { overflow: auto; }
+  .workspace { flex: none; grid-template-columns: 1fr; }
+  .scenarioPicker { height: 240px; }
+  .detail { min-height: 480px; }
+  .filesPanel { min-height: 360px; }
+  .footer { position: sticky; bottom: 0; background: var(--bg); padding: 14px 16px; }
+}
+
+@media (max-width: 520px) {
+  .filesPanel { grid-template-columns: 1fr; }
+  .fileTreePane { height: 200px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .filePreview { min-height: 340px; }
+  .variablesHint { display: none; }
+}

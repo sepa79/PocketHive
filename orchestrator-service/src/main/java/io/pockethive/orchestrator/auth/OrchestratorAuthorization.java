@@ -110,7 +110,8 @@ public class OrchestratorAuthorization {
         if (!HttpMethod.POST.matches(method)) {
             return false;
         }
-        return path.matches("^/api/swarms/[^/]+/(create|start)$");
+        return path.matches("^/api/swarms/[^/]+/(create|start)$")
+            || path.matches("^/api/swarms/[^/]+/runs/[^/]+/start$");
     }
 
     private boolean hasPermissionInScope(AuthenticatedUserDto user,

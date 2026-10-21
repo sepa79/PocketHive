@@ -13,7 +13,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 /**
  * Responsibility: Authenticate registered public-session clients without a client secret.
  * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-BROWSER-SSO — docs/architecture/runtime-responsibilities.md#resp-browser-sso; docs/architecture/AUTH_SERVICE_API_SPEC.md.
  */
 
 /** Validates an explicitly marked refresh/revocation request against the registered public client. */
@@ -34,7 +34,10 @@ final class PocketHivePublicSessionClientAuthenticationProvider implements Authe
         RegisteredClient client = clients.findByClientId(candidate.getPrincipal().toString());
         if (client == null
             || !client.getClientAuthenticationMethods().contains(ClientAuthenticationMethod.NONE)
-            || !client.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN)) {
+            || (!client.getAuthorizationGrantTypes().contains(AuthorizationGrantType.REFRESH_TOKEN)
+                && !(BrowserOAuthClients.isBrowser(client)
+                    && Boolean.FALSE.equals(candidate.getAdditionalParameters().get(
+                        PocketHivePublicSessionClientAuthenticationConverter.REFRESH_REQUEST))))) {
             throw new OAuth2AuthenticationException(OAuth2ErrorCodes.INVALID_CLIENT);
         }
         return new OAuth2ClientAuthenticationToken(client, ClientAuthenticationMethod.NONE, null);

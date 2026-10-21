@@ -26,7 +26,6 @@ export function useSwarmCatalogue(caller: AuthenticatedUser | null) {
     const showLoading = options?.showLoading ?? true
     if (!showLoading && inFlight.current) return inFlight.current
     const version = ++swarmLoadVersion.current
-    setSwarmAccess(new Map())
     if (showLoading) setLoading(true)
     const request = (async () => {
       try {

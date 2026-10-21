@@ -32,6 +32,7 @@ public final class RequestTemplateParser {
 
     public TemplateDefinition parse(Map<?, ?> document) {
         Objects.requireNonNull(document, "document");
+        if (document.containsKey("profile")) return new PortableHttpCallParser().parse(document);
         List<RequestTemplateProblem> problems = new ArrayList<>();
         Map<String, String> required = new LinkedHashMap<>();
         for (String field : COMMON_REQUIRED_FIELDS) {

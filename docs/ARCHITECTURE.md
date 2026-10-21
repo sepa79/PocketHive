@@ -189,7 +189,7 @@ Control-plane payloads are defined by `docs/spec/control-events.schema.json` and
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `timestamp` | string | Yes | RFC‑3339 time when the message was emitted by its origin. |
+| `timestamp` | string | Yes | RFC‑3339 origin event time, not receiver arrival time. Status metrics capture builder construction time; operation outcomes retain the operation's `completedAt`, including publication retries. |
 | `version` | string | Yes | Schema version of the envelope and its structured `data` section. The lifecycle/control-plane cutover is version `2`; version `1` is not accepted by the new producers or consumers. |
 | `kind` | string | Yes | Coarse category of the message: one of `signal`, `result`, `outcome`, `journal`, `event`, `metric`. All routing/consumers should branch on this field first. |
 | `type` | string | Yes | Concrete name within the `kind` category. For `signal`, `result` and `outcome` this is the command name (`swarm-start`, `config-update`, …); for `kind=event` the current spec covers `alert`; for `kind=metric` it covers `status-full` and `status-delta`. |
@@ -198,8 +198,29 @@ Control-plane payloads are defined by `docs/spec/control-events.schema.json` and
 | `scope.swarmId` | string | Yes | Swarm the message relates to. Use the literal `ALL` for cross‑swarm or global fan‑out; never `null`. |
 | `scope.role` | string | Yes | Role/routing segment of the **subject** of the message; carried for control-plane addressing and human display. For materialized scenario workers, this is the unique `template.bees[].role` scenario node key. It is not the runtime worker id and not a worker type system; worker type/capability is resolved from `image`. Core deployed components use values such as `orchestrator` and `swarm-controller`, while scenario workers use their declared roles. The envelope schema must **not** hardcode an enum for this field. Use the literal `ALL` for cross-role or fan-out scopes; never `null`. |
 | `scope.instance` | string | Yes | Logical instance identifier of the **subject** of the message (the controller/worker/orchestrator instance the message is about). For runtime workers, this is the canonical runtime worker id and the only runtime identity clients may use. Use the literal `ALL` for fan‑out across instances; never `null`. This may or may not be the same as the `origin` instance that emitted it. |
-| `correlationId` | string\|null | Yes | Correlation token used to join one operation. For `signal`, `result` and `outcome`, this field must be non-empty and identical. For other kinds it is nullable unless explicitly correlated. |
-| `idempotencyKey` | string\|null | Yes | Stable identifier for the logical operation. It must be non-empty and identical on its `signal`, executor `result` and public `outcome`. |
+| `correlationId` | string\|null | Yes | Correlation token used to join one operation. Required non-empty for `signal`, `result`, `outcome` and `journal`; null for metrics; nullable for alerts. An operation's signal/result/outcome use identical values. |
+| `idempotencyKey` | string\|null | Yes | Stable identifier for the logical operation. Required non-empty for `signal`, `result`, `outcome` and `journal`; null for metrics; nullable for alerts. An operation's signal/result/outcome use identical values. |
+| `runtime` | object | Conditional | Required on non-signal envelopes for a concrete swarm; forbidden on signals and on non-signal envelopes with `scope.swarmId = ALL`. See the tables below. Never `null`. |
+| `data` | object | Yes | Kind/type-specific payload; never `null`. Empty command arguments use `{}`. |
+
+**Runtime metadata** — the canonical definition is `swarm-lifecycle.schema.json#/$defs/RuntimeMetadata`.
+
+| Field | Type | Required when `runtime` is present | Description |
+|---|---|---|---|
+| `runtime.templateId` | non-empty string | Yes | Scenario/template identity for this runtime. |
+| `runtime.runId` | non-empty string | Yes | Execution identity; do not merge observations across runs. |
+| `runtime.containerId` | non-empty string or null | No | Reported compute resource identity, when available. |
+| `runtime.image` | non-empty string or null | No | Reported runtime image. |
+| `runtime.stackName` | non-empty string or null | No | Reported stack identity. |
+
+No other `runtime` keys are allowed. These are not automatically REST response fields.
+
+| `kind` | `correlationId` / `idempotencyKey` | `runtime`, concrete swarm | `runtime`, `swarmId = ALL` |
+|---|---|---|---|
+| `signal` | Required non-empty strings | FORBIDDEN | FORBIDDEN |
+| `result`, `outcome`, `journal` | Required non-empty strings | Required object | FORBIDDEN |
+| `metric` | Required keys, both null | Required object | FORBIDDEN |
+| `event` (`alert`) | Required keys, each non-empty string or null; correlated alerts echo both operation ids | Required object | FORBIDDEN |
 
 ### 3.2 Structured `data` rules
 
@@ -309,8 +330,8 @@ Results and outcomes share the canonical terminal-operation payload so the Orche
 - Executor results for `swarm-start`, `swarm-stop` and `config-update` are published on `event.result.<type>.<swarmId>.<executorRole>.<executorInstance>`. Remove terminal evidence uses only the filesystem result described in §5.4.
 - Public outcomes are published on `event.outcome.<type>.<swarmId>.orchestrator.<orchestratorInstance>`.
 - `data.status` is always required and is one of `Succeeded`, `Rejected`, `Failed`, or `TimedOut`.
-- `data.retryable` is set only for commands with defined retry semantics.
-- `data.context` contains command-specific terminal evidence such as desired/observed values, non-converged workers or remaining resources. Domain observations such as `RUNNING` and `STOPPED` are never encoded as operation status.
+- `data.retryable` is a required boolean; `true` is used only for commands with defined retry semantics.
+- `data.context` is a required object containing command-specific terminal evidence such as desired/observed values, non-converged workers or remaining resources. Domain observations such as `RUNNING` and `STOPPED` are never encoded as operation status.
 - Human-readable `message` and stable diagnostic `code` belong in the correlated `event.alert.{type}` payload.
 - Synchronous request preconditions are evaluated before operation reservation. In particular, a rejected create authorization must not create an operation record.
 - Failure to publish a terminal outcome never replaces the originating execution failure. The operation remains terminal with its outcome unpublished so the existing publication retry can deliver it later; the publication failure is retained as secondary diagnostic evidence.
@@ -320,8 +341,8 @@ Results and outcomes share the canonical terminal-operation payload so the Orche
 | Fact | Location | Description |
 |---|---|---|
 | Operation result | `data.status` | `Succeeded`, `Rejected`, `Failed`, or `TimedOut`; never a workload/resource state. |
-| Retry policy | `data.retryable` | Whether a new execution with a new idempotency key is allowed after this terminal result. |
-| Terminal evidence | `data.context` | Typed command-specific evidence. Start/stop include requested and observed workload values; remove includes removed and remaining resources. |
+| Retry policy | `data.retryable` | Required boolean: whether a new execution with a new idempotency key is allowed after this terminal result. |
+| Terminal evidence | `data.context` | Required object with typed command-specific evidence. Start/stop include requested and observed workload values; remove includes removed and remaining resources. |
 | Operation identity | envelope `correlationId`, `idempotencyKey`, `type`, `scope` | Exact identity used by the Orchestrator operation coordinator. |
 | Diagnostic code/message | alert `data.code`, `data.message` | Human-readable and machine-filterable diagnostic detail. |
 
@@ -343,18 +364,80 @@ Results and outcomes share the canonical terminal-operation payload so the Orche
 
 | `type` | `data` field | Required | Description |
 |---|---|---|---|
-| `status-full` | `enabled` | Workers: Yes; managers: No | Worker-observed workload enablement. Managers do not impersonate aggregate workload enablement with this field. |
-|  | `startedAt` | Yes | RFC‑3339 timestamp when this component started processing workloads for its scope (or when the current process was started). |
-|  | `tps` | No | Integer ≥ 0. Throughput sample for the reporting interval. **Workers should emit this**; managers (Orchestrator / Swarm Controller) may omit. |
+| `status-full` | `enabled` | Workers: Yes; managers: FORBIDDEN | Worker-observed workload enablement. Managers do not impersonate aggregate workload enablement with this field. |
+|  | `startedAt` | Yes | RFC‑3339 component initialization timestamp, captured by its producer (see timestamp meanings below); not workload start or last enablement. |
+|  | `tps` | Workers: Optional; managers: FORBIDDEN | Integer ≥ 0. Throughput sample for the reporting interval. Workers should emit this. |
 |  | `config` | Yes | Snapshot of the effective configuration for this scope (role/instance). Must not include secrets. |
 |  | *(none)* | — | Runtime/infra metadata lives in the envelope as `runtime` (see below). |
 |  | `io` | Yes | Object describing IO bindings and queue health. **Workers** should include both planes (`io.work` + `io.control`); **managers** are control‑plane‑only and should include only `io.control` (no `io.work`). `queueStats` is optional and applies only to the work plane. Present only in `status-full`. |
 |  | `ioState` | Yes | Coarse IO health summary for workload/local IO only (for example `ioState.work`, `ioState.filesystem`). **Workers** should include `ioState.work` plus any local IO; **managers** include only local IO if applicable. `ioState` does not represent control‑plane health. |
-|  | `context` | No | Freeform role-specific context. Swarm Controller carries `controllerState`, `workloadState`, `health`, totals, watermark, staleness and `workers[]` only in `status-full`. It never publishes Orchestrator intent. For Orchestrator, `context` carries at least `swarmCount`; `computeAdapter` belongs in `status-full`. |
-| `status-delta` | `enabled` | Workers: Yes; managers: No | Same worker-observation semantics as in `status-full`. |
-|  | `tps` | No | Integer ≥ 0. Throughput sample for the interval since the last status event. **Workers should emit this**; managers may omit. |
-|  | `ioState` | Yes | Coarse IO health summary (see §6). Same rules as `status-full`: workload/local IO only; managers omit `work`. |
-|  | `context` | No | Same semantics as in `status-full`, but only for fields that change frequently (for example Controller/workload observation, health and rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
+|  | `context` | Workers: Optional; managers: Yes | Worker/Orchestrator context is an open object. Controller context has the closed field set below: full observation axes plus readiness, digest, watermark, expected targets and workers. It never publishes Orchestrator intent. Orchestrator emits `swarmCount`; `computeAdapter` belongs in full only. |
+| `status-delta` | `enabled` | Workers: Yes; managers: FORBIDDEN | Same worker-observation semantics as in `status-full`. |
+|  | `tps` | Workers: Optional; managers: FORBIDDEN | Integer ≥ 0. Throughput sample for the interval since the last status event. |
+|  | `ioState` | Workers/Controller: Yes; Orchestrator: Optional | Coarse IO health summary. Same rules as `status-full`: workload/local IO only; managers omit `work`. |
+|  | `context` | Workers: Optional; managers: Yes | Frequently changing context. Controller requires observation axes, readiness and watermark, but forbids worker lists and full-only context fields. `data.config`, `data.io`, and `data.startedAt` are forbidden in every delta. |
+
+**Status `data` matrix** — requirements from the six role/type definitions in
+`control-events.schema.json`; all six reject unknown top-level `data` keys.
+Required and optional fields are non-null. Open worker/Orchestrator context and
+config objects do not make additional top-level fields legal.
+
+| `data` field | Worker full | Worker delta | Controller full | Controller delta | Orchestrator full | Orchestrator delta |
+|---|---|---|---|---|---|---|
+| `enabled` | Required | Required | FORBIDDEN | FORBIDDEN | FORBIDDEN | FORBIDDEN |
+| `tps` | Optional | Optional | FORBIDDEN | FORBIDDEN | FORBIDDEN | FORBIDDEN |
+| `config` | Required | FORBIDDEN | Required | FORBIDDEN | Required | FORBIDDEN |
+| `startedAt` | Required | FORBIDDEN | Required | FORBIDDEN | Required | FORBIDDEN |
+| `io` | Required | FORBIDDEN | Required | FORBIDDEN | Required | FORBIDDEN |
+| `ioState` | Required | Required | Required | Required | Required | Optional |
+| `context` | Optional (open) | Optional (open) | Required (full context) | Required (delta context) | Required (open) | Required (open) |
+
+**Controller `data.context`** — canonical `ControllerStatusFullContext` and
+`ControllerStatusDeltaContext`. Both reject unknown keys; no field below is
+nullable except optional `sutId` and `networkProfileId`.
+
+| Field | Type / meaning | Full | Delta |
+|---|---|---|---|
+| `controllerState` | `PROVISIONING`, `READY`, `FAILED`, `UNKNOWN` | Required | Required |
+| `workloadState` | `UNAVAILABLE`, `STARTING`, `RUNNING`, `STOPPING`, `STOPPED`, `UNKNOWN` | Required | Required |
+| `health` | `HEALTHY`, `DEGRADED`, `FAILED`, `UNKNOWN` | Required | Required |
+| `startupReady` | boolean; Controller readiness gate | Required | Required |
+| `startupArtifactSha256` | non-empty string; verified startup artifact digest | Required | FORBIDDEN |
+| `watermarkAt` | RFC‑3339 aggregate construction time (not oldest worker time) | Required | Required |
+| `expectedWorkers` | array of unique `{role, instance}` targets; no `swarmId` inside a target | Required | FORBIDDEN |
+| `workers` | array of worker observations below | Required | FORBIDDEN |
+| `bindings` | object; materialized work bindings | Optional | FORBIDDEN |
+| `swarmDiagnostics` | object; worker diagnostics | Optional | Optional |
+| `scenario` | object; scenario progress | Optional | Optional |
+| `bufferGuard` | object; traffic guard diagnostics | Optional | Optional |
+| `location` | non-empty string | Optional | Optional |
+| `sutId` | non-empty string or null | Optional | FORBIDDEN |
+| `networkMode` | `DIRECT` or `PROXIED` | Optional | FORBIDDEN |
+| `networkProfileId` | non-empty string or null | Optional | FORBIDDEN |
+
+The current Controller producer includes `networkMode` in every full report;
+`ControllerStatusService` requires it for admission even though the schema marks
+it optional. Do not invent a mode in consumers.
+
+**Controller `data.context.workers[]`** — canonical `WorkerObservation`, a closed object.
+
+| Field | Type / meaning | Required |
+|---|---|---|
+| `role` | non-empty scenario node/routing key, not runtime identity | Yes |
+| `instance` | non-empty canonical runtime worker identity | Yes |
+| `enabled` | boolean; worker-reported workload enablement | Yes |
+| `tps` | integer ≥ 0; last projected throughput sample | Yes |
+| `lastSeenAt` | RFC‑3339 Controller-side receipt/processing time of accepted worker status | Yes |
+| `stale` | boolean; Controller freshness assessment for that worker | Yes |
+| `ioState` | workload/local IO state object | Yes |
+| `runtime` | runtime metadata object from §3.1; not null if present | No |
+| `config` | last reported public effective config object; not null if present | No |
+
+Omitted worker `config` means no full config report has been received. `config: {}`
+means a full report explicitly contained an empty public config. Neither means
+"use authoring defaults". Public config must be redacted by its producer; neither
+the Controller aggregate nor REST is a secret-bearing config channel. Later
+worker deltas retain that last reported config, including an explicit `{}`.
 
 Additional rules:
 - `runtime` is an event-envelope field, not a `data` field. It is required for swarm-scoped results, outcomes, journal events, status metrics and alerts (that is, `scope.swarmId != ALL`) and must be omitted for their global broadcasts (`scope.swarmId = ALL`). Command signals intentionally omit `runtime`; their target and operation identity are carried by `scope`, `correlationId` and `idempotencyKey`.
@@ -394,6 +477,36 @@ Additional rules:
   - Managers are control-plane-only and include just `io.control`.
   - `queueStats` is optional and applies only to the work plane.
 - Workers must never emit `workers[]`.
+
+**Baseline, timestamps and freshness**
+
+- A Controller delta updates only an existing full baseline for the same swarm,
+  controller instance and run. It must not seed a partial cache. Without a full
+  baseline, `ControllerStatusService` requests a full report and waits; the REST
+  observation remains `{}` until a full report is admitted. Omitted full-only
+  fields survive later deltas; a new full report replaces the baseline.
+- `StatusEnvelopeBuilder.timestamp` is captured at builder construction.
+  Worker `data.startedAt` is captured when `WorkerControlPlaneRuntime` is
+  constructed; Controller `data.startedAt` comes from
+  `SwarmControllerStartupInitializer` construction using its clock;
+  Orchestrator `data.startedAt` is captured on `OrchestratorStatusPublisher`
+  construction. None is a workload start/stop timestamp.
+- Controller `data.context.watermarkAt` is `Instant.now()` in
+  `SwarmControllerStatusPublisher.baseBuilder`, for both full and delta reports.
+  It is not the minimum worker heartbeat time. Worker `lastSeenAt` comes from
+  Controller-side heartbeat processing (`SwarmWorkerStatusHandler` →
+  `SwarmRuntimeCore` → `SwarmReadinessTracker`), not the worker envelope timestamp.
+- REST `observedAt` is Orchestrator receipt/application time of the latest
+  admitted full report or merged delta (`ControllerStatusService`), not the
+  envelope timestamp, `watermarkAt`, or the last heavy worker-list refresh.
+- `SwarmController.STATUS_FULL_STALE_AFTER` makes REST `observationStale` true
+  once receipt age exceeds **30 seconds**, or if no report exists. Separately,
+  `ControllerStatusService.expire` runs every **5 seconds** and marks root
+  Controller/workload/health/resource observations `UNKNOWN` when receipt age
+  exceeds **40 seconds**. Cached context and registration are retained; there
+  is no 30-minute status-cache eviction. Cached worker/config values may be older
+  than the latest delta, and must not be presented as fresh merely because the
+  aggregate receipt time advanced.
 
 **IO state conventions**
 
@@ -465,6 +578,9 @@ Recommended `data.code` values include: `worker.runtime-error`, `controller.runt
   - `event.alert.{type}.#`
   - `event.outcome.#`
 - Avoid per-worker status fan-out; worker lists come from swarm-controller `status-full`.
+- REST hydration uses `SwarmStateView.observation.workers[]`, not an envelope
+  wrapper. Raw event-stream worker paths remain `data.context.workers[]`.
+  `observation` is always an object (`{}` before the first full report), never null.
 
 ### 3.10 Topology-first: logical topology vs adapter config vs runtime bindings
 
@@ -515,7 +631,7 @@ topology:
 - Emitted by swarm-controller in `status-full` only so UI can map logical edges/ports to work-plane routing.
 - Captures exchange, routing keys, and queues for the current swarm.
 
-Example (inside swarm-controller `status-full.data.context`):
+Example fragment (inside swarm-controller `status-full.data.context`, not a complete envelope):
 
 ```json
 {
@@ -569,7 +685,7 @@ topology:
       to:   { role: processor-a, port: in.slow }
 ```
 
-Example (bindings with ports + optional selector hint):
+Example fragment (bindings with ports + optional selector hint, not a complete envelope):
 
 ```json
 {
@@ -593,11 +709,14 @@ Example (bindings with ports + optional selector hint):
 
 - UI obtains `template + topology` via Scenario Manager REST for authoring
   context.
-- UI uses swarm-controller `status-full` for `workers[]`, runtime `bindings`,
-  queue stats, and runtime identity.
-- UI joins selected scenario bees to runtime workers by exact unique `role`.
-- UI edit-targets runtime workers by `role` and
-  `data.context.workers[].instance`.
+- UI hydrates worker observations and runtime bindings from REST
+  `observation.workers[]` and `observation.bindings`. Raw Controller events use
+  `data.context.workers[]` and `data.context.bindings`; these are not REST paths.
+  Raw worker `data.io.work.queueStats` is not projected into REST worker entries.
+- UI joins selected scenario bees to runtime workers by exact unique `role`
+  only as an authoring-to-runtime lookup, never as runtime identity or a
+  deduplication key. Runtime lists retain every `instance`.
+- UI edit-targets runtime workers by `role` and `observation.workers[].instance`.
 - If a selected scenario bee has no matching runtime worker, or more than one
   runtime worker reports the same role, UI must show an explicit invalid-runtime
   state and disable live mutation for that item.
@@ -608,7 +727,10 @@ Example (bindings with ports + optional selector hint):
 
 - **AMQP `event.metric.status-{delta|full}` events are the only heartbeat source.**
 - If **no AMQP status** arrives within a **TTL** for a component included in the aggregate, the Controller **issues `signal.status-request.{swarmId}.ALL.ALL`** and reports health `DEGRADED` or `UNKNOWN` if no response arrives in time.
-- Every **swarm aggregate** carries a **watermark timestamp** and **max-staleness**; if stale or incomplete, the Controller emits health `DEGRADED` or `UNKNOWN` independently of workload observation.
+- Every **swarm aggregate** carries `watermarkAt` (aggregate construction time)
+  and observation axes; full reports also carry per-worker `lastSeenAt` and
+  `stale`. There is no required `max-staleness` wire field. Freshness and health
+  are separate from workload observation (see §3.5).
 - Health values never stand in for lifecycle values: `HEALTHY`, not `RUNNING`; `FAILED` health does not overwrite intent, resource state or operation history.
 
 ---
@@ -631,7 +753,7 @@ PocketHive has no single authoritative "swarm state". A swarm is described by in
 | Axis | Canonical values | Sole writer | Consumers |
 |---|---|---|---|
 | Runtime intent | `PRESENT`, `ABSENT` | Orchestrator | operation coordinator, REST/UI |
-| Workload intent | `RUNNING`, `STOPPED` | Orchestrator | Controller command dispatch, REST/UI |
+| Workload intent | `RUNNING`, `STOPPED`, `UNKNOWN` | Orchestrator | Controller command dispatch, REST/UI; discovered intent is `UNKNOWN` until an explicit command |
 | Controller observation | `PROVISIONING`, `READY`, `FAILED`, `UNKNOWN` | Controller status projection | Orchestrator, UI |
 | Workload observation | `UNAVAILABLE`, `STARTING`, `RUNNING`, `STOPPING`, `STOPPED`, `UNKNOWN` | Controller aggregate projection | Orchestrator, UI, operation evaluator |
 | Health | `HEALTHY`, `DEGRADED`, `FAILED`, `UNKNOWN` | Controller aggregate projection | Orchestrator, UI, alerts |
@@ -943,10 +1065,14 @@ sequenceDiagram
 ## 9. Observability & metrics
 
 **Controller aggregates** include:
-- `ts` (watermark), `swarmId`, and `{total, healthy, running, enabled}` counts.
-- **Max staleness** and, when applicable, `DEGRADED`/`UNKNOWN` reason.
-- Recent **error summaries** (role/instance, reason, correlationId) for operator drill‑down.
-- Optional **queueStats** with per-queue depth/consumer counts (and `oldestAgeSec` when brokers expose it) to highlight backlog pressure.
+- Envelope `scope.swarmId`, `runtime` and timestamp; `data.context.watermarkAt`
+  and Controller/workload/health/readiness observations on both full and delta.
+- Full-only `data.context.expectedWorkers`, `workers[]`, startup digest and
+  optional materialized `bindings`; worker entries include `lastSeenAt`/`stale`.
+- Optional `data.context.swarmDiagnostics`, `scenario` and `bufferGuard`.
+  Counts and maximum staleness are internal calculations, not additional
+  required context fields. Queue statistics belong to raw worker
+  `status-full.data.io.work.queueStats`, not REST `observation.workers[]`.
 
 **Orchestrator** surfaces:
 - Provision/ready/start durations, failure counts by reason, current running/enabled counts, queue connection summaries.
@@ -1029,6 +1155,7 @@ sequenceDiagram
   "scope": { "swarmId": "alpha", "role": "swarm-controller", "instance": "alpha-1" },
   "correlationId": "uuid-from-orchestrator",
   "idempotencyKey": "uuid-reused-for-retries",
+  "runtime": { "templateId": "processor-demo", "runId": "run-2025-09-12-01" },
   "data": {
     "status": "Succeeded",
     "retryable": false,
@@ -1053,6 +1180,7 @@ sequenceDiagram
   "scope": { "swarmId": "alpha", "role": "orchestrator", "instance": "orchestrator-1" },
   "correlationId": "uuid-from-orchestrator",
   "idempotencyKey": "uuid-reused-for-retries",
+  "runtime": { "templateId": "processor-demo", "runId": "run-2025-09-12-01" },
   "data": {
     "status": "Succeeded",
     "retryable": false,
@@ -1066,7 +1194,7 @@ sequenceDiagram
 }
 ```
 
-### Metric (`kind=metric`)
+### Worker full metric (`kind=metric`)
 ```json
 {
   "timestamp": "2025-09-12T12:36:00Z",
@@ -1089,9 +1217,141 @@ sequenceDiagram
     "startedAt": "2025-09-12T12:00:00Z",
     "tps": 12,
     "config": {},
-    "io": {},
+    "io": { "work": {}, "control": {} },
     "ioState": { "work": { "input": "ok", "output": "ok" } }
   }
+}
+```
+
+### Worker delta metric
+
+No `config`, `io` or `startedAt`; retained full-only values are not cleared.
+
+```json
+{
+  "timestamp": "2025-09-12T12:36:05Z",
+  "version": "2",
+  "kind": "metric",
+  "type": "status-delta",
+  "origin": "processor:alpha-1",
+  "scope": { "swarmId": "alpha", "role": "processor", "instance": "alpha-processor-1" },
+  "correlationId": null,
+  "idempotencyKey": null,
+  "runtime": { "templateId": "processor-demo", "runId": "run-2025-09-12-01" },
+  "data": { "enabled": true, "tps": 12, "ioState": { "work": { "input": "ok", "output": "ok" } } }
+}
+```
+
+### Controller full metric
+
+```json
+{
+  "timestamp": "2025-09-12T12:36:06Z",
+  "version": "2",
+  "kind": "metric",
+  "type": "status-full",
+  "origin": "alpha-1",
+  "scope": { "swarmId": "alpha", "role": "swarm-controller", "instance": "alpha-1" },
+  "correlationId": null,
+  "idempotencyKey": null,
+  "runtime": { "templateId": "processor-demo", "runId": "run-2025-09-12-01" },
+  "data": {
+    "config": {},
+    "startedAt": "2025-09-12T12:00:00Z",
+    "io": { "control": {} },
+    "ioState": { "filesystem": { "input": "ok", "output": "ok" } },
+    "context": {
+      "controllerState": "READY",
+      "workloadState": "RUNNING",
+      "health": "HEALTHY",
+      "startupReady": true,
+      "startupArtifactSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "watermarkAt": "2025-09-12T12:36:06Z",
+      "expectedWorkers": [{ "role": "processor", "instance": "alpha-processor-1" }],
+      "workers": [{
+        "role": "processor",
+        "instance": "alpha-processor-1",
+        "enabled": true,
+        "tps": 12,
+        "lastSeenAt": "2025-09-12T12:36:05Z",
+        "stale": false,
+        "ioState": { "work": { "input": "ok", "output": "ok" } },
+        "config": {}
+      }],
+      "networkMode": "DIRECT"
+    }
+  }
+}
+```
+
+### Controller delta metric
+
+No worker list, bindings, startup digest or network metadata. A preceding full
+baseline is required; this envelope alone cannot hydrate a swarm snapshot.
+
+```json
+{
+  "timestamp": "2025-09-12T12:36:11Z",
+  "version": "2",
+  "kind": "metric",
+  "type": "status-delta",
+  "origin": "alpha-1",
+  "scope": { "swarmId": "alpha", "role": "swarm-controller", "instance": "alpha-1" },
+  "correlationId": null,
+  "idempotencyKey": null,
+  "runtime": { "templateId": "processor-demo", "runId": "run-2025-09-12-01" },
+  "data": {
+    "ioState": {},
+    "context": {
+      "controllerState": "READY",
+      "workloadState": "RUNNING",
+      "health": "HEALTHY",
+      "startupReady": true,
+      "watermarkAt": "2025-09-12T12:36:11Z"
+    }
+  }
+}
+```
+
+### Orchestrator full metric (global)
+
+Global metrics forbid `runtime`; managers forbid worker `enabled` and `tps`.
+
+```json
+{
+  "timestamp": "2025-09-12T12:36:12Z",
+  "version": "2",
+  "kind": "metric",
+  "type": "status-full",
+  "origin": "orchestrator-1",
+  "scope": { "swarmId": "ALL", "role": "orchestrator", "instance": "orchestrator-1" },
+  "correlationId": null,
+  "idempotencyKey": null,
+  "data": {
+    "config": {},
+    "startedAt": "2025-09-12T11:00:00Z",
+    "io": { "control": {} },
+    "ioState": { "filesystem": { "input": "ok", "output": "ok" } },
+    "context": { "swarmCount": 1, "computeAdapter": "DOCKER_SINGLE" }
+  }
+}
+```
+
+### Orchestrator delta metric (global)
+
+`ioState` is optional for this variant; `context` is required.
+
+```json
+{
+  "timestamp": "2025-09-12T12:36:17Z",
+  "version": "2",
+  "kind": "metric",
+  "type": "status-delta",
+  "origin": "orchestrator-1",
+  "scope": { "swarmId": "ALL", "role": "orchestrator", "instance": "orchestrator-1" },
+  "correlationId": null,
+  "idempotencyKey": null,
+  "data": { "context": { "swarmCount": 1 } }
 }
 ```
 
@@ -1106,6 +1366,7 @@ sequenceDiagram
   "scope": { "swarmId": "alpha", "role": "processor", "instance": "alpha-processor-1" },
   "correlationId": null,
   "idempotencyKey": null,
+  "runtime": { "templateId": "processor-demo", "runId": "run-2025-09-12-01" },
   "data": {
     "level": "error",
     "code": "worker.runtime-error",
@@ -1129,5 +1390,5 @@ sequenceDiagram
 | `phase` | Alert `data.context.phase` | No generic outcome field. |
 | `code` | Alert `data.code` | Outcomes do not carry error codes. |
 | `message` | Alert `data.message` | Outcomes do not carry error messages. |
-| `retryable` | `data.retryable` | Only on outcomes where retry semantics are defined. |
+| `retryable` | `data.retryable` | Required boolean on results/outcomes; true only where retry semantics are defined. |
 | `details` | `data.context` | No nested stringified payloads. |

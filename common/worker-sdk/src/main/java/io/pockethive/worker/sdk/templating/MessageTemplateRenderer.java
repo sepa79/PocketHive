@@ -1,9 +1,7 @@
 package io.pockethive.worker.sdk.templating;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.templating.api.TemplateRenderer;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -14,10 +12,10 @@ import java.util.Objects;
  * Responsibility: map MessageTemplate body/path/method/headers through the injected TemplateRenderer.
  * Must not: open transport connections or implement a second Pebble/SpEL evaluator.
  * Contract: RESP-WORK-MESSAGE-TEMPLATE — docs/architecture/runtime-responsibilities.md#resp-work-message-template.
+ * Consumes RESP-WORK-TEMPLATE-CONTEXT and RESP-TEMPLATE-DATA — docs/architecture/runtime-responsibilities.md#resp-template-data.
  */
 public final class MessageTemplateRenderer {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
     private static final int TEMPLATE_SNIPPET_LIMIT = 160;
     private final TemplateRenderer renderer;
 
@@ -28,15 +26,7 @@ public final class MessageTemplateRenderer {
     public RenderedMessage render(MessageTemplate template, WorkItem seed) {
         Objects.requireNonNull(template, "template");
         Objects.requireNonNull(seed, "seed");
-        Map<String, Object> ctx = new HashMap<>();
-        ctx.put("payloadAsJson", parsePayloadAsJson(seed.payload()));
-        ctx.put("payload", seed.payload());
-        ctx.put("headers", seed.headers());
-        Object vars = seed.headers().get("vars");
-        if (vars != null) {
-            ctx.put("vars", vars);
-        }
-        ctx.put("workItem", seed);
+        Map<String, Object> ctx = WorkerTemplateContext.textPayload(seed, seed.payload());
 
         String body = render("bodyTemplate", template.bodyTemplate(), ctx);
         String path = render("pathTemplate", template.pathTemplate(), ctx);
@@ -64,26 +54,6 @@ public final class MessageTemplateRenderer {
         Map<String, String> rendered = new LinkedHashMap<>(templates.size());
         templates.forEach((name, value) -> rendered.put(name, render("header:" + name, value, ctx)));
         return rendered;
-    }
-
-    private static Object parsePayloadAsJson(String payload) {
-        if (payload == null || payload.isBlank()) {
-            return null;
-        }
-        try {
-            return MAPPER.readValue(payload, Object.class);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    public record RenderedMessage(
-        MessageBodyType bodyType,
-        String path,
-        String method,
-        String body,
-        Map<String, String> headers
-    ) {
     }
 
     private static String errorMessage(String label, String template) {

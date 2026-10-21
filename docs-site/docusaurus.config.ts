@@ -40,6 +40,7 @@ const config: Config = {
           include: [
             "guides/**",
             "architecture/**",
+            "contracts/portable-http-templates.md",
             "scenarios/**",
             "sdk/**",
             "mcp/README.md",
@@ -55,6 +56,9 @@ const config: Config = {
             "ci/evidence/2026-09-26-f08-rabbit-acceptance.md",
             "ci/acceptance-replacement-review.md",
             "USAGE.md",
+            "HIVEFORGE.md",
+            "GHCR_SETUP.md",
+            "UPGRADING.md",
             "AUTH-USER-GUIDE.md",
             "ORCHESTRATOR-REST.md",
             "observability.md",

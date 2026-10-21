@@ -6,9 +6,14 @@ import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const schemaPath = resolve(repositoryRoot, 'docs/spec/swarm-lifecycle.schema.json')
+const controlSchemaPath = resolve(repositoryRoot, 'docs/spec/control-events.schema.json')
 const outputRoot = resolve(repositoryRoot, 'packages/swarm-lifecycle-contract')
-const schema = JSON.parse(readFileSync(schemaPath, 'utf8'))
+const schemaSource = readFileSync(schemaPath, 'utf8')
+const controlSchemaSource = readFileSync(controlSchemaPath, 'utf8')
+const schema = JSON.parse(schemaSource)
+const controlSchema = JSON.parse(controlSchemaSource)
 const definitions = schema.$defs
+const observationTypes = ['IoInputState', 'IoOutputState', 'IoState', 'MetricIoState', 'WorkerObservation', 'ControllerStatusFullContext', 'ControllerStatusDeltaContext']
 
 if (!definitions || typeof definitions !== 'object') {
   throw new Error('swarm lifecycle schema has no $defs')
@@ -18,7 +23,7 @@ const enumNames = Object.entries(definitions)
   .filter(([, definition]) => definition.type === 'string' && Array.isArray(definition.enum))
   .map(([name]) => name)
 
-const banner = '// Generated from docs/spec/swarm-lifecycle.schema.json. Do not edit.\n'
+const banner = '// Generated from docs/spec/swarm-lifecycle.schema.json and control-events.schema.json. Do not edit.\n'
 const enumValues = Object.fromEntries(enumNames.map((name) => [name, definitions[name].enum]))
 const esm = `${banner}
 export const lifecycleEnumValues = Object.freeze(${JSON.stringify(enumValues, null, 2)})
@@ -143,7 +148,11 @@ function requiredEnum(value, name) {
 module.exports = { lifecycleEnumValues, parseControlResponse, parseOperationState, parseTerminalStatus, parseControllerState, parseWorkloadState, parseLifecycleAxes }
 `
 
-const declarations = Object.entries(definitions)
+const declarations = [...Object.entries(definitions), ...observationTypes.map(name => {
+  const definition = controlSchema.$defs[name]
+  if (!definition) throw new Error(`control event schema has no ${name}`)
+  return [name, definition]
+})]
   .map(([name, definition]) => `export type ${name} = ${typescriptType(definition, 0)}`)
   .join('\n\n')
 const dts = `${banner}
@@ -168,6 +177,8 @@ const outputs = new Map([
   ['index.js', esm],
   ['index.cjs', cjs],
   ['index.d.ts', dts],
+  ['swarm-lifecycle.schema.json', schemaSource],
+  ['control-events.schema.json', controlSchemaSource],
 ])
 if (process.argv.includes('--check')) {
   for (const [name, expected] of outputs) {

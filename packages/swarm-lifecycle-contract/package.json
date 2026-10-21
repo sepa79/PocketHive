@@ -10,11 +10,15 @@
       "types": "./index.d.ts",
       "import": "./index.js",
       "require": "./index.cjs"
-    }
+    },
+    "./swarm-lifecycle.schema.json": "./swarm-lifecycle.schema.json",
+    "./control-events.schema.json": "./control-events.schema.json"
   },
   "files": [
     "index.js",
     "index.cjs",
-    "index.d.ts"
+    "index.d.ts",
+    "swarm-lifecycle.schema.json",
+    "control-events.schema.json"
   ]
 }

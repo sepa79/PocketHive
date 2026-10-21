@@ -99,4 +99,54 @@ class PostgresJournalRunMetadataTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM journal_run", Long.class)).isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM journal_run WHERE test_plan IS NOT NULL", Long.class)).isZero();
     }
+
+    @Test
+    void plannerAssociationsAreIdempotentAppendOnlyAndProtectOtherMetadata() throws Exception {
+        var metadata = metadata();
+        metadata.register("alpha", "run", "scenario");
+        metadata.update("run", new SwarmRunMetadataUpdate(null, "operator note", List.of("external")));
+        var minimal = new PlannerRunLink("pp:qa:plan", "pp.activity:" + "A".repeat(43));
+        var heavy = new PlannerRunLink("pp:qa:plan", "pp.activity:" + "B".repeat(43));
+        metadata.linkPlanner("alpha", "run", minimal);
+        metadata.linkPlanner("alpha", "run", minimal);
+        var linked = metadata.linkPlanner("alpha", "run", heavy);
+        assertThat(linked.testPlan()).isEqualTo("pp:qa:plan");
+        assertThat(linked.tags()).containsExactly("external", minimal.activityTag(), heavy.activityTag());
+        assertThat(linked.description()).isEqualTo("operator note");
+        assertThat(linked.scenarioId()).isEqualTo("scenario");
+        assertThatThrownBy(() -> metadata.update("run", null)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> metadata.update("run", new SwarmRunMetadataUpdate(linked.testPlan(), "stale note", List.of("external"))))
+            .isInstanceOf(IllegalStateException.class);
+        var edited = metadata.update("run", new SwarmRunMetadataUpdate(linked.testPlan(), "new note", linked.tags()));
+        assertThat(edited.description()).isEqualTo("new note");
+        assertThat(edited.tags()).isEqualTo(linked.tags());
+        assertThat(metadata.linkPlanner("other-swarm", "run", minimal)).isNull();
+        assertThatThrownBy(() -> metadata.linkPlanner("alpha", "run", new PlannerRunLink("pp:qa:other", minimal.activityTag())))
+            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void concurrentActivitiesAreNotLostAndCapacityFailuresDoNotMutateTheRun() throws Exception {
+        var metadata = metadata();
+        metadata.register("alpha", "run", "scenario");
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+            for (char letter : new char[]{'A', 'B', 'C', 'D'}) {
+                var link = new PlannerRunLink("pp:qa:plan", "pp.activity:" + String.valueOf(letter).repeat(43));
+                futures.add(executor.submit(() -> metadata.linkPlanner("alpha", "run", link)));
+            }
+            for (var future : futures) future.get();
+        }
+        var query = new PostgresJournalRunQueries(jdbc, new ObjectMapper());
+        var concurrent = query.metadataSummary("alpha", "run");
+        assertThat(concurrent.tags()).hasSize(4);
+        var full = new java.util.ArrayList<>(concurrent.tags());
+        for (int index = 0; index < 28; index++) full.add("external-" + index);
+        metadata.update("run", new SwarmRunMetadataUpdate(concurrent.testPlan(), "keep", full));
+        var before = query.metadataSummary("alpha", "run");
+        assertThatThrownBy(() -> metadata.linkPlanner("alpha", "run", new PlannerRunLink("pp:qa:plan", "pp.activity:" + "E".repeat(43))))
+            .isInstanceOf(IllegalStateException.class);
+        assertThat(query.metadataSummary("alpha", "run")).isEqualTo(before);
+        assertThat(metadata.linkPlanner("alpha", "run", new PlannerRunLink("pp:qa:plan", concurrent.tags().getFirst())).tags()).hasSize(32);
+    }
 }

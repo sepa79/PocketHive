@@ -26,6 +26,7 @@
   </properties>
   <modules>
     <module>common/templating-api</module>
+    <module>common/template-data</module>
     <module>common/observability-core</module>
     <module>common/work-api</module>
     <module>common/work-config</module>

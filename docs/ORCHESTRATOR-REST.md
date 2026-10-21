@@ -2,7 +2,69 @@
 
 **Base:** `/api` • MIME: `application/json` • Auth: Bearer JWT (RBAC enforced)
 
+## PocketPlanner integration
+
+PocketPlanner is the master of Plan/Stream/Activity definitions. Orchestrator reads
+its authenticated, revisioned catalogue from `POCKETHIVE_PLANNER_BASE_URL`; it never
+copies the plan or rewrites its dates. No redirects or browser-chosen destinations
+are followed. A caller's PH session is passed only to this configured owner.
+
+Public ingress endpoints (all JSON):
+
+- `GET /orchestrator/api/planner/catalogue`: deployment-read permission; returns
+  PP `{schemaVersion:1,instanceId,revision,plans}` with plan `testPlan` references,
+  Streams and Activities with owner-generated `tag` references.
+- `POST /orchestrator/api/planner/validate`: deployment-management permission;
+  body `{instanceId,revision,planId,streamId,activityId}`. Verifies current catalogue
+  revision and membership before CREATE. No execution or database mutation.
+- `GET /orchestrator/api/planner/runs/{swarmId}/{runId}`: deployment-read permission;
+  returns metadata for exactly that journal run (404 if unavailable).
+- `GET /orchestrator/api/planner/swarms/{swarmId}`: swarm-read permission; resolves
+  the current run from the authoritative SwarmStore, then reads that exact identity.
+  It does not rely on a cached status snapshot or choose the newest journal entry.
+- `POST` to the same exact-run URL: deployment-management permission; the same
+  selection body is revalidated, then the sole metadata owner atomically appends
+  its Activity tag and sets `testPlan` if unassigned. It preserves description and
+  unrelated tags. Idempotent for an already linked Activity. Another plan, capacity
+  overflow or changed PP catalogue returns 409 without replacing metadata.
+
+Planner identity: `testPlan = pp:<instanceId>:<literal plan ID>`. Activity tags are
+`pp.activity:` + unpadded base64url SHA-256 of compact UTF-8 JSON
+`[instanceId,planId,activityId]` (no ASCII escaping), generated only by PP.
+No tag is truncated. A run can support multiple Activities; membership in a Stream
+is derived from PP, not duplicated in another tag. Generic metadata replacement
+cannot create or remove these reserved references, including a stale form that
+would erase a concurrent append. PostgreSQL journal is required for run operations.
+
+Creation keeps its existing canonical lifecycle contract. PH UI explicitly selects
+whether to associate a plan, preflights first, then waits for the accepted CREATE
+operation to succeed and saves the exact returned runtime identity. HTTP acceptance
+is not creation success or proof of running workload. Failed association after
+creation is partial success: retry only the association, never CREATE. Existing-run
+selection uses the same endpoint for subsequent Activities. Neither path changes
+Planner progress, Started/Done, issues or dates. Journal evidence and agent workflow
+automation remain outside this first integration.
+
 ## Idempotency & correlation
+
+### Exact-run Start/Stop
+
+`POST /api/swarms/{swarmId}/runs/{runId}/start` and `/stop` accept the existing
+`ControlRequest` and return the canonical asynchronous `ControlResponse` (202).
+Start requires the existing scoped RUN permission; Stop requires scoped ALL.
+These are exact-run entrypoints, not a new lifecycle owner: `SwarmRunLifecycleController`
+delegates to `SwarmLifecycleCommandService.dispatchForRun`. It checks the selected
+run before reservation and passes that admitted runtime to `OperationDispatchService`,
+whose existing identity check rejects a replacement before admission. Unknown swarm
+returns 404, changed run 409. No command is published for an obsolete run. Operation
+polling uses `GET /api/swarms/{swarmId}/runs/{runId}/operations/{correlationId}`:
+the same authoritative operation resource, guarded by scoped swarm READ and exact
+current-runtime AND operation swarm/run identity (404 on mismatch). A replacement
+runtime's permissions never grant access to its predecessor's operation. It does
+not infer success from status.
+No Planner progress or actual dates are written. Existing swarm-addressed controls
+remain their distinct explicit contract, not a retry fallback for these endpoints.
+
 Client sends **`idempotencyKey`** (UUID v4) per new logical action and reuses it when retrying that action. The Orchestrator creates one **`correlationId`** for the accepted operation and returns that same operation identity for duplicates:
 ```json
 {
@@ -26,37 +88,113 @@ Client sends **`idempotencyKey`** (UUID v4) per new logical action and reuses it
     "id": "demo",
     "runId": "run-20260722-123455Z",
     "runtimeIntent": "PRESENT",
-    "workloadIntent": "RUNNING",
-    "controllerState": "READY",
-    "workloadState": "RUNNING",
-    "health": "HEALTHY",
+    "workloadIntent": "STOPPED",
+    "controllerState": "PROVISIONING",
+    "workloadState": "UNAVAILABLE",
+    "health": "UNKNOWN",
     "runtimeResourceState": "PRESENT",
-    "observedAt": "2026-07-22T12:00:00Z",
-    "observationStale": false,
+    "observedAt": null,
+    "observationStale": true,
     "activeOperation": null,
     "observation": {},
     "templateId": "baseline-demo",
     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
-    "bees": [
-      { "instance": "demo-generator-1", "role": "generator", "image": "ghcr.io/pockethive/generator:1.2.3" },
-      { "instance": "demo-moderator-1", "role": "moderator", "image": "ghcr.io/pockethive/moderator:1.2.3" }
-    ]
+    "bees": []
   }
 ]
 ```
 
 > Swarms are sorted lexicographically by `id` for deterministic UI rendering.
+> List items use the same complete `SwarmStateView` contract as fetch-swarm.
+> This example shows a registration before its first full Controller report.
 > Bee summaries are keyed by runtime `instance`; do not collapse multiple bees
-> with the same `role`.
+> with the same `role`. `bees: []` means no cached worker entries, not proof that
+> no runtime resources exist.
 
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
 
 **Response (200)** — Orchestrator projection joining owned intent/operation state with the cached Controller context. `observation` is that context projection; it is evidence, not the swarm state authority. The raw control-plane envelope remains an internal transport contract and is not nested in this REST response.
 
-Before the first Controller status observation, `observation` is the empty
+**Complete `SwarmStateView` field contract**
+
+The sole schema owner is `docs/spec/swarm-lifecycle.schema.json#/$defs/SwarmStateView`.
+Every root key below is required, including nullable keys. No additional root
+fields are allowed. Observation enums are defined in the architecture §5.1.
+
+| Root field | Type / nullability | Source and meaning |
+|---|---|---|
+| `id` | non-empty string | Registered swarm identity. |
+| `runId` | non-empty string | Registered current runtime execution identity. |
+| `runtimeIntent` | `PRESENT` or `ABSENT` | Orchestrator-owned desired runtime presence. |
+| `workloadIntent` | `RUNNING`, `STOPPED`, `UNKNOWN` | Orchestrator-owned workload intent; discovered intent may be `UNKNOWN`. `ABSENT` runtime intent requires `STOPPED`. |
+| `controllerState` | `PROVISIONING`, `READY`, `FAILED`, `UNKNOWN` | Current root Controller observation, including explicit expiry state. |
+| `workloadState` | `UNAVAILABLE`, `STARTING`, `RUNNING`, `STOPPING`, `STOPPED`, `UNKNOWN` | Current root workload observation, not desired state or an operation result. |
+| `health` | `HEALTHY`, `DEGRADED`, `FAILED`, `UNKNOWN` | Current root health observation. |
+| `runtimeResourceState` | `PRESENT`, `REMOVING`, `ABSENT`, `UNKNOWN` | Root resource observation maintained by lifecycle/observation handling, not copied from context. |
+| `observedAt` | RFC‑3339 string or null | Orchestrator receipt/application time of the latest admitted full report or merged delta; null before the first full report. |
+| `observationStale` | boolean | True before a full baseline, or when receipt age exceeds 30 seconds. |
+| `activeOperation` | non-terminal `SwarmOperation` object or null | Orchestrator-owned active lifecycle operation; null when none. A terminal result is read from the operation endpoint, not stored here. |
+| `templateId` | non-empty string or null | Registered template metadata, including identity admitted at discovery; key is present even when unknown. |
+| `controllerImage` | non-empty string or null | Registered Controller template image; key is present even when unknown. Not an automatic copy of envelope `runtime.image`. |
+| `bees` | array of `WorkerSummary` | Compact projection of cached worker entries. Each item requires `role`, `instance`, and `image` (non-empty string or null). Not worker config or a planned-resource inventory. |
+| `observation` | object, never null | Cached Controller `data.context` after accepted full/delta merging; `{}` before the first full report. It contains no envelope or `data` wrapper. |
+
+**Event → REST projection (not envelope passthrough)**
+
+| Controller event / owner input | REST output | Projection boundary |
+|---|---|---|
+| Registered swarm/run identity | `id`, `runId` | Incoming scope instance and `runtime.runId` must match the registered Controller/run; conflicting reports cannot replace it. |
+| Orchestrator intent and operation store | `runtimeIntent`, `workloadIntent`, `activeOperation` | Not supplied by Controller context or inferred from status. |
+| `data.context.controllerState`, `.workloadState`, `.health` | Same-named root axes plus cached `observation` values | Accepted reports update root axes; expiry can later make root axes `UNKNOWN` without rewriting cached context. |
+| Admitted Controller report | `runtimeResourceState` | Receipt records `PRESENT`; lifecycle handling/expiry can subsequently change the root axis. |
+| Orchestrator local receipt/application time | `observedAt`, derived `observationStale` | Not event `timestamp` or context `watermarkAt`. |
+| `data.context` | `observation` | Full report supplies the baseline; deltas merge only present fields into that baseline. |
+| `data.context.workers[]` | `observation.workers[]` | Detailed observed entries: required `role`, `instance`, `enabled`, `tps`, `lastSeenAt`, `stale`, `ioState`; optional `runtime` and `config`. See architecture §3.5. |
+| Each cached worker's `role`, `instance`, `runtime.image` | `bees[].role`, `.instance`, `.image` | Summary only; image is null if unreported. Never deduplicate by role. |
+| `data.context.watermarkAt`, `.bindings`, `.expectedWorkers`, diagnostics and other allowed context | Same keys under `observation` | `expectedWorkers[]` uses `{role, instance}`, not a scope with `swarmId`. Fields such as `sutId` are not root REST fields. |
+| Template registration/discovery metadata | `templateId`, `controllerImage` | Owned metadata, not a general envelope-runtime projection. |
+| Envelope `timestamp`, `version`, `kind`, `type`, `origin`, `scope`, correlation/idempotency keys and Controller envelope `runtime` | Not returned as envelope/root fields | `id`/`runId` are registered identity; optional **worker** runtime remains nested under `observation.workers[].runtime`. |
+| Controller `data.config`, `data.startedAt`, `data.io`, `data.ioState`; raw worker `data.io.work.queueStats` | Not returned by this state view | They are not in Controller `data.context`; neither `bees` nor detailed worker observations expose raw worker IO bindings/queue stats or worker `startedAt`. Use the event stream for those fields. |
+
+`observation.workers[].config` is the last public worker full-report config.
+Omission means no full config report is available; `{}` means an explicitly empty
+reported config. Later deltas must not erase it. Secrets/private configuration
+must be removed by the producer, not exposed by aggregates or filled from scenario
+defaults. Runtime selection uses `instance` within the selected swarm/run, and
+component commands also require `role`. A unique scenario `role` supports only
+the authoring-to-runtime join; it never replaces runtime identity.
+
+**Baseline and freshness**
+
+`ControllerStatusService` will not seed a partial cache from a delta: if the full
+baseline is absent it requests a full report and waits. Later full reports replace
+the baseline; deltas preserve omitted full-only fields. The cache is scoped to the
+registered Controller instance and run.
+
+`SwarmController.STATUS_FULL_STALE_AFTER` is **30 seconds**, measured from the last
+accepted full **or delta** receipt. `ControllerStatusService.expire`, scheduled
+every **5 seconds**, separately marks root `controllerState`, `workloadState`,
+`health` and `runtimeResourceState` as `UNKNOWN` after **40 seconds** without an
+accepted update. It does not remove the registration, cached observation or worker
+config after 30 minutes. Cached context may still say `READY`/`RUNNING` while the
+root axes are `UNKNOWN`; render root state and its staleness, not stale context as
+current truth. Worker `lastSeenAt`/`stale` remain the last heavy snapshot's facts,
+not freshly sampled worker evidence on each Controller delta.
+
+Timestamp meanings follow their producers: status-metric `timestamp` is builder
+construction time, context `watermarkAt` is Controller aggregate construction time,
+worker `lastSeenAt` is Controller-side worker-status processing time, and
+`observedAt` is Orchestrator receipt/application time. `data.startedAt` is component
+initialization time and is not returned here. None establishes workload start or
+operation completion.
+
+Before the first full Controller status observation, `observation` is the empty
 object, `observedAt` is `null`, `observationStale` is `true`,
-`controllerState` is `PROVISIONING`, and `workloadState` is `UNAVAILABLE`.
+`controllerState` is `PROVISIONING`, `workloadState` is `UNAVAILABLE`,
+`health` is `UNKNOWN`, and `bees` is `[]` for a newly created registration.
+The following example instead shows an admitted full observation:
+
 ```json
 {
   "id": "demo",
@@ -70,15 +208,20 @@ object, `observedAt` is `null`, `observationStale` is `true`,
   "observedAt": "2026-07-22T12:34:56Z",
   "observationStale": false,
   "activeOperation": null,
+  "templateId": "baseline-demo",
+  "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
+  "bees": [
+    { "role": "generator", "instance": "demo-generator-1", "image": "ghcr.io/pockethive/generator:1.2.3" }
+  ],
   "observation": {
     "controllerState": "READY",
     "workloadState": "RUNNING",
     "health": "HEALTHY",
     "startupReady": true,
-    "startupArtifactSha256": "sha256-hex",
+    "startupArtifactSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "watermarkAt": "2026-07-22T12:34:55Z",
     "expectedWorkers": [
-      { "swarmId": "demo", "role": "generator", "instance": "demo-generator-1" }
+      { "role": "generator", "instance": "demo-generator-1" }
     ],
     "workers": [
       {
@@ -104,21 +247,26 @@ object, `observedAt` is `null`, `observationStale` is `true`,
         "config": {
           "inputs": {
             "type": "SCHEDULER",
-            "ratePerSecond": 10
+            "scheduler": { "ratePerSec": 10 }
           }
         }
       }
-    ]
+    ],
+    "networkMode": "DIRECT"
   }
 }
 ```
 
-Returns `404` only when the swarm id is unknown. Before a fresh Controller observation exists, the owned intent remains available and observed axes are explicitly `UNKNOWN`; absence of status is never treated as absence of the swarm.
+Returns `404` only when the swarm id is unknown. Owned intent remains available
+without telemetry. Initial provisioning values and expired `UNKNOWN` observations
+are distinct; absence of status is never treated as absence of the swarm.
 
 `observation.workers[].instance` is the runtime worker identity for component
 selection. `role` is the required routing segment for component actions, but
-clients must not join or deduplicate workers by `role`. Runtime worker payloads
-must not expose or require a second `beeId` identity.
+clients must not use it as runtime identity or deduplicate workers by `role`.
+A unique-role authoring-to-runtime join is permitted as described above; ambiguous
+matches must not silently select an instance. Runtime worker payloads must not
+expose or require a second `beeId` identity.
 
 ### 2.2.1 Fetch operation
 
@@ -131,6 +279,7 @@ Returns the Orchestrator-owned operation independently of RabbitMQ delivery or U
   "swarmId": "demo",
   "type": "START",
   "target": { "role": "swarm-controller", "instance": "demo-marshal-bee-1234" },
+  "runtime": { "templateId": "baseline-demo", "runId": "run-20260722-123455Z" },
   "correlationId": "uuid-v4",
   "idempotencyKey": "uuid-v4",
   "state": "SUCCEEDED",
@@ -948,8 +1097,9 @@ Approved explicitly by the user on 2026-09-26 under AGENTS.md §3.
 **Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → internal target **result:** `event.result.config-update.<swarmId>.<role>.<instance>` → public **outcome:** `event.outcome.config-update.<swarmId>.orchestrator.<orchestratorInstance>`.
 
 For UI-originated edits, resolve `{role}/{instance}` from the selected runtime
-worker in `status-full.data.context.workers[]`. `instance` is the runtime worker
-identity; `role` alone is not a stable target.
+worker in REST `observation.workers[]`. The raw event-stream path is
+`status-full.data.context.workers[]`, not the REST shape. `instance` is the runtime
+worker identity; `role` alone is not a stable target.
 
 **Response (202)**
 ```json

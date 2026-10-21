@@ -3,6 +3,8 @@ package io.pockethive.auth.service.service;
 import io.pockethive.auth.contract.AuthProvider;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.SessionResponseDto;
+import io.pockethive.auth.contract.PocketHiveBrowserAuth;
+import io.pockethive.auth.service.oauth.BrowserOAuthTokenResolver;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import io.pockethive.auth.service.domain.AuthSession;
 import io.pockethive.auth.service.domain.AuthSessionPrincipalKind;
@@ -16,19 +18,27 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * Responsibility: Own opaque DEV/service sessions and dispatch explicitly typed browser OAuth sessions.
+ * Must not: Issue OAuth tokens or grant product permissions.
+ * Contract: RESP-BROWSER-SSO — docs/architecture/runtime-responsibilities.md#resp-browser-sso.
+ */
 @Service
 public class AuthSessionService {
     private final AuthServiceProperties properties;
     private final InMemoryUserStore users;
     private final InMemoryServiceAccountStore serviceAccounts;
     private final Map<String, AuthSession> sessions = new ConcurrentHashMap<>();
+    private final BrowserOAuthTokenResolver browserTokens;
 
     public AuthSessionService(AuthServiceProperties properties,
                               InMemoryUserStore users,
-                              InMemoryServiceAccountStore serviceAccounts) {
+                              InMemoryServiceAccountStore serviceAccounts,
+                              BrowserOAuthTokenResolver browserTokens) {
         this.properties = properties;
         this.users = users;
         this.serviceAccounts = serviceAccounts;
+        this.browserTokens = browserTokens;
     }
 
     public SessionResponseDto createSession(StoredUser user) {
@@ -46,6 +56,7 @@ public class AuthSessionService {
     }
 
     public AuthenticatedUserDto resolve(String token) {
+        if (token.startsWith(PocketHiveBrowserAuth.TOKEN_PREFIX)) return browserTokens.resolve(token);
         AuthSession session = sessions.get(token);
         if (session == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unknown bearer token");

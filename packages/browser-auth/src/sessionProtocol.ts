@@ -1,0 +1,9 @@
+export const SESSION_PATH = '/api/session'
+export const DEVICE_START_PATH = '/api/session/device/start'
+export const DEVICE_POLL_PATH = '/api/session/device/poll'
+export const LOGOUT_PATH = '/api/session/logout'
+export const DEFAULT_POLL_INTERVAL_MS = 5_000
+export const SLOW_DOWN_INCREMENT_MS = 5_000
+export const REQUEST_TIMEOUT_MS = 15_000
+export const MAX_JSON_BYTES = 64 * 1024
+export const MAX_TIMER_DELAY_MS = 2_147_483_647

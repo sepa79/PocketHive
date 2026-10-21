@@ -763,6 +763,54 @@ Response shape:
 
 ### 8.1 UI integration
 
+The Pocket UIs use explicitly registered callback-free `pockethive-device`,
+`pocketplanner-device` and `pocketdata-device` clients. Their device authorization,
+confirmation and polling contract is [Callback free Pocket browser login](BROWSER_DEVICE_LOGIN.md).
+They share this service's existing identity/token owners and browser resource/scope;
+they have no redirect URI or refresh grant. Their shared browser controller owns
+polling, cancellation, token expiry and tab-scoped credential storage.
+Do not use it as a silent fallback for a failed authorization-code login.
+
+The Auth Service also supports explicitly configured registered public
+`pockethive-web`, `pocketplanner-web` and `pocketdata-web` clients. Explicit callback configuration
+is `POCKETHIVE_AUTH_WEB_PH_REDIRECT_URI`, `POCKETHIVE_AUTH_WEB_PP_REDIRECT_URI`
+and `POCKETHIVE_AUTH_WEB_PD_REDIRECT_URI`;
+an empty value disables that browser client. Callbacks are exact HTTPS or HTTP
+loopback `/auth/callback` URLs without credentials, query or fragment; unlike
+native clients, their ports cannot rotate. `GET /api/auth/browser/config?client_id=...`
+returns the canonical `clientId`, `issuer`, `redirectUri`, `resource` and `scope`.
+
+These fixed first-party clients use the existing Spring Authorization Server
+Authorization Code flow with S256 PKCE and state. Their resource is exactly
+`urn:pockethive:web` and their sole scope is `pockethive:web`, meaning active
+identity, not product permissions. No consent page or refresh token is issued
+for these preconfigured first-party clients. MCP scopes/resources and dynamic
+client registrations do not grant browser access. `phweb_` access tokens are
+resolved from the single canonical OAuth authorization store, including expiry
+and revocation, then hydrate current active user/grants for existing REST policies.
+The DEV/service-token API is a separate explicit machine/client contract,
+not an automatic browser fallback.
+
+The central login uses an HttpOnly, SameSite=Lax session cookie, scoped to
+`/auth-service`, Secure under HTTPS. Each device consumer owns only its own access
+token; PH confirms login in a separate tab, and the original app remains on its
+current origin and route. A PH journal waits for restoration before requests and
+offers confirmation controls when anonymous; the exact swarm/run query survives.
+Explicit redirect consumers retain bounded tab-local PKCE transactions.
+PP and PocketData public viewing does not initiate login. PocketData allows editing
+only for active `local-admin`, verified through the identity API on every mutation.
+Login errors are explicit, not redirect loops or a change to another protocol.
+Tokens never enter navigation URLs or cross-window messages.
+
+Device consumers revoke their own token and use the callback-free central logout
+documented in [the device contract](BROWSER_DEVICE_LOGIN.md#central-logout-without-callbacks).
+For explicit redirect clients, `GET /oauth/browser/logout?client_id=...` presents a confirmation form with CSRF;
+`POST /oauth/browser/logout` invalidates the central browser session and returns
+only to that registered callback with `signed_out=1`. Each tool first revokes
+its own access token through the existing OAuth revocation endpoint. Other
+already issued access tokens retain their expiry; immediate cross-client logout
+and refresh are outside this increment.
+
 PocketHive UI and HiveWatch UI:
 
 - authenticate through `auth-service`,

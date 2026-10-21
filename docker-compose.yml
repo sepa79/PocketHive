@@ -265,6 +265,9 @@ services:
       POCKETHIVE_ALLOW_REMOTE_HTTP: ${POCKETHIVE_ALLOW_REMOTE_HTTP:-false}
       POCKETHIVE_AUTH_OAUTH_ISSUER: ${POCKETHIVE_PUBLIC_INGRESS:-http://localhost:8088}/auth-service
       POCKETHIVE_AUTH_OAUTH_RESOURCE: ${POCKETHIVE_PUBLIC_INGRESS:-http://localhost:8088}/mcp
+      POCKETHIVE_AUTH_WEB_PH_REDIRECT_URI: ${POCKETHIVE_PUBLIC_INGRESS:-http://localhost:8088}/auth/callback
+      POCKETHIVE_AUTH_WEB_PP_REDIRECT_URI: ${POCKETPLANNER_BROWSER_CALLBACK:-}
+      POCKETHIVE_AUTH_WEB_PD_REDIRECT_URI: ${POCKETDATA_BROWSER_CALLBACK:-}
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY: "256"
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_STATE_PATH: /var/lib/pockethive-auth/state/dynamic-clients.json
@@ -353,6 +356,7 @@ services:
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
     # all defaulted in application.yml, uncomment to override here
     environment:
+      POCKETHIVE_PLANNER_BASE_URL: ${POCKETHIVE_PLANNER_BASE_URL:-}
       # One WorkPlane per deployment; scenario input/output must select the same WORK adapter.
       POCKETHIVE_WORK_TYPE: ARTEMIS
       POCKETHIVE_WORK_ARTEMIS_BROKERURL: tcp://artemis:61616

@@ -4,20 +4,17 @@ import io.pockethive.work.api.WorkStep;
 import io.pockethive.redis.api.RedisListWriter;
 import io.pockethive.redis.api.RedisListClients;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.worker.sdk.templating.WorkerTemplateContext;
 import io.pockethive.redis.config.RedisRoute;
 import io.pockethive.redis.config.RedisPayloadSource;
 import io.pockethive.redis.config.RedisConnectionSettings;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Shared Redis push utility used by both output transports and side-output interceptors.
@@ -26,15 +23,13 @@ import org.slf4j.LoggerFactory;
  * Must not: parse/validate write settings or route declarations or turn diagnostic capture into business output.
  * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
  * Consumes RESP-WORK-REDIS-ROUTES, RESP-WORK-REDIS-WRITE-SETTINGS and RESP-REDIS-CONNECTION-SETTINGS.
+ * Consumes RESP-WORK-TEMPLATE-CONTEXT and RESP-TEMPLATE-DATA — docs/architecture/runtime-responsibilities.md#resp-template-data.
  */
 public final class RedisPushSupport implements AutoCloseable {
     // Operations may run concurrently; shutdown excludes operations and resource creation.
     private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
     private boolean closed;
 
-
-    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
-    private static final Logger LOGGER = LoggerFactory.getLogger(RedisPushSupport.class);
 
     private final java.util.function.Function<RedisConnectionSettings, RedisListWriter> writerFactory;
     private final TemplateRenderer templateRenderer;
@@ -97,15 +92,7 @@ public final class RedisPushSupport implements AutoCloseable {
     }
 
     private String renderTargetList(String template, WorkItem message, String payload) {
-        Map<String, Object> context = new HashMap<>();
-        context.put("payload", payload);
-        context.put("payloadAsJson", parsePayloadAsJson(payload, template, message));
-        context.put("headers", message.headers());
-        Object vars = message.headers().get("vars");
-        if (vars != null) {
-            context.put("vars", vars);
-        }
-        context.put("workItem", message);
+        Map<String, Object> context = WorkerTemplateContext.textPayload(message, payload);
         return templateRenderer.render(template, context);
     }
 
@@ -125,49 +112,6 @@ public final class RedisPushSupport implements AutoCloseable {
             return null;
         }
         return iterator.next().payload();
-    }
-
-    private static Object parsePayloadAsJson(String payload) {
-        return parsePayloadAsJson(payload, null, null);
-    }
-
-    private static Object parsePayloadAsJson(String payload, String template, WorkItem message) {
-        if (payload == null || payload.isBlank()) {
-            return null;
-        }
-        try {
-            return MAPPER.readValue(payload, Object.class);
-        } catch (Exception ex) {
-            // Some payloads are intentionally not JSON. We only warn when the template is likely to
-            // depend on payloadAsJson. Otherwise we log at DEBUG to avoid noisy logs.
-            boolean templateMentionsJson = template != null && template.contains("payloadAsJson");
-            int length = payload.length();
-            String messageId = message == null ? "" : String.valueOf(message.messageId());
-            String callId = message == null ? "" : String.valueOf(message.headers().getOrDefault("x-ph-call-id", ""));
-            String serviceId = message == null ? "" : String.valueOf(message.headers().getOrDefault("x-ph-service-id", ""));
-
-            if (templateMentionsJson) {
-                // TODO(0.15): attach this parse failure to the work/journal trail so it's visible in UI/journal views.
-                LOGGER.warn(
-                    "Failed to parse payload as JSON (payloadAsJson will be null). serviceId={} callId={} messageId={} len={} err={}",
-                    serviceId,
-                    callId,
-                    messageId,
-                    length,
-                    ex.getMessage()
-                );
-            } else if (LOGGER.isDebugEnabled()) {
-                LOGGER.debug(
-                    "Payload is not valid JSON; payloadAsJson will be null. serviceId={} callId={} messageId={} len={} err={}",
-                    serviceId,
-                    callId,
-                    messageId,
-                    length,
-                    ex.getMessage()
-                );
-            }
-            return null;
-        }
     }
 
     public static String asText(Object value) {

@@ -1,0 +1,39 @@
+.header {
+  grid-row: 1;
+  grid-column: 1 / span 2;
+  border-bottom: 1px solid var(--border2);
+  background: var(--header-bg);
+  backdrop-filter: blur(6px);
+  position: relative;
+  z-index: 300;
+}
+
+.inner {
+  height: var(--app-header-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.leading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.trailing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}

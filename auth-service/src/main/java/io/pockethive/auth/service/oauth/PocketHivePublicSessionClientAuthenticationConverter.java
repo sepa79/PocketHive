@@ -15,12 +15,13 @@ import org.springframework.security.web.authentication.AuthenticationConverter;
 /**
  * Responsibility: Convert public-client refresh authentication requests at the token endpoint.
  * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-BROWSER-SSO — docs/architecture/runtime-responsibilities.md#resp-browser-sso; docs/architecture/AUTH_SERVICE_API_SPEC.md.
  */
 
 /** Authenticates the pre-registered public client for refresh and revocation bearer requests. */
 final class PocketHivePublicSessionClientAuthenticationConverter implements AuthenticationConverter {
     static final String SESSION_CLIENT_MARKER = PocketHivePublicSessionClientAuthenticationConverter.class.getName();
+    static final String REFRESH_REQUEST = SESSION_CLIENT_MARKER + ".refresh";
     private final String tokenPath;
     private final String revocationPath;
 
@@ -51,7 +52,7 @@ final class PocketHivePublicSessionClientAuthenticationConverter implements Auth
             clientId,
             ClientAuthenticationMethod.NONE,
             null,
-            Map.of(SESSION_CLIENT_MARKER, Boolean.TRUE));
+            Map.of(SESSION_CLIENT_MARKER, Boolean.TRUE, REFRESH_REQUEST, refresh));
     }
 
     private static String applicationPath(HttpServletRequest request) {

@@ -9,6 +9,25 @@ documented migration before deploying a release that removes an old shape.
 
 ## 0.15.36 (from 0.15.35)
 
+### HiveForge deployment inputs (from 0.15.34 or 0.15.35)
+
+The `v0.15.36` component manifest requires four additional explicit inputs:
+`POCKETHIVE_WORK_TYPE`, `POCKETHIVE_PUBLIC_INGRESS`, `POCKETHIVE_PUBLIC_HOST`
+and `POCKETHIVE_ALLOW_REMOTE_HTTP`. The checked `v0.15.35` manifest does not
+declare them; this is the 0.15.36 migration boundary, not a claim that all
+0.15.35 installations already used this contract.
+
+Use the [current installation requirements](HIVEFORGE.md#declared-runtime-requirements)
+and [complete HTTPS/HTTP profile maps](HIVEFORGE.md#complete-runtime-configuration-examples)
+to choose accepted values. WORK is explicitly RabbitMQ or Artemis; CONTROL
+remains RabbitMQ. The public origin and Host define the shared Auth/MCP identity,
+and remote HTTP requires an explicit allowance. Both actions need the same
+complete profile configuration; `swarm-full` additionally needs its four
+dedicated roots, while `swarm-reduced` does not.
+
+If this upgrade is already complete, use the installation guide's read-only
+verification steps. Do not redeploy merely to satisfy this historical note.
+
 ### SUT registry contract SSOT
 
 Scenario Manager now reads and returns the shared `SutEnvironment` contract

@@ -5,7 +5,7 @@ import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import java.net.URI;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestClient;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * Responsibility: Wire MCP owner-service authentication to the shared Auth Service client and token owner.
@@ -14,13 +14,14 @@ import org.springframework.web.client.RestClient;
  */
 
 @Configuration
+@EnableConfigurationProperties(McpOwnerAuthProperties.class)
 public class McpOwnerAuthConfiguration {
     private static final String AUTH_SERVICE_INGRESS_PATH = "/auth-service";
 
     @Bean
-    AuthServiceClient ownerAuthServiceClient(RestClient.Builder builder, PocketHiveMcpProperties properties) {
+    AuthServiceClient ownerAuthServiceClient(PocketHiveMcpProperties properties, McpOwnerAuthProperties deadlines) {
         URI authServiceIngress = properties.ownerApiBase().resolve(AUTH_SERVICE_INGRESS_PATH);
-        return new AuthServiceClient(builder.baseUrl(authServiceIngress.toString()).build());
+        return new AuthServiceClient(authServiceIngress, deadlines.connectTimeout(), deadlines.readTimeout());
     }
 
     @Bean

@@ -1,6 +1,7 @@
 package io.pockethive.auth.service.oauth;
 
 import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.auth.contract.PocketHiveBrowserAuth;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import io.pockethive.auth.service.domain.StoredUser;
 import io.pockethive.auth.service.service.InMemoryUserStore;
@@ -22,7 +23,7 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 /**
  * Responsibility: Generate audience-bound PocketHive access tokens from canonical authorization state.
  * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-BROWSER-SSO — docs/architecture/runtime-responsibilities.md#resp-browser-sso; docs/architecture/AUTH_SERVICE_API_SPEC.md.
  */
 
 public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerator<OAuth2AccessToken> {
@@ -45,7 +46,10 @@ public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerato
             .filter(StoredUser::active)
             .orElseThrow(PocketHiveAccessTokenGenerator::invalidGrant);
         Set<String> effectiveScopes = context.getAuthorizedScopes();
-        if (!McpScopeAuthorizationValidator.allowedScopes(stored.grants()).containsAll(effectiveScopes)) {
+        boolean browser = BrowserOAuthClients.isBrowser(context.getRegisteredClient());
+        Set<String> allowed = browser ? Set.of(PocketHiveBrowserAuth.SCOPE)
+            : McpScopeAuthorizationValidator.allowedScopes(stored.grants());
+        if (effectiveScopes.isEmpty() || !allowed.containsAll(effectiveScopes)) {
             throw invalidGrant();
         }
         AuthenticatedUserDto principal = stored.toDto(properties.getProvider());
@@ -54,7 +58,7 @@ public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerato
         Map<String, Object> claims = new LinkedHashMap<>();
         claims.put("iss", properties.getOauth().getIssuer().toString());
         claims.put("sub", stored.id().toString());
-        claims.put("aud", List.of(properties.getOauth().getResource().toString()));
+        claims.put("aud", List.of(browser ? PocketHiveBrowserAuth.RESOURCE : properties.getOauth().getResource().toString()));
         claims.put("client_id", context.getRegisteredClient().getClientId());
         claims.put("username", stored.username());
         claims.put("scope", String.join(" ", effectiveScopes));
@@ -63,7 +67,8 @@ public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerato
         claims.put("principal", principal);
         byte[] entropy = new byte[32];
         random.nextBytes(entropy);
-        String token = "phmcp_" + Base64.getUrlEncoder().withoutPadding().encodeToString(entropy);
+        String token = (browser ? PocketHiveBrowserAuth.TOKEN_PREFIX : "phmcp_")
+            + Base64.getUrlEncoder().withoutPadding().encodeToString(entropy);
         return new PocketHiveAccessToken(token, issuedAt, expiresAt, effectiveScopes, claims);
     }
 

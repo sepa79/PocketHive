@@ -5,10 +5,18 @@ import io.pockethive.journal.api.JournalRunMetadata;
 import io.pockethive.journal.api.JournalRunQueries;
 import io.pockethive.journal.api.SwarmRunMetadataUpdate;
 import io.pockethive.journal.api.SwarmRunSummary;
+import io.pockethive.journal.api.PlannerRunLink;
+import com.fasterxml.jackson.core.type.TypeReference;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Responsibility: write startup and operator metadata through one SQL owner.
@@ -65,8 +73,74 @@ public final class PostgresJournalRunMetadata implements JournalRunMetadata {
           tags = EXCLUDED.tags,
           updated_at = now()
         """;
-    jdbc.update(sql, swarmId, resolvedRunId, cleaned.testPlan(), cleaned.description(), tagsJson);
-    return runs.metadataSummary(swarmId, resolvedRunId);
+    return transaction(() -> {
+      jdbc.update("INSERT INTO journal_run (swarm_id, run_id) VALUES (?, ?) ON CONFLICT DO NOTHING", swarmId, resolvedRunId);
+      SwarmRunMetadataUpdate current = locked(swarmId, resolvedRunId);
+      if (!Objects.equals(current.testPlan(), cleaned.testPlan())
+          && (isPlannerPlan(current.testPlan()) || isPlannerPlan(cleaned.testPlan()))) {
+        throw new IllegalStateException("Planner plan references must be assigned through PocketPlanner selection");
+      }
+      if (!plannerTags(current.tags()).equals(plannerTags(cleaned.tags()))) {
+        throw new IllegalStateException("Planner Activity associations cannot be replaced by generic metadata edits");
+      }
+      jdbc.update(sql, swarmId, resolvedRunId, cleaned.testPlan(), cleaned.description(), tagsJson);
+      return runs.metadataSummary(swarmId, resolvedRunId);
+    });
+  }
+
+  @Override
+  public SwarmRunSummary linkPlanner(String swarmId, String runId, PlannerRunLink link) {
+    Objects.requireNonNull(link, "link");
+    return transaction(() -> {
+      SwarmRunMetadataUpdate current = locked(swarmId, runId);
+      if (current == null) return null;
+      if (current.testPlan() != null && !current.testPlan().equals(link.testPlan())) {
+        throw new IllegalStateException("This run already belongs to another test plan");
+      }
+      List<String> tags = new ArrayList<>(current.tags() == null ? List.of() : current.tags());
+      if (!tags.contains(link.activityTag())) tags.add(link.activityTag());
+      if (tags.size() > 32 || tags.stream().anyMatch(tag -> tag == null || tag.length() > 64)) {
+        throw new IllegalStateException("Run tag limit exceeded; no tags were removed or shortened");
+      }
+      String tagsJson;
+      try {
+        tagsJson = json.writeValueAsString(tags);
+      } catch (Exception exception) {
+        throw new IllegalStateException("Cannot encode run tags", exception);
+      }
+      jdbc.update("UPDATE journal_run SET test_plan = ?, tags = ?::jsonb, updated_at = now() WHERE swarm_id = ? AND run_id = ?",
+          link.testPlan(), tagsJson, swarmId, runId);
+      return runs.metadataSummary(swarmId, runId);
+    });
+  }
+
+  private <Result> Result transaction(Supplier<Result> action) {
+    return new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbc.getDataSource())))
+        .execute(status -> action.get());
+  }
+
+  private SwarmRunMetadataUpdate locked(String swarmId, String runId) {
+    List<SwarmRunMetadataUpdate> rows = jdbc.query(
+        "SELECT test_plan, description, tags::text FROM journal_run WHERE swarm_id = ? AND run_id = ? FOR UPDATE",
+        (result, index) -> {
+          String tags = result.getString(3);
+          try {
+            return new SwarmRunMetadataUpdate(result.getString(1), result.getString(2),
+                tags == null ? null : json.readValue(tags, new TypeReference<List<String>>() {}));
+          } catch (Exception exception) {
+            throw new IllegalStateException("Invalid persisted run tags", exception);
+          }
+        }, swarmId, runId);
+    return rows.isEmpty() ? null : rows.getFirst();
+  }
+
+  private static boolean isPlannerPlan(String value) {
+    return value != null && value.startsWith(PlannerRunLink.PLAN_PREFIX);
+  }
+
+  private static java.util.Set<String> plannerTags(List<String> tags) {
+    return tags == null ? java.util.Set.of() : tags.stream()
+        .filter(tag -> tag.startsWith(PlannerRunLink.ACTIVITY_PREFIX)).collect(Collectors.toSet());
   }
 
   private String resolveSingleSwarmIdForRun(String runId) {

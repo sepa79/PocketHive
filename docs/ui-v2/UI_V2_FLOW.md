@@ -164,15 +164,30 @@ From archived UI v1 (`archive/legacy-ui/src/pages/hive/*`):
 
 Use existing SSOT docs and schemas, do not handcraft parallel parsers:
 - Scenario graph (authoring-time SSOT): `docs/scenarios/SCENARIO_CONTRACT.md` (`template.bees[]` + `topology.edges[]`).
-- Runtime wiring + metrics:
-  - Control-plane envelopes (`status-full` / `status-delta`) decoded from `docs/spec/control-events.schema.json`.
-  - Key fields needed for the view:
-    - `data.io.work.queueStats[queue] = { depth, consumers, oldestAgeSec? }`
-    - `data.io.queues.{in,out,routes}` (for quick IO overview)
-    - `data.ioState.work` (input/output health)
-    - `data.tps`, `data.startedAt`
-- Swarm metadata & selection:
-  - Orchestrator REST (existing Hive list/details) for swarm ids, templateId, sut id, etc.
+- Runtime baseline and selection:
+  - Orchestrator REST list/details return `SwarmStateView`, defined by
+    `docs/spec/swarm-lifecycle.schema.json`, not a raw control-plane envelope.
+  - Root `id`, `runId`, intent/observation axes, `observedAt`,
+    `observationStale`, `activeOperation`, `templateId` and `controllerImage`
+    describe the registered swarm/run. Root state takes precedence over retained
+    cached context when telemetry expires.
+  - `bees[]` contains compact `{role, instance, image}` summaries only. Detailed
+    runtime values come from `observation.workers[]`: `enabled`, `tps`,
+    `lastSeenAt`, `stale`, `ioState.work`, optional `runtime` and `config`.
+  - Bindings and SUT context use `observation.bindings` and `observation.sutId`
+    when reported. `observation` is always an object (`{}` before the first full
+    report), never null. Missing config/worker evidence is shown explicitly.
+  - A delta cannot establish a missing full baseline. Wait/request a full report;
+    do not manufacture a partial REST snapshot or use scenario defaults as live state.
+- Event-stream diagnostics (not REST paths):
+  - Raw control-plane envelopes use `docs/spec/control-events.schema.json`.
+    Controller events carry `data.context.workers[]` and `data.context.bindings`.
+  - Raw worker full events carry `data.io.work.queueStats[queue]`,
+    `data.io.work.queues.{in,out,routes}`, `data.io.control.queues.{in,out,routes}`,
+    `data.ioState.work`, `data.tps` and `data.startedAt`.
+  - Worker `startedAt` and `data.io`/queue statistics are not exposed in REST
+    `observation.workers[]` or `bees[]`; do not fabricate those fields. The normal
+    runtime view must not depend on per-worker event fan-out for hydration.
 
 ### Hive Scenario Tab — Live Config Edit
 
@@ -181,10 +196,12 @@ Live config editing is a must-have in UI v2. The first supported surface is:
 - `Hive -> /hive/:swarmId -> Scenario tab -> selected bee`.
 - The selected bee is Scenario Manager authoring context. Its `role` is the
   unique scenario node key and is used to resolve exactly one runtime worker
-  from `status-full`.
-- The runtime target comes from Orchestrator's cached swarm `status-full` aggregate:
-  `data.context.workers[]`, matched by exact `role`, then addressed by
-  `role + data.context.workers[].instance`.
+  from REST `observation.workers[]`.
+- The runtime target comes from Orchestrator's `SwarmStateView`:
+  `observation.workers[]`, matched by exact unique `role` only for this
+  authoring join, then addressed by `role + observation.workers[].instance`.
+  Runtime lists and selection retain every `instance`; never collapse workers
+  by role or carry a selection across a changed `runId`.
 - The field catalog comes from Scenario Manager capability manifests, matched to the
   selected runtime image.
 - The mutation path is only Orchestrator:
@@ -203,9 +220,13 @@ Rules:
   live mutation for that item.
 - Do not infer a runtime current value from scenario defaults. The current
   value source is the worker `status-full.data.config` carried by the
-  swarm-controller aggregate at `data.context.workers[].config`. If it is not
-  available in the UI state, show that explicitly and build a patch only from
-  fields the user selects/changes.
+  swarm-controller aggregate and projected by REST at
+  `observation.workers[].config`. Only raw Controller events use
+  `data.context.workers[].config`. An absent `config` means no full worker config
+  is available; `{}` means an explicitly empty public config, not missing data.
+  Worker deltas do not clear that config. It is producer-redacted, never a source
+  of private configuration. If unavailable, show that explicitly and build a
+  patch only from fields the user selects/changes.
 - The form must use capability `config[]` entries as the only field catalog.
 - Runtime live config forms must render only capability entries marked
   `liveMutable: true`; entries marked `liveMutable: false` remain scenario
@@ -220,6 +241,14 @@ Rules:
 - Empty patches are not sent unless the UI has an explicit reset action.
 - After a successful request, refresh the swarm snapshot; do not fabricate a
   local config state.
+- HTTP 202 is acceptance, not completion. Follow the returned operation and
+  refresh the exact swarm/run's reported config after terminal success.
+- Use root `observationStale` plus worker `stale`/`lastSeenAt` for stale messaging.
+  `observedAt` is Orchestrator receipt time (full or merged delta), not a worker
+  heartbeat or workload start. Controller `watermarkAt` is aggregate construction
+  time. REST marks the aggregate stale after 30 seconds; the 5-second expiry task
+  marks root observed axes `UNKNOWN` after 40 seconds without updates, retaining
+  cached context rather than evicting it after 30 minutes.
 
 ### UX spec (compact, stable, “no flicker”)
 

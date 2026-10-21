@@ -91,9 +91,8 @@ export function UserMenu() {
               className="menuItem"
               role="menuitem"
               onClick={() => {
-                auth.logout()
+                void auth.logout()
                 setOpen(false)
-                navigate('/login')
               }}
             >
               Sign out

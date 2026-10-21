@@ -37,12 +37,12 @@ class ApacheHttpCallExecutorIntegrationTest {
 
   @Test
   void executesOnlyTheResolvedUriProvidedByTheResolver() throws Exception {
-    ApacheHttpCallExecutor executor = new ApacheHttpCallExecutor(client);
+    ApacheHttpCallExecutor executor = new ApacheHttpCallExecutor(client, client);
     URI target = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/base/call?source=resolved");
-    HttpCallExecutor.RenderedCall call = new HttpCallExecutor.RenderedCall(
+    RenderedCall call = new RenderedCall(
         "POST", "/must-not-be-appended", "payload", Map.of("Content-Type", "text/plain"));
 
-    HttpCallExecutor.HttpCallResult result = executor.execute(target, call);
+    HttpCallResult result = executor.execute(target, call);
 
     assertThat(result.statusCode()).isEqualTo(201);
     assertThat(result.body()).isEqualTo("accepted");

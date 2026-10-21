@@ -61,7 +61,7 @@ class HttpSequenceDebugCaptureTest {
         header[3], List.of("response-cookie=first", "response-cookie=second"),
         "X-Safe", List.of("one", "two"));
     try (Fixture fixture = new Fixture(true, capture(HttpSequenceWorkerConfig.DebugCaptureMode.ALWAYS),
-        new HttpCallExecutor.HttpCallResult(200, responseHeaders, "response-body", null))) {
+        new HttpCallResult(200, responseHeaders, "response-body", null))) {
       WorkItem output = fixture.run();
       String key = debugKey(output);
       String stored = fixture.observer.sync().get(key);
@@ -101,12 +101,12 @@ class HttpSequenceDebugCaptureTest {
   void defaultErrorOnlyCaptureRedactsResponseCookiesWithoutEnablingRequestCapture() throws Exception {
     writeTemplate(new String[] {"Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie"});
     try (Fixture fixture = new Fixture(true, HttpSequenceWorkerConfig.DebugCapture.defaults(),
-        new HttpCallExecutor.HttpCallResult(503, Map.of("sEt-CoOkIe", List.of("error-session=private")), "error", null))) {
+        new HttpCallResult(503, Map.of("sEt-CoOkIe", List.of("error-session=private")), "error", null))) {
       JsonNode captured = MAPPER.readTree(fixture.observer.sync().get(debugKey(fixture.run())));
       assertThat(captured.path("headers").path("sEt-CoOkIe")).isEqualTo(MAPPER.valueToTree(List.of(REDACTED)));
       assertThat(captured.has("request")).isFalse();
       assertThat(captured.path("status").asInt()).isEqualTo(503);
-      fixture.response = new HttpCallExecutor.HttpCallResult(200, Map.of(), "ok", null);
+      fixture.response = new HttpCallResult(200, Map.of(), "ok", null);
       assertThat(fixture.run().stepHeaders()).doesNotContainKey(HttpSequenceHeaders.DEBUG_REF);
     }
   }
@@ -118,7 +118,7 @@ class HttpSequenceDebugCaptureTest {
     var setting = new HttpSequenceWorkerConfig.DebugCapture(
         HttpSequenceWorkerConfig.DebugCaptureMode.ALWAYS, 0, 8, 1024, includeHeaders, includeRequest, 0, 90);
     try (Fixture fixture = new Fixture(true, setting,
-        new HttpCallExecutor.HttpCallResult(200, Map.of("Set-Cookie", List.of("flag-session=private")), "ok", null))) {
+        new HttpCallResult(200, Map.of("Set-Cookie", List.of("flag-session=private")), "ok", null))) {
       JsonNode capture = MAPPER.readTree(fixture.observer.sync().get(debugKey(fixture.run())));
       assertThat(capture.has("headers")).isEqualTo(includeHeaders);
       assertThat(capture.has("request")).isEqualTo(includeRequest);
@@ -138,7 +138,7 @@ class HttpSequenceDebugCaptureTest {
     HttpSequenceWorkerConfig.DebugCapture setting = capture(disableRedis
         ? HttpSequenceWorkerConfig.DebugCaptureMode.ALWAYS : HttpSequenceWorkerConfig.DebugCaptureMode.NONE);
     try (Fixture fixture = new Fixture(!disableRedis, setting,
-        new HttpCallExecutor.HttpCallResult(200, Map.of(), "ok", null))) {
+        new HttpCallResult(200, Map.of(), "ok", null))) {
       int before = fixture.clients();
       for (int attempt = 0; attempt < 3; attempt++) {
         assertThat(fixture.run().stepHeaders()).doesNotContainKey(HttpSequenceHeaders.DEBUG_REF);
@@ -154,7 +154,7 @@ class HttpSequenceDebugCaptureTest {
   void shortLivedThreadsReuseOneConnectionAndRunnerCloseReleasesItWithoutReopening() throws Exception {
     writeTemplate(new String[] {"Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie"});
     try (Fixture fixture = new Fixture(true, capture(HttpSequenceWorkerConfig.DebugCaptureMode.ALWAYS),
-        new HttpCallExecutor.HttpCallResult(200, Map.of(), "ok", null))) {
+        new HttpCallResult(200, Map.of(), "ok", null))) {
       int before = fixture.clients();
       var keys = new HashSet<String>();
       for (int attempt = 0; attempt < 6; attempt++) {
@@ -191,7 +191,7 @@ class HttpSequenceDebugCaptureTest {
     });
     endpoint.start();
     try (Fixture fixture = new Fixture(true, capture(HttpSequenceWorkerConfig.DebugCaptureMode.ALWAYS),
-        new HttpCallExecutor.HttpCallResult(200, Map.of(), "ok", null))) {
+        new HttpCallResult(200, Map.of(), "ok", null))) {
       HttpSequenceWorkerImpl worker = new HttpSequenceWorkerImpl(MAPPER, null,
           (template, ignored) -> template == null ? "" : template, redis(true));
       try {
@@ -271,12 +271,12 @@ class HttpSequenceDebugCaptureTest {
     final WorkerInfo info = new WorkerInfo("http-sequence", "capture-" + UUID.randomUUID(), "capture-worker", null, null);
     final WorkerContext context = mock(WorkerContext.class);
     final WorkItem seed = WorkItem.text(info, "{}").contentType("application/json").build();
-    final List<HttpCallExecutor.RenderedCall> sent = new ArrayList<>();
+    final List<RenderedCall> sent = new ArrayList<>();
     final HttpSequenceWorkerConfig config;
     final HttpSequenceRunner runner;
-    volatile HttpCallExecutor.HttpCallResult response;
+    volatile HttpCallResult response;
 
-    Fixture(boolean enabled, HttpSequenceWorkerConfig.DebugCapture capture, HttpCallExecutor.HttpCallResult response) {
+    Fixture(boolean enabled, HttpSequenceWorkerConfig.DebugCapture capture, HttpCallResult response) {
       this.response = response;
       when(context.info()).thenReturn(info);
       when(context.logger()).thenReturn(LoggerFactory.getLogger(HttpSequenceDebugCaptureTest.class));

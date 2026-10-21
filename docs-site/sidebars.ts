@@ -18,6 +18,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Installation",
+      items: ["HIVEFORGE", "GHCR_SETUP", "UPGRADING"],
+    },
+    {
+      type: "category",
       label: "Workers",
       items: ["guides/workers-basics", "guides/workers-advanced"],
     },

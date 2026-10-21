@@ -21,7 +21,7 @@ final class OAuthBrowserPageRenderer {
               <div class="auth-intro">
                 <p class="auth-eyebrow">Secure environment access</p>
                 <h1 id="auth-title">Sign in to PocketHive</h1>
-                <p>Authenticate with the selected PocketHive environment to continue in your MCP client.</p>
+                <p>Sign in once to continue in your PocketHive tools.</p>
               </div>
               <form class="auth-form" method="post" action="%s">
                 <label class="auth-field" for="username">
@@ -32,7 +32,7 @@ final class OAuthBrowserPageRenderer {
                 <input type="hidden" name="%s" value="%s">
                 <button class="auth-button auth-button--primary" type="submit">Sign in</button>
               </form>
-              <p class="auth-assurance">Your session is protected by the selected environment and stored by your MCP client.</p>
+              <p class="auth-assurance">Your identity is verified here. Each connected tool still checks its own permissions.</p>
             </section>
             """.formatted(brand(logo), escape(action), escape(csrfParameter), escape(csrfToken)));
     }
@@ -122,7 +122,7 @@ final class OAuthBrowserPageRenderer {
         return """
             <header class="auth-brand">
               <img class="auth-brand__logo" src="%s" alt="PocketHive">
-              <span class="auth-brand__product">MCP access</span>
+              <span class="auth-brand__product">Shared sign in</span>
             </header>
             """.formatted(escape(logo));
     }

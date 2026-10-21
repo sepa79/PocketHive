@@ -2,6 +2,7 @@ package io.pockethive.requesttemplates.files;
 
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -28,7 +29,8 @@ public final class TemplateLoader {
 
     private final RequestTemplateParser parser;
     private final ObjectMapper jsonMapper = JsonMapper.builder()
-        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();
+        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+        .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
     private final ObjectMapper yamlMapper = new ObjectMapper(YAMLFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build());
 

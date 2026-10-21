@@ -84,8 +84,16 @@ final class SpelTemplateEvaluator {
     ReflectionUtils.findMethod(SpelFunctions.class, "regexExtract", String.class, String.class, int.class),
     "regexExtract method missing");
   private static final Method JSON_PATH_METHOD = Objects.requireNonNull(
-    ReflectionUtils.findMethod(SpelFunctions.class, "jsonPath", Object.class, String.class),
+    ReflectionUtils.findMethod(TemplateDataFunctions.class, "jsonPath", Object.class, Object.class),
     "jsonPath method missing");
+  private static final Method XML_PATH_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(TemplateDataFunctions.class, "xmlPath", Object.class, Object.class, Object.class));
+  private static final Method XML_TEXT_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(TemplateDataFunctions.class, "xmlText", Object.class));
+  private static final Method XML_ATTR_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(TemplateDataFunctions.class, "xmlAttribute", Object.class));
+  private static final Method JSON_STRING_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(TemplateDataFunctions.class, "jsonString", Object.class));
   private static final Method DATE_FORMAT_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(SpelFunctions.class, "dateFormat", Object.class, String.class),
     "dateFormat method missing");
@@ -131,6 +139,10 @@ final class SpelTemplateEvaluator {
     context.registerFunction("regex_match", REGEX_MATCH_METHOD);
     context.registerFunction("regex_extract", REGEX_EXTRACT_METHOD);
     context.registerFunction("json_path", JSON_PATH_METHOD);
+    context.registerFunction("xml_path", XML_PATH_METHOD);
+    context.registerFunction("xml_text", XML_TEXT_METHOD);
+    context.registerFunction("xml_attr", XML_ATTR_METHOD);
+    context.registerFunction("json_string", JSON_STRING_METHOD);
     context.registerFunction("date_format", DATE_FORMAT_METHOD);
     context.registerFunction("sequence", sequenceMethod);
     context.registerFunction("sequenceWith", sequenceWithMethod);

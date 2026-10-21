@@ -1,0 +1,14 @@
+{
+  "profile": "portable-v1",
+  "requires": ["xml_path", "xml_text", "xml_attr", "soap11"],
+  "request": {
+    "serviceId": "cards", "callId": "create", "protocol": "HTTP",
+    "method": "POST", "pathTemplate": "{{ endpoint.path }}", "headersTemplate": {},
+    "bodyTemplate": "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><c:CreateCard xmlns:c=\"urn:cards\" class=\"{{ xml_attr(params.productClass) }}\"><c:accountNumber>{{ xml_text(record.accountNumber) }}</c:accountNumber></c:CreateCard></s:Body></s:Envelope>"
+  },
+  "response": {
+    "kind": "SOAP11", "soapAction": "urn:create-card", "expectedStatus": 200,
+    "extract": {"cardNumber": "/soap:Envelope/soap:Body/c:CreateCardResponse/c:cardNumber"},
+    "namespaces": {"c": "urn:cards"}
+  }
+}

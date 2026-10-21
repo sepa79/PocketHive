@@ -12,6 +12,9 @@ const backendProxy = proxyTarget
   : undefined
 
 export default defineConfig({
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   // In plugin mode: relative base so webview can load assets from the filesystem.
   // In normal mode: serve as the primary gateway UI.
   base: pluginMode ? './' : '/',

@@ -20,8 +20,8 @@ export function SwarmJournalPage() {
   const [search, setSearch] = useState('')
   const [errorsOnly, setErrorsOnly] = useState(false)
   const [severityFilter, setSeverityFilter] = useState<JournalSeverityFilter | ''>('')
-  const [runId, setRunId] = useState('')
-  const [draftRunId, setDraftRunId] = useState('')
+  const runId = normalizeQueryParam(new URLSearchParams(location.search).get('runId'))
+  const [draftRunId, setDraftRunId] = useState(runId)
   const [cursor, setCursor] = useState<JournalCursor | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -29,7 +29,6 @@ export function SwarmJournalPage() {
   useEffect(() => {
     const params = new URLSearchParams(location.search)
     const nextRunId = normalizeQueryParam(params.get('runId'))
-    setRunId(nextRunId)
     setDraftRunId(nextRunId)
   }, [location.search])
 

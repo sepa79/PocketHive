@@ -30,6 +30,8 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Before approving a non-trivial change, search the whole repository for alternative owners of every affected responsibility. Two active authorities are a **CRITICAL** finding and block approval unless the architecture explicitly defines distinct, non-overlapping ownership.
 - **KISS.**
   - Prefer straightforward, maintainable implementations over clever abstractions.
+- **Contract-derived documentation.**
+  - Generate structural reference details from the canonical contract instead of maintaining a second handwritten specification or documentation-conformance tests. Handwritten explanations are reviewed for meaning and completeness. Follow `docs/ENGINEERING_RULES.md#contract-derived-documentation`.
 - **Strict implementation-unit separation.**
   - Follow `docs/ENGINEERING_RULES.md`: one Java production type per file by default, one TypeScript/React runtime module or component concern per file, one clear responsibility per file, and no kitchen-sink classes or public nested contract bags. Only the narrow private nested-type exception defined there is allowed.
   - Existing mixed files are debt, not precedent. Do not add behavior to a mixed file; extract the affected responsibility first.

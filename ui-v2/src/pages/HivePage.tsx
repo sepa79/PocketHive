@@ -1,5 +1,11 @@
 import { SwarmLifecycleButtons } from './hive/SwarmLifecycleButtons'
+import { PlannerRunPanel } from '../components/planner/PlannerRunPanel'
 import { useSwarmCatalogue } from './hive/useSwarmCatalogue'
+import { useSwarmSnapshot } from './hive/useSwarmSnapshot'
+import { SwarmSnapshotPanel } from './hive/SwarmSnapshotPanel'
+import { useHiveScenario } from './hive/useHiveScenario'
+import { SwarmDetailStatus } from './hive/SwarmDetailStatus'
+import type { SwarmRuntimeWorker } from '../lib/SwarmRuntimeWorker'
 import type { SwarmSummary } from '../lib/SwarmSummary'
 import type { NetworkMode } from '../lib/NetworkMode'
 import NetworkBindingModeBadge from './hive/NetworkBindingModeBadge'
@@ -43,79 +49,6 @@ import { changesRedisDatasetListName, isStoppedWorkloadState } from '../lib/runt
 
 const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 
-type BeeSummary = {
-  role: string
-  image: string | null
-}
-
-type StatusFullSnapshotResponse = {
-  receivedAt: string
-  staleAfterSec: number
-  envelope: unknown
-}
-
-type RuntimeMeta = {
-  templateId: string | null
-  runId: string | null
-  containerId: string | null
-  image: string | null
-  stackName: string | null
-}
-
-type SwarmWorkerSummary = {
-  role: string | null
-  instance: string | null
-  enabled: boolean | null
-  tps: number | null
-  stale: boolean | null
-  lastSeenAt: string | null
-  workIo: { input: string | null; output: string | null } | null
-  runtime: RuntimeMeta | null
-  config: Record<string, unknown> | null
-}
-
-type SwarmSnapshotView = {
-  receivedAt: string
-  staleAfterSec: number
-  envelopeTimestamp: string | null
-  runtime: RuntimeMeta | null
-  startedAt: string | null
-  controllerState: string | null
-  workloadState: string | null
-  health: string | null
-  workers: SwarmWorkerSummary[]
-}
-
-type ScenarioBee = {
-  role: string | null
-  image: string | null
-  work: {
-    in: Record<string, string> | undefined
-    out: Record<string, string> | undefined
-  } | null
-  ports: { id: string; direction: 'in' | 'out' }[] | null
-}
-
-type ScenarioTopologyEdge = {
-  id: string | null
-  from: { role: string | null; port: string | null } | null
-  to: { role: string | null; port: string | null } | null
-}
-
-type ScenarioDefinition = {
-  id: string | null
-  name: string | null
-  description: string | null
-  template?: {
-    image: string | null
-    bees?: ScenarioBee[]
-  } | null
-  topology?: {
-    version: number | null
-    edges?: ScenarioTopologyEdge[]
-  } | null
-}
-
 type SwarmAction = 'start' | 'stop' | 'remove'
 type SwarmDetailTab = 'snapshot' | 'network' | 'scenario' | 'inspector'
 
@@ -140,108 +73,6 @@ const SWARM_DETAIL_TABS: Array<{ id: SwarmDetailTab; label: string }> = [
 
 function createIdempotencyKey() {
   return `ph-${newUuid()}`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-function toStringOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
-}
-
-function toNumberOrNull(value: unknown): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  return value
-}
-
-function toBooleanOrNull(value: unknown): boolean | null {
-  if (typeof value !== 'boolean') return null
-  return value
-}
-
-function extractRuntimeMeta(value: unknown): RuntimeMeta | null {
-  if (!isRecord(value)) return null
-  const templateId = toStringOrNull(value.templateId)
-  const runId = toStringOrNull(value.runId)
-  const containerId = toStringOrNull(value.containerId)
-  const image = toStringOrNull(value.image)
-  const stackName = toStringOrNull(value.stackName)
-  if (!templateId && !runId && !containerId && !image && !stackName) return null
-  return { templateId, runId, containerId, image, stackName }
-}
-
-function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): SwarmSnapshotView | null {
-  if (!snapshot) return null
-  const envelope = snapshot.envelope
-  if (!isRecord(envelope)) {
-    return {
-      receivedAt: snapshot.receivedAt,
-      staleAfterSec: snapshot.staleAfterSec,
-      envelopeTimestamp: null,
-      runtime: null,
-      startedAt: null,
-      controllerState: null,
-      workloadState: null,
-      health: null,
-      workers: [],
-    }
-  }
-
-  const envelopeTimestamp = toStringOrNull(envelope.timestamp)
-  const runtime = extractRuntimeMeta(envelope.runtime)
-
-  const data = isRecord(envelope.data) ? envelope.data : null
-  const startedAt = data ? toStringOrNull(data.startedAt) : null
-  const context = data && isRecord(data.context) ? data.context : null
-  const controllerState = context ? toStringOrNull(context.controllerState) : null
-  const workloadState = context ? toStringOrNull(context.workloadState) : null
-  const health = context ? toStringOrNull(context.health) : null
-
-  const workersRaw = context && Array.isArray(context.workers) ? (context.workers as unknown[]) : []
-  const workers: SwarmWorkerSummary[] = workersRaw
-    .map((entry) => {
-      if (!isRecord(entry)) return null
-      const role = toStringOrNull(entry.role)
-      const instance = toStringOrNull(entry.instance)
-      const workerEnabled = toBooleanOrNull(entry.enabled)
-      const tps = toNumberOrNull(entry.tps)
-      const stale = toBooleanOrNull(entry.stale)
-      const lastSeenAt = toStringOrNull(entry.lastSeenAt)
-      const workIoState = isRecord(entry.ioState) && isRecord(entry.ioState.work) ? entry.ioState.work : null
-      const config = isRecord(entry.config) ? entry.config : null
-      const workIo = workIoState
-        ? {
-            input: toStringOrNull(workIoState.input),
-            output: toStringOrNull(workIoState.output),
-          }
-        : null
-      const workerRuntime = extractRuntimeMeta(entry.runtime)
-      return {
-        role,
-        instance,
-        enabled: workerEnabled,
-        tps,
-        stale,
-        lastSeenAt,
-        workIo,
-        runtime: workerRuntime,
-        config,
-      } satisfies SwarmWorkerSummary
-    })
-    .filter((entry): entry is SwarmWorkerSummary => entry !== null)
-
-  return {
-    receivedAt: snapshot.receivedAt,
-    staleAfterSec: snapshot.staleAfterSec,
-    envelopeTimestamp,
-    runtime,
-    startedAt,
-    controllerState,
-    workloadState,
-    health,
-    workers,
-  }
 }
 
 function formatWorkPortMap(value?: Record<string, string>) {
@@ -312,73 +143,6 @@ function WorkIoTable({
   )
 }
 
-function asScenarioDefinition(data: unknown): ScenarioDefinition | null {
-  if (!isRecord(data)) return null
-  const template = isRecord(data.template) ? data.template : null
-  const bees = Array.isArray(template?.bees)
-    ? (template?.bees as unknown[])
-        .map((bee) => {
-          if (!isRecord(bee)) return null
-          const work = isRecord(bee.work) ? bee.work : null
-          const workIn = isRecord(work?.in) ? (work?.in as Record<string, string>) : undefined
-          const workOut = isRecord(work?.out) ? (work?.out as Record<string, string>) : undefined
-          const ports = Array.isArray(bee.ports)
-            ? (bee.ports as unknown[])
-                .map((port) => {
-                  if (!isRecord(port)) return null
-                  const id = toStringOrNull(port.id)
-                  const direction = toStringOrNull(port.direction)
-                  if (!id || (direction !== 'in' && direction !== 'out')) return null
-                  return { id, direction }
-                })
-                .filter((port): port is { id: string; direction: 'in' | 'out' } => port !== null)
-            : null
-          return {
-            role: toStringOrNull(bee.role),
-            image: toStringOrNull(bee.image),
-            work: workIn || workOut ? { in: workIn, out: workOut } : null,
-            ports,
-          }
-        })
-        .filter((bee): bee is ScenarioBee => bee !== null)
-    : undefined
-  const topology = isRecord(data.topology) ? data.topology : null
-  const edges = Array.isArray(topology?.edges)
-    ? (topology?.edges as unknown[])
-        .map((edge) => {
-          if (!isRecord(edge)) return null
-          const from = isRecord(edge.from) ? edge.from : null
-          const to = isRecord(edge.to) ? edge.to : null
-          return {
-            id: toStringOrNull(edge.id),
-            from: from
-              ? { role: toStringOrNull(from.role), port: toStringOrNull(from.port) }
-              : null,
-            to: to ? { role: toStringOrNull(to.role), port: toStringOrNull(to.port) } : null,
-          }
-        })
-        .filter((edge): edge is ScenarioTopologyEdge => edge !== null)
-    : undefined
-
-  return {
-    id: toStringOrNull(data.id),
-    name: toStringOrNull(data.name),
-    description: toStringOrNull(data.description),
-    template: template
-      ? {
-          image: toStringOrNull(template.image),
-          bees,
-        }
-      : null,
-    topology: topology
-      ? {
-          version: typeof topology.version === 'number' ? topology.version : null,
-          edges,
-        }
-      : null,
-  }
-}
-
 async function readErrorMessage(response: Response): Promise<string> {
   try {
     const text = await response.text()
@@ -416,7 +180,7 @@ function halEyeTitle(status: string | null | undefined, health: string | null | 
   return `Status: ${statusLabel}\nHealth: ${healthLabel}`
 }
 
-function workerHalEyeState(worker: SwarmWorkerSummary | null): HalEyeState {
+function workerHalEyeState(worker: SwarmRuntimeWorker | null): HalEyeState {
   if (!worker) return 'missing'
   if (worker.enabled === false) return 'alert'
   if (worker.stale === true) return 'warn'
@@ -424,7 +188,7 @@ function workerHalEyeState(worker: SwarmWorkerSummary | null): HalEyeState {
   return 'missing'
 }
 
-function workerHalEyeTitle(worker: SwarmWorkerSummary | null): string {
+function workerHalEyeTitle(worker: SwarmRuntimeWorker | null): string {
   if (!worker) {
     return 'Worker runtime: missing'
   }
@@ -439,7 +203,7 @@ function workerHalEyeTitle(worker: SwarmWorkerSummary | null): string {
 /**
  * Responsibility: present swarm management and consume backend access decisions.
  * Must not: derive permissions from grants or replace backend command authorization.
- * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (access presentation).
+ * Contract: RESP-UI-GLOBAL-ACCESS — docs/architecture/runtime-responsibilities.md#resp-ui-global-access (access presentation); RESP-UI-SWARM-DETAIL (detail composition).
  */
 export function HivePage() {
   const auth = useAuth()
@@ -452,9 +216,6 @@ export function HivePage() {
   const [busySwarm, setBusySwarm] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<SwarmAction | null>(null)
   const [lifecycleFeedback, setLifecycleFeedback] = useState<Record<string, SwarmLifecycleFeedback>>({})
-  const [selectedScenario, setSelectedScenario] = useState<ScenarioDefinition | null>(null)
-  const [scenarioError, setScenarioError] = useState<string | null>(null)
-  const [scenarioLoading, setScenarioLoading] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<SwarmSummary | null>(null)
   const [explainMode, setExplainMode] = useState<boolean>(() => {
@@ -466,9 +227,10 @@ export function HivePage() {
     }
   })
   const [selectedBeeKey, setSelectedBeeKey] = useState<string | null>(null)
-  const [snapshot, setSnapshot] = useState<StatusFullSnapshotResponse | null>(null)
-  const [snapshotError, setSnapshotError] = useState<string | null>(null)
-  const [snapshotLoading, setSnapshotLoading] = useState(false)
+  const { snapshot: snapshotView, error: snapshotError, loading: snapshotLoading, reload: loadSnapshot } =
+    useSwarmSnapshot(selectedSwarmId, auth.user, auth.session?.accessToken ?? null)
+  const { selectedScenario, scenarioLoading, scenarioError } =
+    useHiveScenario(selectedSwarmId, snapshotView, auth.user, auth.session?.accessToken ?? null)
   const [capabilities, setCapabilities] = useState<CapabilityManifest[]>([])
   const [capabilitiesLoaded, setCapabilitiesLoaded] = useState(false)
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null)
@@ -521,41 +283,6 @@ export function HivePage() {
     [navigate, selectedSwarmId],
   )
 
-  const loadSnapshot = useCallback(async () => {
-    if (!selectedSwarmId) {
-      setSnapshot(null)
-      setSnapshotError(null)
-      setSnapshotLoading(false)
-      return
-    }
-    setSnapshotLoading(true)
-    try {
-      const response = await fetch(
-        `${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(selectedSwarmId)}`,
-        { headers: { Accept: 'application/json' } },
-      )
-      if (response.status === 404) {
-        setSnapshotError('No cached status-full snapshot yet for this swarm.')
-        return
-      }
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response))
-      }
-      const payload = (await response.json()) as Partial<StatusFullSnapshotResponse>
-      const receivedAt = typeof payload.receivedAt === 'string' ? payload.receivedAt : ''
-      const staleAfterSec = typeof payload.staleAfterSec === 'number' ? payload.staleAfterSec : 0
-      setSnapshotError(null)
-      setSnapshot({
-        receivedAt,
-        staleAfterSec,
-        envelope: payload.envelope,
-      })
-    } catch (err) {
-      setSnapshotError(err instanceof Error ? err.message : 'Failed to load status-full snapshot')
-    } finally {
-      setSnapshotLoading(false)
-    }
-  }, [selectedSwarmId])
 
   const loadSwarmJournal = useCallback(async () => {
     if (!selectedSwarmId) {
@@ -842,16 +569,7 @@ export function HivePage() {
     return () => window.clearInterval(handle)
   }, [loadSwarms])
 
-  useEffect(() => {
-    void loadSnapshot()
-    if (!selectedSwarmId) {
-      return
-    }
-    const handle = window.setInterval(() => {
-      void loadSnapshot()
-    }, 5000)
-    return () => window.clearInterval(handle)
-  }, [loadSnapshot, selectedSwarmId])
+
 
   useEffect(() => {
     void loadSwarmJournal()
@@ -864,43 +582,10 @@ export function HivePage() {
     return () => window.clearInterval(handle)
   }, [loadSwarmJournal, selectedSwarmId])
 
-  const loadScenarioDetail = useCallback(
-    async (scenarioId: string | null) => {
-      if (!scenarioId) {
-        setSelectedScenario(null)
-        setScenarioError(null)
-        setScenarioLoading(false)
-        return
-      }
-      setScenarioLoading(true)
-      setScenarioError(null)
-      try {
-        const response = await fetch(
-          `/scenario-manager/scenarios/${encodeURIComponent(scenarioId)}`,
-          {
-            headers: { Accept: 'application/json' },
-          },
-        )
-        if (!response.ok) {
-          throw new Error(await readErrorMessage(response))
-        }
-        const payload = await response.json()
-        setSelectedScenario(asScenarioDefinition(payload))
-      } catch (err) {
-        setSelectedScenario(null)
-        setScenarioError(err instanceof Error ? err.message : 'Failed to load scenario')
-      } finally {
-        setScenarioLoading(false)
-      }
-    },
-    [],
-  )
-
-  const snapshotView = useMemo(() => extractSnapshotView(snapshot), [snapshot])
   const selectedSwarmIssue = useMemo(() => latestJournalIssue(swarmJournalEntries), [swarmJournalEntries])
-  const scenarioIdFromSnapshot = snapshotView?.runtime?.templateId ?? null
+  const scenarioIdFromSnapshot = snapshotView?.templateId ?? null
   const manifestIndex = useMemo(() => buildManifestIndex(capabilities), [capabilities])
-  const selectedRunId = snapshotView?.runtime?.runId ?? null
+  const selectedRunId = snapshotView?.runId ?? null
 
   const openSwarmJournal = useCallback(
     (swarmId: string, runId?: string | null) => {
@@ -919,20 +604,14 @@ export function HivePage() {
 
   useEffect(() => {
     setSelectedBeeKey(null)
-    if (!selectedSwarmId) {
-      void loadScenarioDetail(null)
-      return
-    }
-  }, [loadScenarioDetail, selectedSwarmId])
+    setConfigEditTarget(null)
+  }, [selectedSwarmId, selectedRunId, scenarioIdFromSnapshot, auth.user, auth.session?.accessToken])
 
   useEffect(() => {
-    // Avoid UI flicker when the cached status snapshot is temporarily missing/refreshing.
-    // Only load (or reload) scenario details when we have a concrete templateId.
     if (!selectedSwarmId) return
     if (!scenarioIdFromSnapshot) return
-    void loadScenarioDetail(scenarioIdFromSnapshot)
     void loadCapabilities()
-  }, [loadCapabilities, loadScenarioDetail, scenarioIdFromSnapshot, selectedSwarmId])
+  }, [loadCapabilities, scenarioIdFromSnapshot, selectedSwarmId])
 
   useEffect(() => {
     const activeProfile =
@@ -1029,7 +708,7 @@ export function HivePage() {
       />
 
       <ConfigUpdatePatchModal
-        open={configEditTarget !== null}
+        open={configEditTarget !== null && selectedScenario !== null}
         title={configEditTarget ? `Edit config: ${configEditTarget.role}` : 'Edit config'}
         imageLabel={configEditTarget?.imageLabel ?? ''}
         entries={configEditTarget?.entries ?? []}
@@ -1226,77 +905,14 @@ export function HivePage() {
                           </button>
                         ))}
                       </div>
-	                    {detailTab === 'snapshot' && snapshotLoading && !snapshotView && (
-	                      <div className="muted" style={{ marginTop: 8 }}>
-	                        Loading runtime snapshot…
-	                      </div>
+                      {detailTab === 'snapshot' && selectedSwarmId && (
+                        <PlannerRunPanel key={selectedSwarmId} swarmId={selectedSwarmId} canManage={canManageSelectedSwarm} />
                       )}
-                      {detailTab === 'snapshot' && snapshotError && (
-                        <div className="card swarmMessage" style={{ marginTop: 8 }}>
-                          {snapshotError}
-                        </div>
+                      <SwarmDetailStatus loading={snapshotLoading} error={snapshotError} onRetry={loadSnapshot} />
+                      {detailTab === 'snapshot' && snapshotView && (
+                        <SwarmSnapshotPanel snapshot={snapshotView} onOpenJournal={openSelectedSwarmJournal} />
                       )}
-	                    {detailTab === 'snapshot' && snapshotView && (
-	                      <div className="card" style={{ marginTop: 10 }}>
-	                        <div className="row between">
-	                          <div className="h2">Runtime snapshot</div>
-                              <div className="row">
-                                <button
-                                  type="button"
-                                  className="actionButton actionButtonGhost actionButtonTiny"
-                                  onClick={openSelectedSwarmJournal}
-                                >
-                                  Open journal
-                                </button>
-	                          <div
-	                            className="muted"
-	                            title={
-	                              explainMode
-	                                ? 'receivedAt = when Orchestrator cached the latest swarm-controller status-full.\nstaleAfterSec = after this age, the snapshot should be treated as stale.'
-	                                : 'Snapshot freshness (receivedAt/staleAfterSec).'
-	                            }
-	                          >
-	                            receivedAt: {snapshotView.receivedAt || '—'} · staleAfterSec:{' '}
-	                            {Number.isFinite(snapshotView.staleAfterSec) ? snapshotView.staleAfterSec : '—'}
-	                          </div>
-                              </div>
-	                        </div>
-                        <div className="kvGrid" style={{ marginTop: 10 }}>
-                          <div className="kv">
-                            <div className="k">Controller state</div>
-                            <div className="v">{snapshotView.controllerState ?? '—'}</div>
-                          </div>
-                          <div className="kv">
-                            <div className="k">Workload state</div>
-                            <div className="v">{snapshotView.workloadState ?? '—'}</div>
-                          </div>
-                          <div className="kv">
-                            <div className="k">Health</div>
-                            <div className="v">{snapshotView.health ?? '—'}</div>
-                          </div>
-                          <div className="kv">
-                            <div className="k">Envelope timestamp</div>
-                            <div className="v">{snapshotView.envelopeTimestamp ?? '—'}</div>
-                          </div>
-                          <div className="kv">
-                            <div className="k">Template ID</div>
-                            <div className="v">{snapshotView.runtime?.templateId ?? '—'}</div>
-                          </div>
-                          <div className="kv">
-                            <div className="k">Run ID</div>
-                            <div className="v">{snapshotView.runtime?.runId ?? '—'}</div>
-                          </div>
-                          <div className="kv">
-                            <div className="k">Controller image</div>
-                            <div className="v">{snapshotView.runtime?.image ?? '—'}</div>
-                          </div>
-                          <div className="kv">
-                            <div className="k">Stack name</div>
-                            <div className="v">{snapshotView.runtime?.stackName ?? '—'}</div>
-                          </div>
-                        </div>
-	                      </div>
-	                    )}
+
 
                       {detailTab === 'network' && (
                       <div className="card" style={{ marginTop: 10 }}>
@@ -1454,8 +1070,13 @@ export function HivePage() {
 
                       {detailTab === 'scenario' && (
                       <>
-		                    {scenarioLoading && <div className="muted">Loading scenario…</div>}
-	                    {scenarioError && <div className="muted">{scenarioError}</div>}
+		                    {scenarioLoading && <div className="muted" role="status">Loading scenario…</div>}
+	                    {scenarioError && <div className="muted" role="alert">{scenarioError}</div>}
+	                    {selectedScenario && snapshotView?.observationStale && (
+                        <div className="muted" role="status">
+                          Runtime observation is stale; worker values shown below are cached.
+                        </div>
+                      )}
 	                    {!scenarioLoading && !scenarioError && selectedScenario && (
                       <>
                         <div className="swarmDetailHeader">
