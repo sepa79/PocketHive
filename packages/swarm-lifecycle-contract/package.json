@@ -1,6 +1,6 @@
 {
   "name": "@pockethive/swarm-lifecycle-contract",
-  "version": "0.15.36",
+  "version": "0.15.38",
   "private": true,
   "type": "module",
   "main": "./index.js",

@@ -7,6 +7,52 @@ and commands live in `docs/ai/SCENARIO_CONFIG_MIGRATION_GUIDE.md`.
 PocketHive does not implicitly accept legacy contract shapes. Complete the
 documented migration before deploying a release that removes an old shape.
 
+## 0.15.38 (from 0.15.37)
+
+### Deployment and sign-in
+
+There are no newly mandatory HiveForge component inputs in this version. Retain
+the explicit WORK selection and public Auth/MCP identity required by 0.15.36;
+use matching source and image versions when the release images are published.
+
+PH's UI now uses [Pocket device-confirmation sign-in](architecture/BROWSER_DEVICE_LOGIN.md).
+Start sign-in in PH and confirm in the PH Auth tab; the original page completes
+sign-in without redirecting to a preview port. Device clients do not require
+per-preview callback registrations. Exact-redirect clients keep their explicit
+callback/PKCE requirements; do not relax redirect validation or origins.
+
+### Optional PocketPlanner integration
+
+Configure `POCKETHIVE_PLANNER_BASE_URL` on Orchestrator only when enabling the
+[Planner catalogue integration](ORCHESTRATOR-REST.md#pocketplanner-integration).
+The URL must reach the intended Planner backend; an unconfigured integration
+reports its configuration error rather than selecting another instance. The
+source Compose file exposes the optional setting. Current HiveForge manifests
+do not expose a Planner URL input, so upgrading that deployment alone does not
+enable the integration. No automatic Plan/Activity creation, progress or
+Started/Done synchronization is introduced.
+
+### Strict template data functions
+
+Review templates using `json_path`: selectors are RFC6901 JSON Pointers, not
+JSONPath expressions, and must select exactly one non-null scalar. Missing/null
+or non-scalar values fail explicitly instead of becoming empty strings. Use
+`json_string`, `xml_text` and `xml_attr` for explicit escaping when constructing
+requests.
+
+The shared document reader rejects duplicate JSON keys, trailing documents,
+invalid UTF-8, non-finite supplied numbers and unpaired JSON string surrogates.
+Validate input documents before deploying affected templates. Named optional
+native views retain their documented null/original-text behavior; this does
+not make WorkItem transport interpret its opaque payload as JSON.
+
+Native PH template contexts remain distinct from
+[portable-v1 record/params/endpoint bindings](contracts/portable-http-templates.md).
+Portable calls require an explicit profile, capabilities, response extraction
+and one attempt, without native retry/extract policies. Existing native
+entrypoints are not automatically converted to that profile. Extra record
+fields and their JSON types are preserved.
+
 ## 0.15.36 (from 0.15.35)
 
 ### HiveForge deployment inputs (from 0.15.34 or 0.15.35)

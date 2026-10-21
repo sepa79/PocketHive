@@ -4,103 +4,70 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-- Record the deferred stale Hive detail route/polling after successful swarm
-  removal in the UI follow-up backlog; document the existing global local-bee
-  cleanup performed by full-stack rebuilds. No runtime behavior change.
-- Bind Hive Planner associations and Activity choices to the displayed swarm/run,
-  resetting them when a swarm is recreated under the same name. Ignore superseded reads.
-- Preserve canonical request-template diagnostics for invalid portable calls so
-  Scenario Manager returns file-level findings instead of a misleading missing-bundle error.
-- Report portable HTTP transport failures before JSON/XML extraction, preserving
-  the transport diagnostic and the existing single-attempt policy.
-- Record delayed cancellation of oversized portable HTTP responses as low-priority
-  follow-up [#531](https://github.com/sepa79/PocketHive/issues/531); cancellation remains unchanged.
+## [0.15.38] - 2026-10-21
 
-- Require structural reference documentation to derive from canonical contracts,
-  with manual review for explanatory content instead of documentation-conformance
-  tests. Policy update only; no documentation generator or runtime change.
+### Added
 
-- Cover Hive runtime tuning through the rendered UI using the actual capability
-  catalogue: generator scheduler/Redis rates, processor concurrency and rate mode,
-  exact numeric patches, confirmed config rereads, invalid fractional thread counts
-  and read-only permissions. Isolated API fixtures; no operational swarm changes.
-- Exclude UI-only synthetic fixtures from production TypeScript inputs so the
-  isolated UI image build does not depend on backend test resources.
+- Integrate PocketPlanner as the master Plan/Stream/Activity catalogue. Select a
+  plan and Activity during swarm creation or append an Activity to an exact run;
+  persist `testPlan` and Activity tags without changing operator-owned progress,
+  Started or Done. Preserve concurrent notes/tags and retry associations without
+  repeating CREATE.
+- Share Pocket device-confirmation sign-in, bounded JVM/browser auth clients and
+  callback-free central logout across the Pocket family. PH's UI keeps its
+  original page/run link and no longer requires a registered callback for each
+  preview port; permissions and exact-redirect client security remain unchanged.
+- Extract the shared Pocket React shell, navigation rail and theme into
+  `@pockethive/ui`, keeping PH routes, application state and authorization in PH.
+- Add `portable-v1` HTTP calls shared with PocketData: explicit record/params/
+  endpoint binding, JSON and SOAP 1.1/1.2 response extraction, declared capabilities
+  and a bounded template-expression subset. Portable calls remain single-attempt.
+- Centralize strict JSON/XML, JSON Pointer/XPath, escaping and SOAP
+  version/Fault/header behavior in shared libraries. Native PH template
+  entrypoints remain separate from the portable profile.
 
-- Tighten review evidence for structured-data readers and UI hydration: trace
-  producer → projection → consumer, validate successful runtime fixtures against
-  canonical schemas, manually review documentation agreement, verify visible values and
-  permission-aware controls, and block unresolved affected-path contract drift.
-  Review/checklist guidance only; no runtime or public contract change.
+### Fixed
 
-- Expand control-envelope/status and Orchestrator REST field tables, required/null
-  semantics, full/delta retention and timestamp/freshness guidance. Correct stale
-  examples and mark superseded UI documentation. Documentation agreement remains
-  a manual review responsibility; no documentation tests or build hooks.
+- Restore Hive swarm details and runtime/config controls from the current
+  Orchestrator state projection, including per-instance observations, freshness
+  and exact-run journal links. Validate responses with the canonical schemas;
+  discard obsolete replies on selection, run, template or caller changes.
+- Bind Planner associations and Activity choices to the displayed swarm/run,
+  resetting them when a swarm is recreated under the same name.
+- Return file-level validation findings for invalid portable templates instead
+  of a misleading missing-bundle error. Preserve transport failure diagnostics
+  before JSON/XML extraction without adding retries.
+- Keep synthetic UI fixtures outside production TypeScript inputs and include
+  the portable HTTP contract in the built documentation.
 
-- Fix blank Hive swarm details and missing runtime/config controls: read the
-  current Orchestrator state response, including per-instance worker observations,
-  instead of the removed status-full envelope wrapper. Show server observation
-  freshness and retain the exact run in journal links. Isolate detail request
-  lifecycle and cover the rendered flow with UI regression tests.
+### Documentation And Verification
 
-- Validate Hive detail responses with the packaged canonical runtime schemas;
-  require an object observation (`{}` before first status). Reuse producer-owned
-  serialized fixtures in consumer tests. Bind authored scenario reads to the
-  selected swarm/run/template and caller, discard obsolete replies, and expose
-  runtime failures/retry on every detail tab without retaining worker controls.
+- Update control-envelope/status and REST field references, successful-response
+  UI regression fixtures, permission-aware tuning checks and producer-to-consumer
+  review guidance. Structural documentation derives from contracts; explanatory
+  content remains manually reviewed, without documentation-conformance tests.
+- Consolidate HiveForge deployment guidance and document global bee-container
+  cleanup during full local rebuilds. Upgrade actions and strict data-function
+  behavior are indexed in [Upgrading PocketHive](docs/UPGRADING.md#01538-from-01537).
+- Verify local RabbitMQ/Artemis acceptance, real UI sign-in/runtime tuning and
+  portable JSON/SOAP calls through official ingress. This is not cross-host
+  Swarm/NFS or payment-platform load qualification.
 
-- Document deferred UI follow-ups: duplicate Cancel/oversized Remove-swarm
-  confirmation and missing actionable startup failure details. No implementation
-  or release change for these reports.
+### Known Follow-ups
 
-- Move PH's own UI sign-in to the shared Pocket device-confirmation mechanism.
-  Local preview ports no longer need a registered callback. Keep the original
-  page/run link, existing permissions, bounded polling and CSRF-protected central
-  logout; remove the displaced UI PKCE consumer rather than relaxing redirects.
-- Include the referenced portable HTTP template contract in the built documentation.
+- Hive selection still polls a removed swarm until navigation; Remove-swarm
+  dialog layout and actionable startup failure details also remain deferred.
+  See the [UI backlog](docs/todo/ui-v2-control-plane-followups.md).
+- Oversized portable HTTP response cancellation can drain the remaining body;
+  [#531](https://github.com/sepa79/PocketHive/issues/531) remains a low-priority
+  follow-up, not a cancellation fix in this release.
 
-- Add portable-v1 calls shared by HTTP Sequence and PocketData, with one request/response contract and explicit record/params/endpoint binding. Reject unsupported capabilities and portable retry/extract policies before auth/HTTP effects.
-- Centralize strict JSON/XML, JSON Pointer/XPath, escaping and SOAP version/Fault/header rules in template-data. SDK/Redis/interceptor/clearing projections delegate without interpreting WorkItem payloads at transport boundaries.
-- Expose strict json_path, xml_path and explicit escaping in direct Pebble and SpEL adapters. Portable calls use a bounded compiler-admitted expression subset without eval/sequence, loops, imports or Java methods; native PH entrypoints remain available.
-- Verify portable SOAP11/12 calls through the local official ingress and actual HTTP Sequence workers; preserve opaque history, typed extra fields, whitespace and leading zeroes. HTTP-200 Fault produces one request and no retry, next step or output in a finite synthetic journey. No payment-system traffic or release.
+## [0.15.37] - 2026-10-19
 
-- Add the bounded no-redirect JVM device client, strict typed responses and safe
-  protocol failures. PocketData consumes shared identity/device clients instead
-  of its own PKCE/HTTP implementation. No shared-library publication.
-- Add `@pockethive/browser-auth` for PH-tab device confirmation, bounded polling,
-  cancellation, tab-scoped tokens and explicit sign-out; PocketData adopts it.
-
-- Add callback-free central logout for registered Pocket device clients, with
-  canonical logout URL discovery, CSRF-protected confirmation and a fixed PH
-  completion page. Existing exact-redirect browser logout is unchanged.
-
-- Extract the shared Pocket React shell/theme into `@pockethive/ui`; PH consumes
-  focused header, layout and controlled navigation components. Keep PH state,
-  routes, permissions and domain content in PH. No copied common styles.
-- Add first-party callback-free device authorization for PocketPlanner/PocketData
-  using the existing Spring OAuth stores, identity scope and token pipeline.
-  Confirmation is in PH with CSRF protection; PocketData adopts it and Planner
-  remains on its explicit current adapter. Existing PH redirect/PKCE security is
-  unchanged. Local only, no release.
-
-- Register PocketData as an independent first-party browser client (`pocketdata-web`)
-  through the existing PH SSO owner; configure its exact callback with
-  `POCKETHIVE_AUTH_WEB_PD_REDIRECT_URI` (`POCKETDATA_BROWSER_CALLBACK` in Compose).
-  Reuse central login, PKCE, identity and logout without adding credentials or issuers.
-
-- Add registered first-party PH/PP browser clients to PH Auth, with PKCE, exact callbacks, central browser login, revocation-aware REST identity resolution and authenticated journal deep links across tabs/tools. No release or remote deployment.
-
-- PocketPlanner integration (local): consume the authenticated master catalogue;
-  select Plan/Stream/Activity during swarm creation and on an existing run; persist
-  `testPlan` and append Activity tags immediately after confirmed creation. Preserve
-  notes and prior associations under concurrent edits; reject stale selections,
-  different plans and tag capacity overflow. Retry failed association without
-  repeating an accepted CREATE. No automatic Activity lifecycle or progress changes.
-
-- Docs: consolidate the current HiveForge installation procedure, complete
-  Swarm profile configuration and public-ingress verification; correct unsupported
-  profile/stack-name claims and require deployment-input guidance before releases.
+- Add composable SpEL functions `#emv_icc_mk_a`, `#emv_common_sk` and
+  `#iso9797_alg3_mac_m2` for EMV Option A key derivation, common session key
+  derivation and ISO 9797-1 Algorithm 3 MACs with method-2 padding. Includes
+  generic template examples, input validation and known-answer/rendering tests.
 
 ## [0.15.36] - 2026-09-29
 

@@ -46,6 +46,7 @@ const config: Config = {
             "mcp/README.md",
             "tcp-mock/legacy-workspaces.md",
             "control-plane/worker-guide.md",
+            "contracts/template-capabilities.md",
             "ARCHITECTURE.md",
             "ENGINEERING_RULES.md",
             "REVIEW_RULES.md",

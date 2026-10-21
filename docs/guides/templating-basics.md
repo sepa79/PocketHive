@@ -114,6 +114,10 @@ The following SpEL functions are available (via `#name(...)`):
 - `#sha256_hex(value)` - SHA-256 hash in hex.
 - `#base64_encode(value)` / `#base64_decode(value)` - Base64 helpers.
 - `#hmac_sha256_hex(key, value)` - HMAC-SHA256 in hex.
+- `#emv_icc_mk_a(imkHex, pan, panSeqNo)` - Option A ICC master key.
+- `#emv_common_sk(iccMkHex, diversificationHex)` - common session key.
+- `#iso9797_alg3_mac_m2(keyHex, dataHex)` - eight-byte MAC with method-2 padding.
+  See the [contracts and generic composition examples](../contracts/template-capabilities.md#composable-emv-and-mac-functions).
 - `#regex_match(input, pattern)` - boolean.
 - `#regex_extract(input, pattern, group)` - string (empty if no match).
 - `#json_path(payload, path)` - JSONPath extractor; returns a string.
