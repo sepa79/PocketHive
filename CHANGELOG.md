@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore the Auth mutation gate's full coverage with regressions for exact
+  first-party browser redirects and public-client revocation versus refresh.
+  Exercise canonical Pocket browser/device registrations without lowering the
+  mutation or coverage thresholds or changing runtime authorization behavior.
+
 ## [0.15.38] - 2026-10-21
 
 ### Added

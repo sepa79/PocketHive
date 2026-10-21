@@ -3,8 +3,10 @@ package io.pockethive.auth.service.oauth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.pockethive.auth.contract.PocketHiveBrowserAuth;
+import io.pockethive.auth.service.config.AuthServiceProperties;
+import java.net.URI;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -24,6 +26,43 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 class LocalhostLoopbackRedirectValidatorTest {
     private static final String REGISTERED_REDIRECT = "http://localhost:52000/oauth/callback";
     private static final String RUNTIME_REDIRECT = "http://localhost:62810/oauth/callback";
+    private static final String BROWSER_REDIRECT = "http://localhost:52000/auth/callback";
+
+    @Test
+    void delegatesExactBrowserRedirectOnceWithoutChangingItsContext() {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicReference<OAuth2AuthorizationCodeRequestAuthenticationContext> validated =
+            new AtomicReference<>();
+        OAuth2AuthorizationCodeRequestAuthenticationContext original = browserContext(BROWSER_REDIRECT);
+        Consumer<OAuth2AuthorizationCodeRequestAuthenticationContext> delegate = context -> {
+            calls.incrementAndGet();
+            validated.set(context);
+        };
+
+        new LocalhostLoopbackRedirectValidator(delegate).accept(original);
+
+        assertThat(calls).hasValue(1);
+        assertThat(validated.get()).isSameAs(original);
+        assertThat(original.getRegisteredClient().getRedirectUris()).containsExactly(BROWSER_REDIRECT);
+    }
+
+    @Test
+    void preservesBrowserPortMismatchWithoutRetryingOrChangingRegistration() {
+        AtomicInteger calls = new AtomicInteger();
+        OAuth2AuthenticationException failure = new OAuth2AuthenticationException(new OAuth2Error(
+            OAuth2ErrorCodes.INVALID_REQUEST, "redirect mismatch", null));
+        Consumer<OAuth2AuthorizationCodeRequestAuthenticationContext> delegate = context -> {
+            calls.incrementAndGet();
+            throw failure;
+        };
+        OAuth2AuthorizationCodeRequestAuthenticationContext original = browserContext(
+            "http://localhost:62810/auth/callback");
+
+        assertThatThrownBy(() -> new LocalhostLoopbackRedirectValidator(delegate).accept(original))
+            .isSameAs(failure);
+        assertThat(calls).hasValue(1);
+        assertThat(original.getRegisteredClient().getRedirectUris()).containsExactly(BROWSER_REDIRECT);
+    }
 
     @Test
     void revalidatesPortVariationWithAnIsolatedRuntimeRedirectProjection() {
@@ -98,6 +137,22 @@ class LocalhostLoopbackRedirectValidatorTest {
             .redirectUri(registeredRedirect)
             .scope("pockethive:mcp:read")
             .build();
+        return context(client, requestedRedirect);
+    }
+
+    private static OAuth2AuthorizationCodeRequestAuthenticationContext browserContext(String requestedRedirect) {
+        AuthServiceProperties properties = new AuthServiceProperties();
+        properties.getOauth().setIssuer(URI.create("http://localhost:8088/auth-service"));
+        properties.getOauth().setPocketHiveBrowserRedirectUri(BROWSER_REDIRECT);
+        RegisteredClient client = new BrowserOAuthClients(properties)
+            .requireRedirectClient(PocketHiveBrowserAuth.PH_CLIENT_ID);
+        return context(client, requestedRedirect);
+    }
+
+    private static OAuth2AuthorizationCodeRequestAuthenticationContext context(
+        RegisteredClient client,
+        String requestedRedirect
+    ) {
         OAuth2AuthorizationCodeRequestAuthenticationToken request =
             new OAuth2AuthorizationCodeRequestAuthenticationToken(
                 "http://localhost:8088/auth-service/oauth/authorize",
@@ -105,23 +160,21 @@ class LocalhostLoopbackRedirectValidatorTest {
                 new TestingAuthenticationToken("local-admin", null),
                 requestedRedirect,
                 "state",
-                Set.of("pockethive:mcp:read"),
+                client.getScopes(),
                 Map.of());
         OAuth2AuthorizationRequest authorizationRequest = OAuth2AuthorizationRequest.authorizationCode()
             .authorizationUri("http://localhost:8088/auth-service/oauth/authorize")
             .clientId(client.getClientId())
             .redirectUri(requestedRedirect)
-            .scopes(Set.of("pockethive:mcp:read"))
+            .scopes(client.getScopes())
             .state("state")
             .build();
-        OAuth2AuthorizationConsent consent = OAuth2AuthorizationConsent
-            .withId(client.getId(), "local-admin")
-            .scope("pockethive:mcp:read")
-            .build();
+        var consent = OAuth2AuthorizationConsent.withId(client.getId(), "local-admin");
+        client.getScopes().forEach(consent::scope);
         return OAuth2AuthorizationCodeRequestAuthenticationContext.with(request)
             .registeredClient(client)
             .authorizationRequest(authorizationRequest)
-            .authorizationConsent(consent)
+            .authorizationConsent(consent.build())
             .build();
     }
 }
