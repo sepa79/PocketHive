@@ -2,12 +2,30 @@ package io.pockethive.scenarios.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.pockethive.templatedata.JsonDocumentReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RequestTemplateFindingsTest {
     private final RequestTemplateFindings projection = new RequestTemplateFindings();
+
+    @Test
+    void invalidPortableCallProducesFileLevelFindingsInsteadOfEscaping() throws Exception {
+        try (var resource = getClass().getResourceAsStream("/portable/examples/account-json.json")) {
+            assertThat(resource).isNotNull();
+            String source = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+            var invalid = new JsonDocumentReader().readObject(source.replace("201", "201.0"));
+            var findings = new ArrayList<ValidationFinding>();
+            assertThat(projection.parse(invalid, "templates/account.json", findings)).isNull();
+            assertThat(findings).singleElement().satisfies(finding -> {
+                assertThat(finding.path()).isEqualTo("templates/account.json");
+                assertThat(finding.code()).isEqualTo("TEMPLATE_INVALID");
+                assertThat(finding.message()).isEqualTo("Expected status must be an integer.");
+            });
+        }
+    }
 
     @Test
     void preservesRequiredFieldPathsInBundleFindings() {

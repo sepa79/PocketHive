@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Record the deferred stale Hive detail route/polling after successful swarm
+  removal in the UI follow-up backlog; document the existing global local-bee
+  cleanup performed by full-stack rebuilds. No runtime behavior change.
+- Bind Hive Planner associations and Activity choices to the displayed swarm/run,
+  resetting them when a swarm is recreated under the same name. Ignore superseded reads.
+- Preserve canonical request-template diagnostics for invalid portable calls so
+  Scenario Manager returns file-level findings instead of a misleading missing-bundle error.
+- Report portable HTTP transport failures before JSON/XML extraction, preserving
+  the transport diagnostic and the existing single-attempt policy.
+- Record delayed cancellation of oversized portable HTTP responses as low-priority
+  follow-up [#531](https://github.com/sepa79/PocketHive/issues/531); cancellation remains unchanged.
+
 - Require structural reference documentation to derive from canonical contracts,
   with manual review for explanatory content instead of documentation-conformance
   tests. Policy update only; no documentation generator or runtime change.

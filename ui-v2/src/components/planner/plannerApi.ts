@@ -39,6 +39,10 @@ export async function linkPlannerRun(swarmId: string, runId: string, selection: 
   return (await plannerRequest(`/runs/${encodeURIComponent(swarmId)}/${encodeURIComponent(runId)}`, selection)).json()
 }
 
-export async function readCurrentPlannerRun(swarmId: string, signal?: AbortSignal): Promise<PlannerRun> {
-  return (await plannerRequest(`/swarms/${encodeURIComponent(swarmId)}`, undefined, signal)).json()
+export async function readCurrentPlannerRun(swarmId: string, expectedRunId: string, signal?: AbortSignal): Promise<PlannerRun> {
+  const run = await (await plannerRequest(`/swarms/${encodeURIComponent(swarmId)}`, undefined, signal)).json()
+  if (run?.swarmId !== swarmId || run?.runId !== expectedRunId) {
+    throw new Error('Swarm run changed. Wait for the latest runtime snapshot before linking an Activity.')
+  }
+  return run
 }

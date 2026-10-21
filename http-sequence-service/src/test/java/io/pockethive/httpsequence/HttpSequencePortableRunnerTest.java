@@ -131,6 +131,21 @@ class HttpSequencePortableRunnerTest {
         assertThat(requests).hasSize(1);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"account-json", "card-soap11", "card-soap12"})
+    void transportFailureStopsJsonAndSoapJourneysWithTheOriginalDiagnostic(String fixture) throws Exception {
+        PortableHttpCall call = loadFixture(fixture);
+        responses.add(new HttpCallResult(-1, Map.of(), "", "java.net.SocketTimeoutException: response timed out"));
+        try (var runner = runner()) {
+            assertThatThrownBy(() -> runner.run(seed("{\"customerId\":\"000123\",\"accountNumber\":\"000123\"}"), context,
+                config(List.of(fixtureStep(call.serviceId()), fixtureStep(call.serviceId())), Map.of("productClass", "gold"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Portable HTTP transport failed").hasMessageContaining("SocketTimeoutException")
+                .hasMessageContaining("response timed out");
+        }
+        assertThat(requests).hasSize(1);
+    }
+
     @Test
     void soapResponsePreservesEmptyAndWhitespaceValues() throws Exception {
         write("create", soapCall("create", "SOAP11"));
@@ -263,7 +278,8 @@ class HttpSequencePortableRunnerTest {
         try (var runner = runner(new ApacheHttpCallExecutor(client, client))) {
             assertThatThrownBy(() -> runner.run(seed("{}"), context,
                 config(List.of(step("portable"), step("portable")), Map.of())))
-                .isInstanceOf(TemplateDataException.class).hasMessageNotContaining("private-");
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("Portable HTTP transport failed")
+                .hasMessageContaining("MalformedInputException").hasMessageNotContaining("private-");
         }
         assertThat(attempts).hasValue(1);
     }

@@ -3,6 +3,8 @@ package io.pockethive.requesttemplates;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.pockethive.templatedata.JsonDocumentReader;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,22 @@ class RequestTemplateParserTest {
         document.put("method", "GET");
         document.put("unexpected", true);
         assertThatThrownBy(() -> parser.parse(document)).hasMessageContaining("unexpected");
+    }
+
+    @Test
+    void portableAdmissionPreservesTheCanonicalParserFailureContract() throws Exception {
+        try (var resource = getClass().getResourceAsStream("/portable/examples/account-json.json")) {
+            assertThat(resource).isNotNull();
+            String source = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+            var reader = new JsonDocumentReader();
+            assertThat(parser.parse(reader.readObject(source))).isInstanceOf(PortableHttpCall.class);
+            var invalid = reader.readObject(source.replace("201", "201.0"));
+            assertThatThrownBy(() -> parser.parse(invalid)).isInstanceOfSatisfying(RequestTemplateException.class,
+                failure -> assertThat(failure.problems()).containsExactly(new RequestTemplateProblem(
+                    RequestTemplateProblemKind.INVALID_VALUE, "", "Expected status must be an integer.")));
+        }
+        assertThatThrownBy(() -> parser.parse(Map.of("profile", "unsupported")))
+            .isInstanceOf(RequestTemplateException.class);
     }
 
     private Map<String, Object> http() {

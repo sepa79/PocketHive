@@ -124,6 +124,7 @@ function interceptIngress({
   authoredScenario = scenario,
   capabilityCatalogue = capabilities,
   configResponse,
+  plannerRunResponse,
 }: {
   state?: Record<string, unknown>
   canRun?: boolean
@@ -132,6 +133,7 @@ function interceptIngress({
   authoredScenario?: unknown
   capabilityCatalogue?: unknown
   configResponse?: (request: Request) => Promise<Response>
+  plannerRunResponse?: (request: Request) => Response
 } = {}) {
   const responses = new Map<string, unknown>([
     ['/orchestrator/api/swarms', [state]],
@@ -157,6 +159,7 @@ function interceptIngress({
       : new Request(new URL(String(input), window.location.origin), init)
     const url = new URL(request.url)
     const path = url.pathname + url.search
+    if (plannerRunResponse && path === `/orchestrator/api/planner/swarms/${swarmId}`) return plannerRunResponse(request)
     if (request.method === 'POST' && configResponse &&
       path.startsWith('/orchestrator/api/components/') && path.endsWith('/config')) return configResponse(request)
     if (request.method === 'GET' && path === `/network-proxy-manager/api/network/bindings/${swarmId}`) {
@@ -237,6 +240,32 @@ afterEach(() => {
 })
 
 describe('Hive swarm detail through the canonical REST projection', () => {
+  it('rebinds Planner associations when the same swarm reports a replacement run', async () => {
+    let currentState = swarmFixture()
+    const reads: string[] = []
+    interceptIngress({
+      detailResponse: () => Response.json(currentState),
+      plannerRunResponse: request => {
+        expect(new URL(request.url).pathname).toBe(`/orchestrator/api/planner/swarms/${swarmId}`)
+        reads.push(currentState.runId)
+        return Response.json({ swarmId, runId: currentState.runId, testPlan: null, tags: [], description: null })
+      },
+    })
+    await renderHive()
+    await screen.findByText(`Run ${runId}`)
+    const nextRunId = 'synthetic-replacement-run'
+    currentState = {
+      ...currentState, runId: nextRunId,
+      observation: { ...currentState.observation, workers: currentState.observation.workers.map(worker => ({
+        ...worker, runtime: { ...worker.runtime, runId: nextRunId },
+      })) },
+    }
+    await act(async () => { vi.advanceTimersByTime(5000) })
+    await screen.findByText(`Run ${nextRunId}`)
+    expect(screen.queryByText(`Run ${runId}`)).toBeNull()
+    expect(reads).toEqual([runId, nextRunId])
+  })
+
   it('reports an obsolete detail payload explicitly and recovers through retry', async () => {
     let detail = () => Response.json({ receivedAt: observedAt, staleAfterSec: 15, envelope: {} })
     interceptIngress({ detailResponse: () => detail() })

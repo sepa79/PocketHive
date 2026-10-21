@@ -29,6 +29,10 @@ final class HttpSequencePortableCalls {
     }
 
     Map<String, String> extract(PortableHttpCall call, HttpCallResult result) {
+        if (result.statusCode() < 0 || result.error() != null) {
+            throw new IllegalStateException("Portable HTTP transport failed (status " + result.statusCode() + ")"
+                + (result.error() == null ? "" : ": " + result.error()));
+        }
         return responses.extract(call, result.statusCode(), result.body());
     }
 }

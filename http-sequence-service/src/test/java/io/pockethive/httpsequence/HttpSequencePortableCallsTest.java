@@ -44,6 +44,20 @@ class HttpSequencePortableCallsTest {
             .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void transportErrorsAreReportedBeforeInterpretingAResponseDocument() {
+        String diagnostic = "java.net.SocketTimeoutException: response timed out";
+        for (var result : List.of(new HttpCallResult(-1, Map.of(), "", diagnostic),
+                new HttpCallResult(200, Map.of(), "sensitive body", diagnostic))) {
+            assertThatThrownBy(() -> calls.extract(call, result))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Portable HTTP transport failed").hasMessageContaining(diagnostic)
+                .hasMessageNotContaining("sensitive body").hasMessageNotContaining("JSON").hasMessageNotContaining("XML");
+        }
+        assertThatThrownBy(() -> calls.extract(call, new HttpCallResult(-1, Map.of(), "", null)))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("transport failed (status -1)");
+    }
+
     private HttpSequenceWorkerConfig.Step step() {
         return new HttpSequenceWorkerConfig.Step("portable", "portable", null, false, null, List.of(), List.of());
     }

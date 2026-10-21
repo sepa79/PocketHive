@@ -12,6 +12,32 @@
 
 Current topology and live-config identity rules live in `docs/ARCHITECTURE.md`, `docs/ORCHESTRATOR-REST.md`, and `docs/ui-v2/UI_V2_FLOW.md`.
 
+## Selected swarm after REMOVE — 2026-10-21
+
+Status: recorded only, P2; explicitly deferred by the human while preparing
+the Pocket-family integration release.
+
+- [ ] After the selected swarm's canonical REMOVE operation succeeds, return
+  to the Hive list and release its detail selection. An accepted request alone
+  is not removal success; retain actionable feedback while removal is pending
+  or fails.
+- [ ] Stop snapshot, journal and network-binding polling for the removed
+  selection. Do not leave `/hive/{swarmId}` issuing repeated404 requests.
+- [ ] Keep backend lifecycle/operation state authoritative. The UI owns only
+  navigation, selection and read projections; do not introduce another swarm
+  lifecycle owner. A late removal response must not clear a different selection
+  or a replacement run.
+- [ ] Cover successful removal from the detail page, pending/failed removal
+  and navigation or run replacement while the request is outstanding with UI
+  regressions and a real-browser check through the official ingress.
+
+Evidence: local integration E2E created `ui-e2e-20261021` through the UI,
+started it, changed generator/processor configuration, stopped it and removed
+it. The row disappeared, but the URL remained on its detail route and snapshot,
+journal and network-binding requests continued returning404 until navigation.
+The runtime was removed correctly; this is stale view selection, not another
+authoritative runtime state store.
+
 ## Reported in release 0.15.37 — 2026-10-21
 
 Status: recorded only; defer implementation to the PocketData/Pocket-family

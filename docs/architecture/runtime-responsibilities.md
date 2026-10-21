@@ -2043,6 +2043,9 @@ the runner remains the workflow payload/history writer. Native HTTP steps retain
 their own retry/extract policies; portable calls cannot inherit them.
 Native result projection delegates to RESP-HTTP-SEQUENCE-NATIVE-RESULTS;
 HTTP transport delegates to RESP-HTTP-SEQUENCE-HTTP-EXECUTION.
+The portable adapter rejects transport failures before document extraction,
+retaining the transport diagnostic rather than reporting a JSON/XML parse error.
+It does not retry or interpret a failed transport's body as a response document.
 
 **Current module(s):** `http-sequence-service`.
 
@@ -2587,6 +2590,10 @@ shape/auth/protocol decisions; silent missing-root, serviceId or duplicate-key f
 **Required effect:** The same decoded template receives the same semantic decision in
 runtime loading and authoring. Validation failures carry field/category evidence for
 Scenario Manager; auth reference values retain their owner in AuthRef.
+RequestTemplateParser translates portable TemplateDataException failures to its
+canonical RequestTemplateException diagnostics; the portable library keeps its own
+data-error contract. Bundle findings retain the source file path without duplicating
+portable validation rules.
 
 **Verification entrypoints:** request parser unit tests, migrated TemplateLoaderTest
 component tests, existing ScenarioRepositoryValidationTest and worker behavior suites.
@@ -4372,6 +4379,11 @@ description and unrelated tags, and reject another plan or the tag limit. Generi
 metadata replacement cannot remove Planner-owned associations. UI consumes these
 owners; it does not generate references or write SQL. See ORCHESTRATOR-REST.md,
 PocketPlanner integration section, for the wire contract and partial-success rules.
+The Hive association panel is mounted for the snapshot's exact swarm/run identity.
+It uses the scoped current-run endpoint and requires the response to match the
+displayed identity, retaining existing read permissions. A replacement run resets
+its choices and discards superseded reads; another run is never substituted for
+the currently displayed run.
 
 ## RESP-SWARM-CATALOGUE-REMOVAL
 

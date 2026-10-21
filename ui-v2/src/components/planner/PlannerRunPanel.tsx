@@ -9,19 +9,22 @@ import { PlannerPicker } from './PlannerPicker'
  * Must not: start work, replace prior associations or infer progress from runtime state.
  * Contract: RESP-POCKETPLANNER-INTEGRATION — docs/architecture/runtime-responsibilities.md#resp-pocketplanner-integration.
  */
-export function PlannerRunPanel({ swarmId, canManage }: { swarmId: string; canManage: boolean }) {
+export function PlannerRunPanel({ swarmId, runId, canManage }: { swarmId: string; runId: string; canManage: boolean }) {
   const picker = usePlannerSelection(true)
-  const [run, setRun] = useState<PlannerRun | null>(null)
+  const [loadedRun, setRun] = useState<PlannerRun | null>(null)
+  const run = loadedRun?.swarmId === swarmId && loadedRun.runId === runId ? loadedRun : null
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     const controller = new AbortController()
     setRun(null); setError(null)
-    readCurrentPlannerRun(swarmId, controller.signal).then(setRun).catch((reason: unknown) => {
+    readCurrentPlannerRun(swarmId, runId, controller.signal).then(value => {
+      if (!controller.signal.aborted) setRun(value)
+    }).catch((reason: unknown) => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Cannot read run')
     })
     return () => controller.abort()
-  }, [swarmId])
+  }, [swarmId, runId])
   const plan = picker.catalogue?.plans.find(item => item.testPlan === run?.testPlan)
   const activities = plan?.activities.filter(item => run?.tags?.includes(item.tag)) ?? []
   const missing = run?.tags?.filter(tag => tag.startsWith('pp.activity:') && !activities.some(activity => activity.tag === tag)) ?? []
@@ -36,7 +39,7 @@ export function PlannerRunPanel({ swarmId, canManage }: { swarmId: string; canMa
     <button type="button" className="btnPrimary" disabled={busy || !canManage || !run || !picker.selection} onClick={async () => {
       if (!picker.selection) return
       setBusy(true); setError(null)
-      try { setRun(await linkPlannerRun(swarmId, run!.runId, picker.selection)) }
+      try { setRun(await linkPlannerRun(swarmId, runId, picker.selection)) }
       catch (reason) { setError(reason instanceof Error ? reason.message : 'Cannot link Activity') }
       finally { setBusy(false) }
     }}>{busy ? 'Linking…' : 'Link Activity'}</button>

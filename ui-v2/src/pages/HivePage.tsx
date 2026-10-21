@@ -905,8 +905,9 @@ export function HivePage() {
                           </button>
                         ))}
                       </div>
-                      {detailTab === 'snapshot' && selectedSwarmId && (
-                        <PlannerRunPanel key={selectedSwarmId} swarmId={selectedSwarmId} canManage={canManageSelectedSwarm} />
+                      {detailTab === 'snapshot' && snapshotView && (
+                        <PlannerRunPanel key={JSON.stringify([snapshotView.id, snapshotView.runId])}
+                          swarmId={snapshotView.id} runId={snapshotView.runId} canManage={canManageSelectedSwarm} />
                       )}
                       <SwarmDetailStatus loading={snapshotLoading} error={snapshotError} onRetry={loadSnapshot} />
                       {detailTab === 'snapshot' && snapshotView && (
