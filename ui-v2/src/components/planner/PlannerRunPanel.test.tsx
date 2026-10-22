@@ -100,3 +100,33 @@ it('refuses a current-run response that does not match the displayed snapshot', 
   expect((screen.getByRole('button', { name: 'Link Activity' }) as HTMLButtonElement).disabled).toBe(true)
   expect(writes).toEqual([])
 })
+
+
+it.each(['streams', 'activities'] as const)('shows a recoverable catalogue error for a null %s entry', async collection => {
+  let currentCatalogue: unknown = { ...catalogue, plans: [{ ...catalogue.plans[0], [collection]: [null] }] }
+  const writes: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
+    if (input === '/orchestrator/api/planner/catalogue') return Response.json(currentCatalogue)
+    if (input === `/orchestrator/api/planner/swarms/${swarmId}`) return Response.json(runFixture('current-run'))
+    if (input === `/orchestrator/api/planner/runs/${swarmId}/current-run` && init?.method === 'POST') {
+      writes.push(input)
+      return Response.json(runFixture('current-run'))
+    }
+    throw new Error(`Unexpected request: ${input}`)
+  }))
+  render(<PlannerRunPanel swarmId={swarmId} runId="current-run" />)
+  await screen.findByText('Invalid PocketPlanner catalogue')
+  expect(screen.getByText('Run current-run')).toBeTruthy()
+  expect((screen.getByRole('combobox', { name: 'Plan' }) as HTMLSelectElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: 'Link Activity' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.queryByRole('option', { name: 'Master plan' })).toBeNull()
+  expect(writes).toEqual([])
+
+  currentCatalogue = catalogue
+  fireEvent.click(screen.getByRole('button', { name: 'Reload plans' }))
+  await screen.findByRole('option', { name: 'Master plan' })
+  expect(screen.queryByText('Invalid PocketPlanner catalogue')).toBeNull()
+  chooseActivity()
+  fireEvent.click(screen.getByRole('button', { name: 'Link Activity' }))
+  await waitFor(() => expect(writes).toEqual([`/orchestrator/api/planner/runs/${swarmId}/current-run`]))
+})

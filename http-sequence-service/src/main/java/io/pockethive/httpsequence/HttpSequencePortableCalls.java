@@ -1,5 +1,6 @@
 package io.pockethive.httpsequence;
 
+import io.pockethive.requesttemplates.HttpSequencePortablePolicy;
 import io.pockethive.requesttemplates.PortableHttpCall;
 import io.pockethive.requesttemplates.PortableResponseExtractor;
 import io.pockethive.templating.PortableHttpBinding;
@@ -18,9 +19,7 @@ final class HttpSequencePortableCalls {
     private final PortableResponseExtractor responses = new PortableResponseExtractor();
 
     void validate(HttpSequenceWorkerConfig.Step step, PortableHttpCall call) {
-        if (step.retry().maxAttempts() != 1 || step.continueOnNon2xx() || !step.extracts().isEmpty()) {
-            throw new IllegalArgumentException("Portable HTTP steps require one attempt, no continueOnNon2xx and no legacy extracts");
-        }
+        HttpSequencePortablePolicy.validate(step.retry().maxAttempts(), step.continueOnNon2xx(), step.extracts());
         renderer.validate(call);
     }
 

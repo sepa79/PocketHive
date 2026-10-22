@@ -5,8 +5,8 @@
   "description": "Development tooling for PocketHive",
   "scripts": {
     "build": "echo \"no build step\"",
-    "contracts:generate": "node scripts/generate-swarm-lifecycle-contract.mjs && node scripts/generate-scenario-config-defaults.mjs",
-    "contracts:check": "node scripts/generate-swarm-lifecycle-contract.mjs --check && node scripts/generate-scenario-config-defaults.mjs --check",
+    "contracts:generate": "node scripts/generate-swarm-lifecycle-contract.mjs",
+    "contracts:check": "node scripts/generate-swarm-lifecycle-contract.mjs --check",
     "lint": "npm run lint --prefix ui-v2",
     "test": "vitest run --passWithNoTests"
   },

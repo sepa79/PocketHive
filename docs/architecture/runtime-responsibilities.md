@@ -1297,7 +1297,7 @@ WorkerInvocation supplies execution context; meters observe execution rather tha
 WorkerTemplateContext assembles existing message/Redis/interceptor template
 contexts from the supplied WorkItem. It consumes JsonViews' optional projections;
 JsonDocumentReader remains the JSON decoding owner under RESP-TEMPLATE-DATA.
-PayloadWrapper exposes the existing col0–col9 bean accessors without parsing.
+Object contexts expose JSON fields directly through their map keys.
 Text contexts keep raw payload plus optional payloadAsJson; interceptor contexts
 retain their object-or-text interface. Headers, vars and WorkItem are projections,
 not new state owners. No XML detection or additional payload alias is inferred.
@@ -1383,7 +1383,11 @@ runtime tests; no new boundary scanner or wiring tests.
 **Current module(s):** `common/worker-sdk`.
 
 `SchedulerWorkInput` owns timed intake and dispatch; its factory/builder wire the
-selected `ScheduledInvocationPolicy` and callbacks. It projects worker snapshots
+selected `ScheduledInvocationPolicy` and callbacks. The factory applies the named
+`schedulerSeedCustomizer` through the existing builder seed factory, after canonical
+seed metadata is created. The SDK customizer preserves that seed; a service may
+supply its explicit scheduled-input shape without adding another input factory.
+It projects worker snapshots
 into ordered `SchedulingState` revisions and invokes the policy's update/plan port.
 Runtime controls and finite-run accounting delegate to RESP-WORK-SCHEDULER-RUN.
 Its builder consumes validated timing without local defaults or clamping.
@@ -2079,11 +2083,13 @@ framing, auth options, results and failures; existing transport IO tests.
 
 ## RESP-HTTP-SEQUENCE-PORTABLE
 
-**Current module:** `http-sequence-service`.
+**Current modules:** `http-sequence-service`, `common/request-templates`.
 
 HttpSequencePortableCalls delegates definition admission for every selected
-portable call before auth/HTTP effects and rejects retries/continueOnNon2xx/native
-extracts. It delegates rendering/extraction to shared
+portable call before auth/HTTP effects. HttpSequencePortablePolicy is the single
+pure owner of the no-retry/continueOnNon2xx/native-extract constraints; both this
+runtime adapter and Scenario Manager project their settings into that policy.
+It delegates rendering/extraction to shared
 PortableHttpRenderer/PortableResponseExtractor, supplying explicit
 record/params/endpoint bindings. Data-dependent binding/rendering validation occurs
 per step before that request. It does not duplicate contract validation, execute
@@ -2107,6 +2113,12 @@ It does not retry or interpret a failed transport's body as a response document.
 
 **Current module(s):** `http-sequence-service`.
 
+For SCHEDULER input, HttpSequenceSchedulingConfiguration supplies the named seed
+customizer: one initial JSON-object step (`{}`, application/json), preserving
+canonical scheduler headers, step tracking and observability. Other worker seeds
+retain the SDK default. This production-time binding does not repair transported
+payloads; the shared strict JSON reader remains the sole input parser.
+
 HttpSequenceWorkerImpl delegates the configured sequence to HttpSequenceRunner,
 which owns ordered step execution, retries, capture selection and journey budgets.
 Capture projection delegates to RESP-HTTP-SEQUENCE-DEBUG-CAPTURE and persistence
@@ -2121,7 +2133,7 @@ interruption; Redis cache entries and refresh leases retain their existing owner
 
 **Required effect:** Configured steps execute in sequence and return the observed result through the worker; renderer and auth capabilities retain their owners.
 
-**Verification entrypoints:** `HttpSequenceRunnerTest`.
+**Verification entrypoints:** `HttpSequenceRunnerTest`, `HttpSequenceSchedulerInputTest`.
 
 **Migration status:** Portable adaptation, native request rendering, native result
 extraction and capture projection/storage have separate source owners. The runner
@@ -2532,8 +2544,14 @@ Both use the canonical template API with DisabledSequenceAccess; diagnostic rend
 Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
 AuthProfileStorageFindings projects authored auth type/storage checks using the
 shared auth-contracts policy; see RESP-SCENARIO-AUTH-STORAGE-FINDINGS.
-RequestTemplateFindings projects its problems into bundle findings; profile existence and
-bundle visibility stay here. The offline diagnostic delegates file loading to
+RequestTemplateFindings projects its problems into bundle findings and invokes
+PortableHttpRenderer for portable syntax/capability admission. Native templates
+retain the native syntax validator; portable documents are never compiled through
+that engine. Selected HTTP Sequence steps also delegate adapter admission to
+HttpSequencePortablePolicy. Bundle admission also rejects portable calls referenced by
+Request Builder, whose native protocol renderer does not implement that profile;
+unreferenced portable files may share its template root.
+Profile existence and bundle visibility stay here. The offline diagnostic delegates file loading to
 request-template-files. See RESP-REQUEST-TEMPLATE-PARSE for these transferred owners.
 WorkConfigurationFindings projects one injected WorkConfigurationParser AUTHORING result,
 prefixing canonical errors/deferred paths without adapter-specific decisions. The existing
@@ -3401,8 +3419,10 @@ for Java services; `vscode-pockethive/src/connection/endpointSecurityPolicy.ts`
 for the companion boundary in its TypeScript runtime.
 
 Auth Service and MCP bind the same `POCKETHIVE_ALLOW_REMOTE_HTTP` deployment
-setting and delegate to the Java policy. The companion requires an independent,
-explicit saved transport selection. Profile creation, persisted profile decoding,
+setting and delegate to the Java policy. The Java device client also delegates
+returned public endpoints to that policy using its explicit consumer permission;
+its response DTOs validate URI structure without selecting the permission. The
+companion requires an independent, explicit saved transport selection. Profile creation, persisted profile decoding,
 command decoding and metadata validation consume its canonical policy. UI labels
 are a read-only presentation of the available modes.
 

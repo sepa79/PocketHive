@@ -781,10 +781,12 @@ public final class ScenarioBundleValidator {
             if (relativeRoot.isEmpty()) {
                 continue;
             }
+            Set<TemplateReference> consumerReferences = referencedTemplatesForConsumer(scenario, consumer);
             Map<String, List<TemplateSource>> visibleTemplates = visibleRequestTemplates(
                 templateSources,
                 relativeRoot.get(),
                 consumer,
+                consumerReferences,
                 findings,
                 shapeReports);
             visibleTemplates.keySet().forEach(defined::add);
@@ -810,7 +812,7 @@ public final class ScenarioBundleValidator {
                         .formatted(entry.getKey(), relativeRoot.get())));
             }
 
-            for (TemplateReference reference : referencedTemplatesForConsumer(scenario, consumer)) {
+            for (TemplateReference reference : consumerReferences) {
                 referenced.add(reference.key());
                 if (!visibleTemplates.containsKey(reference.key())) {
                     String visibleRoot = relativeRoot.get().isBlank() ? "." : relativeRoot.get();
@@ -846,7 +848,9 @@ public final class ScenarioBundleValidator {
             }
             try {
                 sources.add(new TemplateSource(relativePath, readStructuredMap(bundleRoot.resolve(relativePath).normalize())));
-                validateTemplateSyntaxNode(sources.get(sources.size() - 1).document(), relativePath, findings);
+                if (!sources.get(sources.size() - 1).document().containsKey("profile")) {
+                    validateTemplateSyntaxNode(sources.get(sources.size() - 1).document(), relativePath, findings);
+                }
             } catch (Exception e) {
                 findings.add(ValidationIssue.TEMPLATE_PARSE_ERROR.finding(
                     ValidationSeverity.ERROR,
@@ -1409,6 +1413,7 @@ public final class ScenarioBundleValidator {
         List<TemplateSource> templateSources,
         String relativeRoot,
         TemplateConsumer consumer,
+        Set<TemplateReference> references,
         List<ValidationFinding> findings,
         Set<String> shapeReports
     ) {
@@ -1421,6 +1426,19 @@ public final class ScenarioBundleValidator {
                 shapeReports.add(source.relativePath()) ? findings : new ArrayList<>());
             if (definition == null) {
                 continue;
+            }
+            if (definition instanceof io.pockethive.requesttemplates.PortableHttpCall portable) {
+                if (BeeRoles.HTTP_SEQUENCE.equals(imageRepositoryName(consumer.bee().image()))) {
+                    requestTemplateFindings.validatePortableSteps(portable, consumer.effectiveConfig(),
+                        ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role() + ".config",
+                        findings);
+                } else if (references.stream().anyMatch(reference -> reference.key()
+                    .equals(templateKey(portable.serviceId(), portable.callId())))) {
+                    findings.add(ValidationIssue.TEMPLATE_INVALID.finding(ValidationSeverity.ERROR,
+                        source.relativePath(), "Portable HTTP calls require the HTTP Sequence adapter.",
+                        "Use HTTP Sequence for portable calls or author a native request template for this worker."));
+                    continue;
+                }
             }
             String callId = definition.callId();
             String serviceId = definition.serviceId();
@@ -2047,11 +2065,8 @@ public final class ScenarioBundleValidator {
     }
 
     private Set<String> serviceIdCandidates(Object value, String defaultServiceId) {
-        if (value == null) {
-            return Set.of();
-        }
-        if (value instanceof String text && text.trim().isBlank()) {
-            return Set.of();
+        if (value == null || value instanceof String text && text.isBlank()) {
+            return extractCallIds(defaultServiceId);
         }
         return extractCallIds(value);
     }

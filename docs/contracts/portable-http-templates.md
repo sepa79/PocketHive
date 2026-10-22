@@ -117,12 +117,14 @@ payloadAsXML projection.
 
 Portable bindings do not replace native contexts. SDK message/Redis contexts keep
 raw `payload` and optional `payloadAsJson` (object, array or scalar). Invocation
-templating keeps object-or-original-text `payload`, including col0–col9 object
-accessors, without adding a `payloadAsJson` alias there. Existing `headers`, `vars`
+templating keeps object-or-original-text `payload`, with JSON object fields
+accessed through map keys, without adding a `payloadAsJson` alias there. Existing `headers`, `vars`
 and `workItem` bindings remain. Clearing keeps raw `steps.*.payload`, per-step
 headers and optional object-only `steps.*.json`, with its existing history aliases.
 Native HTTP Sequence keeps its journey-map `payload` / `payloadAsJson` / `ctx`
-bindings, native extract/set behavior and retry configuration. These are distinct
+bindings, native extract/set behavior and retry configuration. Its SCHEDULER
+producer explicitly supplies an empty JSON object (`{}`) as the initial journey;
+message inputs still require valid object JSON. These are distinct
 named projections, not portable aliases or competing document decoders. Their
 names/shapes remain; shared strict document rules do not promise the old lenient
 handling of malformed, duplicate-key or trailing JSON.
@@ -163,6 +165,20 @@ the existing baseUrl/SUT endpoint resolver supplies the URI, the current journey
 object supplies record, and config.vars supplies params. Do not put CSV/Redis/job
 settings into the call. Portable steps require maxAttempts=1,
 continueOnNon2xx=false and no native extracts; response.extract owns selection.
+Scenario Manager validates portable syntax with the same bounded compiler used
+by execution and delegates these step constraints to the shared HTTP Sequence
+policy. Calls that fail either admission are reported as template errors and are
+not offered as available scenarios. Request Builder's native adapter does not
+support portable calls; a bundle referencing one through that adapter fails
+admission rather than advertising an unexecutable scenario. Unreferenced portable
+calls may share a root with native templates. Native templates retain their native engine.
+
+Known authoring/runtime admission gaps remain tracked in
+[#533](https://github.com/sepa79/PocketHive/issues/533): numeric step identifiers can
+skip the authoring policy check, and trailing JSON can pass bundle validation while
+the runtime loader rejects it. The same issue records overbroad reference and
+variable scanning. These cases are deferred to the SUT work; the shared compiler
+and policy do not establish complete equivalence between bundle admission and execution.
 
 The authored shared examples are packaged at `/portable/examples/account-json.json`,
 `card-soap11.json`, `card-soap12.json` in request-templates. Both product adapter

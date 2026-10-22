@@ -14,6 +14,9 @@ Public ingress endpoints (all JSON):
 - `GET /orchestrator/api/planner/catalogue`: deployment-read permission; returns
   PP `{schemaVersion:1,instanceId,revision,plans}` with plan `testPlan` references,
   Streams and Activities with owner-generated `tag` references.
+  The UI checks the complete catalogue shape before exposing choices. Malformed
+  Planner data produces a catalogue load error; reloading a valid response restores
+  selection without losing the displayed run.
 - `POST /orchestrator/api/planner/validate`: deployment-management permission;
   body `{instanceId,revision,planId,streamId,activityId}`. Verifies current catalogue
   revision and membership before CREATE. No execution or database mutation.

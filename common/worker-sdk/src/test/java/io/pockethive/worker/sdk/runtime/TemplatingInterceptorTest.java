@@ -93,41 +93,13 @@ class TemplatingInterceptorTest {
         assertThat(stepCount).isEqualTo(2L);
     }
 
-    @Test
-    void enablesDirectPropertyAccessForJsonPayload() throws Exception {
-        WorkerState state = new WorkerState(DEFINITION);
-        state.setStatusPublisher(new WorkerStatusPublisher(state, () -> { }, () -> { }));
-        WorkerContext context = workerContext(state);
-        WorkItem original = WorkItem.text(context.info(), "{\"col0\":\"value0\",\"col1\":\"value1\"}").build();
-        WorkerInvocationContext invocationContext = new WorkerInvocationContext(
-            DEFINITION,
-            state,
-            context,
-            original
-        );
-
-        TemplateRenderer renderer = (template, ctx) -> {
-            Object payload = ctx.get("payload");
-            if (payload instanceof PayloadWrapper wrapper) {
-                return template.replace("{{col0}}", String.valueOf(wrapper.getCol0()))
-                              .replace("{{col1}}", String.valueOf(wrapper.getCol1()));
-            }
-            return template;
-        };
-        TemplatingInterceptor interceptor = new TemplatingInterceptor(renderer, ctx -> "col0={{col0}}, col1={{col1}}");
-
-        WorkItem result = interceptor.intercept(invocationContext, ctx -> ctx.message());
-
-        assertThat(result.payload()).isEqualTo("col0=value0, col1=value1");
-    }
-
     @ParameterizedTest
     @ValueSource(strings = {
-        "{\"col0\":\"000123\",\"col0\":\"000456\"}",
-        "{\"nested\":{\"col0\":1,\"col0\":2}}",
-        "{\"col0\":\"000123\"} {}",
-        "{\"col0\":\"000123\"} trailing",
-        "{\"col0\":\"000123\"",
+        "{\"customerId\":\"000123\",\"customerId\":\"000456\"}",
+        "{\"nested\":{\"customerId\":1,\"customerId\":2}}",
+        "{\"customerId\":\"000123\"} {}",
+        "{\"customerId\":\"000123\"} trailing",
+        "{\"customerId\":\"000123\"",
         "<card id=\"000123\"/>", "plain 000123", "", "  ", "null", "[1,2]", "123", "\"000123\""
     })
     void nonObjectOrInvalidDocumentsRemainOriginalTextThroughTheRealRenderer(String payload) throws Exception {
@@ -140,8 +112,8 @@ class TemplatingInterceptorTest {
 
     @Test
     void keepsObjectPropertyAccessAndVarsWithoutAddingAnOptionalJsonAlias() throws Exception {
-        WorkItem result = renderPayload("{\"col0\":\"000123\",\"col9\":\"000009\"}",
-            "{{ payload.col0 }}|{{ payload.col9 }}|{{ vars.code }}|{{ headers.trace }}|{% if payloadAsJson is null %}absent{% endif %}");
+        WorkItem result = renderPayload("{\"customerId\":\"000123\",\"proofRun\":\"000009\"}",
+            "{{ payload.customerId }}|{{ payload.proofRun }}|{{ vars.code }}|{{ headers.trace }}|{% if payloadAsJson is null %}absent{% endif %}");
 
         assertThat(result.payload()).isEqualTo("000123|000009|000007|000008|absent");
     }

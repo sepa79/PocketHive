@@ -33,8 +33,33 @@ All notable changes to this project will be documented in this file.
   version/Fault/header behavior in shared libraries. Native PH template
   entrypoints remain separate from the portable profile.
 
+### Changed
+
+- Expose object payloads as ordinary maps in worker template contexts and remove
+  the unused `PayloadWrapper` Java bean aliases. Existing payload keys retain
+  their values and types.
+- Remove the unused root `design-qa.md`, obsolete scenario-default generation and
+  bootstrap tests, and dead script/tool helpers. Document the maintained
+  disposable infrastructure and deployment-package tests in their own READMEs.
+
 ### Fixed
 
+- Bind browser OAuth identity to the immutable user ID and prevent a delayed
+  browser-session refresh from restoring credentials cleared by a matching 401.
+- Let the shared Java device client consume explicitly permitted remote HTTP
+  verification/logout endpoints. The client requires an explicit transport
+  setting; DTOs validate URI structure without choosing that policy.
+- Restore HTTP Sequence with SCHEDULER input by supplying a JSON object seed
+  through the SDK's scheduler customizer. Count malformed journey input in the
+  runner's error metrics and status updates.
+- Check portable template syntax/capabilities with the portable compiler and
+  share portable-step restrictions between authoring and execution. Reject
+  portable calls referenced by Request Builder while allowing unused portable
+  files beside its native templates; remaining admission edge cases are tracked
+  below.
+- Enforce deployment-management permission for Planner linking during creation
+  and on existing runs. Report missing Planner runs as 404 and malformed nested
+  catalogues as recoverable load errors instead of breaking the interface.
 - Restore Hive swarm details and runtime/config controls from the current
   Orchestrator state projection, including per-instance observations, freshness
   and exact-run journal links. Validate responses with the canonical schemas;
@@ -68,6 +93,13 @@ All notable changes to this project will be documented in this file.
 - Oversized portable HTTP response cancellation can drain the remaining body;
   [#531](https://github.com/sepa79/PocketHive/issues/531) remains a low-priority
   follow-up, not a cancellation fix in this release.
+- Separate configuration-variable binding from message templating and narrow
+  validator inference during the upcoming SUT work in
+  [#533](https://github.com/sepa79/PocketHive/issues/533). Known cases include
+  false references inferred from ordinary data/comments, numeric call IDs
+  bypassing portable-step checks, and trailing JSON accepted by Scenario Manager
+  but rejected by the runtime loader. This release does not change the variable
+  syntax or claim those cases are resolved.
 
 ## [0.15.37] - 2026-10-19
 

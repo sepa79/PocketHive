@@ -2,7 +2,6 @@ package io.pockethive.worker.sdk.templating;
 
 import io.pockethive.templatedata.JsonViews;
 import io.pockethive.work.api.WorkItem;
-import io.pockethive.worker.sdk.runtime.PayloadWrapper;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,7 +26,7 @@ public final class WorkerTemplateContext {
     public static Map<String, Object> objectPayload(WorkItem message) {
         Map<String, Object> context = base(message);
         Map<String, Object> object = JsonViews.optionalObject(message.payload());
-        context.put("payload", object == null ? message.payload() : new PayloadWrapper(object));
+        context.put("payload", object == null ? message.payload() : object);
         return context;
     }
 

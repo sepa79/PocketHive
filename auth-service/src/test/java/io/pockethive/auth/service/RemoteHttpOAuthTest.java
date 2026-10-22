@@ -8,6 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.contract.DeviceAuthorizationDto;
+import io.pockethive.auth.contract.DeviceClientConfigDto;
+import io.pockethive.auth.contract.PocketHiveBrowserAuth;
+import io.pockethive.auth.contract.PocketHiveDeviceAuth;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -101,6 +105,25 @@ class RemoteHttpOAuthTest {
         mvc.perform(post("/oauth/token").param("grant_type", "refresh_token").param("client_id", CLIENT)
                 .param("refresh_token", renewed.path("refresh_token").asText()).param("resource", RESOURCE))
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
+    @Test
+    void explicitHttpDeviceResponsesAreAcceptedByTheSharedContracts() throws Exception {
+        var authorization = mvc.perform(post(PocketHiveDeviceAuth.AUTHORIZATION_PATH)
+                .param("client_id", PocketHiveDeviceAuth.DATA_CLIENT_ID)
+                .param("resource", PocketHiveBrowserAuth.RESOURCE).param("scope", PocketHiveBrowserAuth.SCOPE))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        var device = mapper.readValue(authorization, DeviceAuthorizationDto.class);
+        assertThat(device.verificationUri().toString())
+            .isEqualTo("http://lab.example:8088/auth-service" + PocketHiveDeviceAuth.VERIFICATION_PATH);
+        assertThat(device.verificationUriComplete().getRawQuery()).startsWith("user_code=");
+
+        var configuration = mvc.perform(get(PocketHiveDeviceAuth.CONFIG_PATH)
+                .param("client_id", PocketHiveDeviceAuth.DATA_CLIENT_ID))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        assertThat(mapper.readValue(configuration, DeviceClientConfigDto.class).logoutUri().toString())
+            .isEqualTo("http://lab.example:8088/auth-service" + PocketHiveDeviceAuth.LOGOUT_PATH
+                + "?client_id=" + PocketHiveDeviceAuth.DATA_CLIENT_ID);
     }
 
     @Test

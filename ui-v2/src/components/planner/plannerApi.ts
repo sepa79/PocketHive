@@ -26,8 +26,14 @@ export async function fetchPlannerCatalogue(signal?: AbortSignal): Promise<Plann
   const value = await (await plannerRequest('/catalogue', undefined, signal)).json()
   if (value?.schemaVersion !== 1 || typeof value.instanceId !== 'string' || !Number.isSafeInteger(value.revision)
     || value.revision < 0 || !Array.isArray(value.plans) || value.plans.some((plan: PlannerCatalogue['plans'][number]) =>
-      typeof plan.id !== 'string' || typeof plan.name !== 'string' || typeof plan.testPlan !== 'string'
-      || !Array.isArray(plan.streams) || !Array.isArray(plan.activities))) throw new Error('Invalid PocketPlanner catalogue')
+      typeof plan?.id !== 'string' || typeof plan.name !== 'string' || typeof plan.testPlan !== 'string'
+      || !Array.isArray(plan.streams) || plan.streams.some(stream =>
+        typeof stream?.id !== 'string' || typeof stream.name !== 'string')
+      || !Array.isArray(plan.activities) || plan.activities.some(activity =>
+        typeof activity?.id !== 'string' || typeof activity.name !== 'string'
+        || typeof activity.streamId !== 'string' || typeof activity.tag !== 'string'))) {
+    throw new Error('Invalid PocketPlanner catalogue')
+  }
   return value
 }
 

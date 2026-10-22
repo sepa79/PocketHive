@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class DeviceAuthClientTest {
     private HttpServer server;
@@ -39,7 +41,7 @@ class DeviceAuthClientTest {
         });
         server.start();
         endpoint = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/auth-service");
-        client = new DeviceAuthClient(endpoint, PocketHiveDeviceAuth.DATA_CLIENT_ID, Duration.ofSeconds(1), Duration.ofSeconds(1));
+        client = new DeviceAuthClient(endpoint, PocketHiveDeviceAuth.DATA_CLIENT_ID, Duration.ofSeconds(1), Duration.ofSeconds(1), false);
     }
 
     @AfterEach void stop() { server.stop(0); }
@@ -119,7 +121,7 @@ class DeviceAuthClientTest {
             } finally { exchange.close(); }
         });
         var streaming = new DeviceAuthClient(endpoint.resolve("/stream"), PocketHiveDeviceAuth.DATA_CLIENT_ID,
-            Duration.ofSeconds(1), Duration.ofSeconds(1));
+            Duration.ofSeconds(1), Duration.ofSeconds(1), false);
         try {
             org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(2), () ->
                 assertThatThrownBy(streaming::start).isInstanceOf(AuthServiceClientException.class));
@@ -139,10 +141,57 @@ class DeviceAuthClientTest {
         assertThatThrownBy(client::configuration).isInstanceOf(AuthServiceClientException.class);
     }
 
+    @Test void remoteHttpDeviceEndpointsRequireExplicitConsumerPermission() {
+        String issuer = "http://lab.example:8088/auth-service";
+        body.set(authorization(issuer));
+        assertThatThrownBy(client::start).isInstanceOf(AuthServiceClientException.class);
+        var allowed = new DeviceAuthClient(endpoint, PocketHiveDeviceAuth.DATA_CLIENT_ID,
+            Duration.ofSeconds(1), Duration.ofSeconds(1), true);
+        assertThat(allowed.start().verificationUri().toString()).startsWith(issuer);
+
+        body.set("{\"logoutUri\":\"" + issuer + PocketHiveDeviceAuth.LOGOUT_PATH
+            + "?client_id=pocketdata-device\"}");
+        assertThatThrownBy(client::configuration).isInstanceOf(AuthServiceClientException.class);
+        assertThat(allowed.configuration().logoutUri().toString()).startsWith(issuer);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"https://ph.example.test/auth-service", "http://localhost:8088/auth-service",
+        "http://127.0.0.1:8088/auth-service", "http://[::1]:8088/auth-service"})
+    void secureAndLoopbackDeviceEndpointsNeedNoRemoteHttpPermission(String issuer) {
+        body.set(authorization(issuer));
+        assertThat(client.start().verificationUri().toString()).startsWith(issuer);
+        body.set("{\"logoutUri\":\"" + issuer + PocketHiveDeviceAuth.LOGOUT_PATH
+            + "?client_id=pocketdata-device\"}");
+        assertThat(client.configuration().logoutUri().toString()).startsWith(issuer);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ftp://lab.example/auth-service", "http://user@lab.example/auth-service",
+        "/auth-service", "http://lab.example/auth-service#fragment"})
+    void remoteHttpPermissionNeverAdmitsUnsafeDeviceEndpoints(String issuer) {
+        var allowed = new DeviceAuthClient(endpoint, PocketHiveDeviceAuth.DATA_CLIENT_ID,
+            Duration.ofSeconds(1), Duration.ofSeconds(1), true);
+        body.set(authorization(issuer));
+        assertThatThrownBy(allowed::start).isInstanceOf(AuthServiceClientException.class);
+        body.set("{\"logoutUri\":\"" + issuer + PocketHiveDeviceAuth.LOGOUT_PATH
+            + "?client_id=pocketdata-device\"}");
+        assertThatThrownBy(allowed::configuration).isInstanceOf(AuthServiceClientException.class);
+    }
+
+    private static String authorization(String issuer) {
+        return """
+            {"device_code":"synthetic-secret","user_code":"ABCD-EFGH",
+             "verification_uri":"%s/oauth/device_verification",
+             "verification_uri_complete":"%s/oauth/device_verification?user_code=ABCD-EFGH",
+             "expires_in":300}
+            """.formatted(issuer, issuer);
+    }
+
     @Test void invalidInputsCannotReachTheNetwork() {
         assertThatThrownBy(() -> client.poll(" ")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> client.revoke("machine_token")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new DeviceAuthClient(endpoint, "pockethive-web", Duration.ofSeconds(1), Duration.ofSeconds(1)))
+        assertThatThrownBy(() -> new DeviceAuthClient(endpoint, "pockethive-web", Duration.ofSeconds(1), Duration.ofSeconds(1), false))
             .isInstanceOf(IllegalArgumentException.class);
         assertThat(calls.get()).isZero();
     }

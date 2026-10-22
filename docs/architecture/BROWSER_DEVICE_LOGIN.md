@@ -117,6 +117,15 @@ stores tokens, grants product permissions or retries a request. OAuth pending,
 denied and expired responses retain their protocol error codes. HTTP failures and
 malformed responses are safe explicit failures, never a switch to another flow.
 
+The device response DTOs validate HTTP(S) URI structure without selecting a
+consumer transport policy. `DeviceAuthClient` requires an explicit
+`allowRemoteHttp` constructor argument for the returned public verification and
+logout endpoints. Pass `false` for HTTPS and loopback-only HTTP; pass `true` only
+for an approved remote HTTP deployment. Validation delegates to
+`PublicEndpointTransportPolicy`; an HTTP response URL never enables the exception.
+The separately configured auth-service base URL may be an internal HTTP service
+address and does not determine the public endpoint permission.
+
 The selected JDK HTTP transport cancels its original input stream on rejection;
 it must not call a Spring response close operation that drains an untrusted body.
 Only the URI/deadline constructor is available to production consumers. Raw

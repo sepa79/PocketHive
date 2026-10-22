@@ -7,6 +7,7 @@ import io.pockethive.auth.contract.DeviceClientConfigDto;
 import io.pockethive.auth.contract.DeviceTokenDto;
 import io.pockethive.auth.contract.PocketHiveBrowserAuth;
 import io.pockethive.auth.contract.PocketHiveDeviceAuth;
+import io.pockethive.auth.contract.PublicEndpointTransportPolicy;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
@@ -21,7 +22,7 @@ import org.springframework.web.client.RestClientResponseException;
 /**
  * Responsibility: Execute typed first-party device authorization, polling and revocation requests.
  * Must not: Poll in a loop, store tokens, issue identity or decide product policy.
- * Contract: docs/architecture/BROWSER_DEVICE_LOGIN.md#shared-consumer-boundary.
+ * Contract: RESP-BROWSER-DEVICE-LOGIN — docs/architecture/runtime-responsibilities.md#resp-browser-device-login.
  */
 public final class DeviceAuthClient {
     private static final String DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
@@ -29,13 +30,16 @@ public final class DeviceAuthClient {
         "access_denied", "expired_token", "invalid_grant", "invalid_client", "invalid_request", "invalid_scope");
     private final RestClient http;
     private final String clientId;
+    private final boolean allowRemoteHttp;
     private final ObjectMapper errors = new ObjectMapper();
 
-    public DeviceAuthClient(URI baseUrl, String clientId, Duration connectTimeout, Duration readTimeout) {
+    public DeviceAuthClient(URI baseUrl, String clientId, Duration connectTimeout, Duration readTimeout,
+                            boolean allowRemoteHttp) {
         if (!Set.of(PocketHiveDeviceAuth.DATA_CLIENT_ID, PocketHiveDeviceAuth.PLANNER_CLIENT_ID).contains(clientId)) {
             throw new IllegalArgumentException("An explicit Pocket device client is required");
         }
         this.clientId = clientId;
+        this.allowRemoteHttp = allowRemoteHttp;
         http = AuthServiceRestClients.create(baseUrl, connectTimeout, readTimeout);
     }
 
@@ -43,7 +47,11 @@ public final class DeviceAuthClient {
         var form = form();
         form.add("resource", PocketHiveBrowserAuth.RESOURCE);
         form.add("scope", PocketHiveBrowserAuth.SCOPE);
-        return post(PocketHiveDeviceAuth.AUTHORIZATION_PATH, form, DeviceAuthorizationDto.class);
+        var authorization = post(PocketHiveDeviceAuth.AUTHORIZATION_PATH, form, DeviceAuthorizationDto.class);
+        if (!PublicEndpointTransportPolicy.allows(authorization.verificationUri(), allowRemoteHttp)) {
+            throw new AuthServiceClientException("Invalid PH device authorization transport", 503, null);
+        }
+        return authorization;
     }
 
     public DeviceTokenDto poll(String deviceCode) {
@@ -71,7 +79,9 @@ public final class DeviceAuthClient {
         try {
             var configuration = http.get().uri(PocketHiveDeviceAuth.CONFIG_PATH + "?client_id=" + clientId)
                 .retrieve().body(DeviceClientConfigDto.class);
-            if (configuration == null || !("client_id=" + clientId).equals(configuration.logoutUri().getRawQuery())) {
+            if (configuration == null
+                || !PublicEndpointTransportPolicy.allows(configuration.logoutUri().resolve("/"), allowRemoteHttp)
+                || !("client_id=" + clientId).equals(configuration.logoutUri().getRawQuery())) {
                 throw new AuthServiceClientException("Invalid PH device configuration", 503, null);
             }
             return configuration;

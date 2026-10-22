@@ -5,9 +5,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.net.URI;
 
 /**
- * Responsibility: Represent a validated device authorization response from PH.
- * Must not: Poll, store codes or choose product permissions.
- * Contract: docs/architecture/BROWSER_DEVICE_LOGIN.md.
+ * Responsibility: Represent a structurally validated device authorization response from PH.
+ * Must not: Poll, store codes or decide the consumer's transport permission.
+ * Contract: RESP-BROWSER-DEVICE-LOGIN — docs/architecture/runtime-responsibilities.md#resp-browser-device-login.
  */
 public record DeviceAuthorizationDto(
     @JsonProperty("device_code") String deviceCode,
@@ -21,7 +21,7 @@ public record DeviceAuthorizationDto(
         if (deviceCode == null || deviceCode.isBlank() || deviceCode.length() > 4096
             || userCode == null || userCode.isBlank() || userCode.length() > 128
             || expiresIn <= 0 || interval != null && interval <= 0
-            || !PublicEndpointTransportPolicy.allows(verificationUri, false)
+            || !PublicEndpointTransportPolicy.allows(verificationUri, true)
             || verificationUriComplete == null || verificationUriComplete.getUserInfo() != null
             || verificationUriComplete.getFragment() != null
             || !verificationUri.resolve("/").equals(verificationUriComplete.resolve("/"))
