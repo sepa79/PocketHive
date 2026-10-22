@@ -1,0 +1,6 @@
+{
+  "canAccessPocketHive": true,
+  "canRunPocketHive": true,
+  "canManageDeployment": false,
+  "canManageUsers": false
+}

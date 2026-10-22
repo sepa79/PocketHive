@@ -42,6 +42,7 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 
 class PocketHivePublicSessionSecurityTest {
     private static final String CLIENT_ID = "pockethive-vscode";
+    private static final String USER_ID = "00000000-0000-0000-0000-000000000001";
     private static final Duration REFRESH_TTL = Duration.ofHours(8);
     private static final AuthorizationServerSettings SETTINGS = AuthorizationServerSettings.builder()
         .issuer("http://localhost:8080/auth-service")
@@ -90,15 +91,15 @@ class PocketHivePublicSessionSecurityTest {
         AuthServiceProperties properties = userProperties("viewer", true, PocketHivePermissionIds.VIEW);
         InMemoryUserStore currentUsers = new InMemoryUserStore(properties);
         PocketHiveAccessTokenGenerator generator = new PocketHiveAccessTokenGenerator(properties, currentUsers);
-        OAuth2TokenContext context = accessTokenContext("viewer", Set.of(
+        OAuth2TokenContext context = accessTokenContext(USER_ID, Set.of(
             PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ,
             PocketHiveMcpScopes.OPERATE, PocketHiveMcpScopes.AUTHOR));
 
         assertOAuthError(() -> generator.generate(context), OAuth2ErrorCodes.INVALID_GRANT);
         PocketHiveAccessToken viewer = (PocketHiveAccessToken) generator.generate(accessTokenContext(
-            "viewer", Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ)));
+            USER_ID, Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ)));
         PocketHiveAccessToken secondViewer = (PocketHiveAccessToken) generator.generate(accessTokenContext(
-            "viewer", Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ)));
+            USER_ID, Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ)));
         assertThat(viewer.getScopes())
             .containsExactlyInAnyOrder(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ);
         assertThat(viewer.getTokenValue()).matches("phmcp_[A-Za-z0-9_-]{43}")
@@ -106,14 +107,14 @@ class PocketHivePublicSessionSecurityTest {
         assertThat(Set.copyOf(List.of(((String) viewer.getClaims().get("scope")).split(" "))))
             .containsExactlyInAnyOrder(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ);
 
-        currentUsers.replaceGrants(UUID.fromString("00000000-0000-0000-0000-000000000001"), List.of());
-        assertOAuthError(() -> generator.generate(accessTokenContext("viewer", Set.of(
+        currentUsers.replaceGrants(UUID.fromString(USER_ID), List.of());
+        assertOAuthError(() -> generator.generate(accessTokenContext(USER_ID, Set.of(
             PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ))), OAuth2ErrorCodes.INVALID_GRANT);
 
         AuthServiceProperties inactiveProperties = userProperties("inactive", false, PocketHivePermissionIds.VIEW);
         PocketHiveAccessTokenGenerator inactive = new PocketHiveAccessTokenGenerator(
             inactiveProperties, new InMemoryUserStore(inactiveProperties));
-        assertOAuthError(() -> inactive.generate(accessTokenContext("inactive", Set.of(
+        assertOAuthError(() -> inactive.generate(accessTokenContext(USER_ID, Set.of(
             PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ))), OAuth2ErrorCodes.INVALID_GRANT);
 
         assertThat(generator.generate(tokenContext(OAuth2TokenType.REFRESH_TOKEN,
@@ -124,7 +125,7 @@ class PocketHivePublicSessionSecurityTest {
     void interactiveConverterNarrowsEveryAuthenticatedNonCleanupIntent() {
         PocketHiveInteractiveAuthorizationRequestConverter converter =
             new PocketHiveInteractiveAuthorizationRequestConverter(users("viewer", true));
-        Authentication viewer = UsernamePasswordAuthenticationToken.authenticated("viewer", "", List.of());
+        Authentication viewer = UsernamePasswordAuthenticationToken.authenticated(USER_ID, "", List.of());
 
         assertThat(convert(converter, CLIENT_ID, PocketHiveMcpScopes.COMPANION_ORDERED, viewer).getScopes())
             .containsExactlyInAnyOrder(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ);
@@ -148,7 +149,7 @@ class PocketHivePublicSessionSecurityTest {
         assertThat(convert(active, CLIENT_ID, PocketHiveMcpScopes.COMPANION_ORDERED, unknown).getScopes())
             .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.COMPANION);
         assertThat(convert(inactive, CLIENT_ID, PocketHiveMcpScopes.COMPANION_ORDERED,
-            UsernamePasswordAuthenticationToken.authenticated("viewer", "", List.of())).getScopes())
+            UsernamePasswordAuthenticationToken.authenticated(USER_ID, "", List.of())).getScopes())
             .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.COMPANION);
         assertThat(convert(active, CLIENT_ID, List.of(), unknown).getScopes()).isEmpty();
         assertThatThrownBy(() -> new PocketHiveInteractiveAuthorizationRequestConverter(null))
@@ -261,10 +262,10 @@ class PocketHivePublicSessionSecurityTest {
         return context;
     }
 
-    private static OAuth2TokenContext accessTokenContext(String username, Set<String> scopes) {
+    private static OAuth2TokenContext accessTokenContext(String subject, Set<String> scopes) {
         OAuth2TokenContext context = tokenContext(OAuth2TokenType.ACCESS_TOKEN, scopes);
         OAuth2Authorization authorization = mock(OAuth2Authorization.class);
-        when(authorization.getPrincipalName()).thenReturn(username);
+        when(authorization.getPrincipalName()).thenReturn(subject);
         when(context.getAuthorization()).thenReturn(authorization);
         return context;
     }
@@ -310,7 +311,7 @@ class PocketHivePublicSessionSecurityTest {
         properties.getOauth().setIssuer(URI.create("http://localhost:8080/auth-service"));
         properties.getOauth().setResource(URI.create("http://localhost:8080/mcp"));
         AuthServiceUserProperties user = new AuthServiceUserProperties();
-        user.setId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        user.setId(UUID.fromString(USER_ID));
         user.setUsername(username);
         user.setDisplayName(username);
         user.setActive(active);

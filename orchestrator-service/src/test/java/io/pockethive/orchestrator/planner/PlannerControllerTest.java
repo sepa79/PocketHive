@@ -3,7 +3,12 @@ package io.pockethive.orchestrator.planner;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import io.pockethive.journal.api.JournalRunMetadata;
+import io.pockethive.journal.api.JournalRunQueries;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -35,6 +40,34 @@ class PlannerControllerTest {
             .content("{\"instanceId\":\"qa\",\"revision\":0,\"planId\":\"p\",\"streamId\":\"s\",\"activityId\":\"a\"}"))
             .andExpect(status().isForbidden()).andExpect(jsonPath("$.message").value("No management permission"));
         verifyNoInteractions(runs, client);
+    }
+
+    @Test
+    void missingExactAndCurrentJournalRunsReturnNotFound() throws Exception {
+        var authorization = mock(OrchestratorEndpointAuthorization.class);
+        var planner = mock(PocketPlannerClient.class);
+        var metadata = mock(JournalRunMetadata.class);
+        var queries = mock(JournalRunQueries.class);
+        var store = mock(SwarmStore.class);
+        var swarm = mock(Swarm.class);
+        when(store.find("swarm")).thenReturn(Optional.of(swarm));
+        when(swarm.getRunId()).thenReturn("registered-run");
+        var runs = new PlannerRunService(planner, metadata, queries, store, "postgres");
+        var mvc = MockMvcBuilders.standaloneSetup(new PlannerController(authorization, planner, runs)).build();
+
+        mvc.perform(get("/api/planner/runs/swarm/absent-run"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.message").value("Exact journal run not found"));
+        mvc.perform(get("/api/planner/swarms/swarm"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.message").value("Exact journal run not found"));
+
+        verify(authorization).requireReadDeployment();
+        verify(authorization).requireReadSwarm("swarm");
+        verify(queries).metadataSummary("swarm", "absent-run");
+        verify(queries).metadataSummary("swarm", "registered-run");
+        verifyNoMoreInteractions(queries);
+        verifyNoInteractions(planner, metadata);
     }
 
     @Test

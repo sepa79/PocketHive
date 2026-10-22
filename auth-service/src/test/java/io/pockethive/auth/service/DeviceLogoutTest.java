@@ -37,6 +37,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class DeviceLogoutTest {
     private static final String ISSUER = "https://ph.example.test/auth-service";
+    private static final String ADMIN_ID = "11111111-1111-1111-1111-111111111111";
     @TempDir static Path directory;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
@@ -66,7 +67,7 @@ class DeviceLogoutTest {
         MockHttpSession session = login();
         var result = mvc.perform(get(PocketHiveDeviceAuth.LOGOUT_PATH).session(session)
                 .param("client_id", PocketHiveDeviceAuth.DATA_CLIENT_ID))
-            .andExpect(status().isOk()).andExpect(authenticated().withUsername("local-admin"))
+            .andExpect(status().isOk()).andExpect(authenticated().withUsername(ADMIN_ID))
             .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
             .andExpect(header().string("Cache-Control", "no-store"))
             .andExpect(header().doesNotExist("Location")).andReturn();
@@ -90,7 +91,7 @@ class DeviceLogoutTest {
         assertThat(session.isInvalid()).isFalse();
         mvc.perform(get(PocketHiveDeviceAuth.LOGOUT_PATH).session(session)
                 .param("client_id", PocketHiveDeviceAuth.DATA_CLIENT_ID))
-            .andExpect(status().isOk()).andExpect(authenticated().withUsername("local-admin"));
+            .andExpect(status().isOk()).andExpect(authenticated().withUsername(ADMIN_ID));
     }
 
     @ParameterizedTest
@@ -130,7 +131,7 @@ class DeviceLogoutTest {
         assertThat(session.isInvalid()).isFalse();
         mvc.perform(get(PocketHiveDeviceAuth.LOGOUT_PATH).session(session)
                 .param("client_id", PocketHiveDeviceAuth.DATA_CLIENT_ID))
-            .andExpect(authenticated().withUsername("local-admin"));
+            .andExpect(authenticated().withUsername(ADMIN_ID));
     }
 
     @Test
@@ -157,7 +158,7 @@ class DeviceLogoutTest {
     private MockHttpSession login() throws Exception {
         MockHttpSession session = new MockHttpSession();
         mvc.perform(post("/oauth/dev/login").session(session).with(csrf()).param("username", "local-admin"))
-            .andExpect(status().is3xxRedirection()).andExpect(authenticated().withUsername("local-admin"));
+            .andExpect(status().is3xxRedirection()).andExpect(authenticated().withUsername(ADMIN_ID));
         return session;
     }
 }

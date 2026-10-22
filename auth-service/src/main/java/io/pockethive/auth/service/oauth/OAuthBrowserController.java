@@ -74,7 +74,7 @@ public final class OAuthBrowserController {
             return;
         }
         UsernamePasswordAuthenticationToken authentication = UsernamePasswordAuthenticationToken.authenticated(
-            user.username(), "N/A", List.of(new SimpleGrantedAuthority("ROLE_USER")));
+            user.id().toString(), "N/A", List.of(new SimpleGrantedAuthority("ROLE_USER")));
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);

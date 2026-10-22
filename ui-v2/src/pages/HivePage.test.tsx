@@ -5,6 +5,8 @@ import { ToolsBarProvider } from '../components/ToolsBarContext'
 import { HivePage } from './HivePage'
 import { observedStateFixture } from '../testFixtures/swarmState'
 import { swarmTuningFixture } from '../testFixtures/swarmTuning'
+import deploymentAccess from '../../../auth-service/src/test/resources/auth-access-deployment-manager.json'
+import folderAccess from '../../../auth-service/src/test/resources/auth-access-folder-manager.json'
 
 vi.mock('../lib/authContext', () => ({
   useAuth: () => authenticatedCaller,
@@ -15,6 +17,7 @@ const authenticatedCaller = {
   accessStatus: 'ready',
   canAccessPocketHive: true,
   canRunPocketHive: true,
+  canManageDeployment: true,
   user: {
     id: 'synthetic-hive-operator',
     username: 'synthetic-hive-operator',
@@ -125,6 +128,8 @@ function interceptIngress({
   capabilityCatalogue = capabilities,
   configResponse,
   plannerRunResponse,
+  plannerCatalogue,
+  plannerLinkResponse,
 }: {
   state?: Record<string, unknown>
   canRun?: boolean
@@ -134,6 +139,8 @@ function interceptIngress({
   capabilityCatalogue?: unknown
   configResponse?: (request: Request) => Promise<Response>
   plannerRunResponse?: (request: Request) => Response
+  plannerCatalogue?: unknown
+  plannerLinkResponse?: (request: Request) => Promise<Response>
 } = {}) {
   const responses = new Map<string, unknown>([
     ['/orchestrator/api/swarms', [state]],
@@ -142,7 +149,7 @@ function interceptIngress({
     [`/orchestrator/api/swarms/${swarmId}/journal/page?limit=50&severity=ERROR`, {
       items: [], nextCursor: null, hasMore: false,
     }],
-    ['/orchestrator/api/planner/catalogue', {
+    ['/orchestrator/api/planner/catalogue', plannerCatalogue ?? {
       schemaVersion: 1, instanceId: 'synthetic-planner', revision: 0, plans: [],
     }],
     [`/orchestrator/api/planner/swarms/${swarmId}`, {
@@ -160,6 +167,8 @@ function interceptIngress({
     const url = new URL(request.url)
     const path = url.pathname + url.search
     if (plannerRunResponse && path === `/orchestrator/api/planner/swarms/${swarmId}`) return plannerRunResponse(request)
+    if (request.method === 'POST' && plannerLinkResponse &&
+      path === `/orchestrator/api/planner/runs/${swarmId}/${runId}`) return plannerLinkResponse(request)
     if (request.method === 'POST' && configResponse &&
       path.startsWith('/orchestrator/api/components/') && path.endsWith('/config')) return configResponse(request)
     if (request.method === 'GET' && path === `/network-proxy-manager/api/network/bindings/${swarmId}`) {
@@ -228,6 +237,8 @@ async function openScenario() {
 
 beforeEach(() => {
   unexpectedRequests = []
+  authenticatedCaller.canRunPocketHive = true
+  authenticatedCaller.canManageDeployment = true
   window.sessionStorage.clear()
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
 })
@@ -240,6 +251,56 @@ afterEach(() => {
 })
 
 describe('Hive swarm detail through the canonical REST projection', () => {
+  it.each([
+    { access: 'folder manager without deployment access', canManageSwarm: true, canManageDeployment: false },
+    { access: 'deployment manager', canManageSwarm: true, canManageDeployment: true },
+    { access: 'run-only user', canManageSwarm: false, canManageDeployment: false },
+  ])('uses deployment permission for Planner linking: $access', async ({ canManageSwarm, canManageDeployment }) => {
+    const access = canManageDeployment ? deploymentAccess : folderAccess
+    authenticatedCaller.canRunPocketHive = access.canRunPocketHive
+    authenticatedCaller.canManageDeployment = access.canManageDeployment
+    const writes: unknown[] = []
+    const testPlan = 'pp:synthetic-planner:permission-plan'
+    const tag = 'pp.activity:' + 'A'.repeat(43)
+    interceptIngress({
+      canManage: canManageSwarm,
+      plannerCatalogue: {
+        schemaVersion: 1, instanceId: 'synthetic-planner', revision: 7,
+        plans: [{ id: 'permission-plan', name: 'Permission plan', testPlan,
+          streams: [{ id: 'permission-stream', name: 'Permission stream' }],
+          activities: [{ id: 'permission-activity', streamId: 'permission-stream', name: 'Permission activity', tag }],
+        }],
+      },
+      plannerLinkResponse: async request => {
+        writes.push(await request.json())
+        return Response.json({ swarmId, runId, testPlan, tags: [tag], description: null })
+      },
+    })
+    await renderHive()
+    await screen.findByText(`Run ${runId}`)
+    await screen.findByRole('option', { name: 'Permission plan' })
+    const plan = screen.getByRole('combobox', { name: 'Plan' })
+    const link = screen.getByRole('button', { name: 'Link Activity' })
+    expect(plan.matches(':disabled')).toBe(!canManageDeployment)
+    if (!canManageDeployment) {
+      expect(link).toHaveProperty('disabled', true)
+      fireEvent.click(link)
+      expect(writes).toEqual([])
+      return
+    }
+    fireEvent.change(plan, { target: { value: 'permission-plan' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Stream' }), { target: { value: 'permission-stream' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Activity' }), { target: { value: 'permission-activity' } })
+    expect(link).toHaveProperty('disabled', false)
+    fireEvent.click(link)
+    await waitFor(() => expect(writes).toEqual([{
+      instanceId: 'synthetic-planner', revision: 7,
+      planId: 'permission-plan', streamId: 'permission-stream', activityId: 'permission-activity',
+    }]))
+    await screen.findByText('Plan: Permission plan')
+    expect(screen.getByText('Permission stream / Permission activity')).toBeDefined()
+  })
+
   it('rebinds Planner associations when the same swarm reports a replacement run', async () => {
     let currentState = swarmFixture()
     const reads: string[] = []

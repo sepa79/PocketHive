@@ -7,6 +7,7 @@ import io.pockethive.auth.service.service.InMemoryUserStore;
 import java.util.List;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
@@ -22,14 +23,14 @@ import org.springframework.web.server.ResponseStatusException;
 public final class BrowserOAuthTokenResolver {
     private final OAuth2AuthorizationService authorizations;
     private final RegisteredClientRepository clients;
-    private final InMemoryUserStore users;
+    private final OAuthPrincipalLookup principals;
     private final AuthServiceProperties properties;
 
     public BrowserOAuthTokenResolver(OAuth2AuthorizationService authorizations, RegisteredClientRepository clients,
                                       InMemoryUserStore users, AuthServiceProperties properties) {
         this.authorizations = authorizations;
         this.clients = clients;
-        this.users = users;
+        this.principals = new OAuthPrincipalLookup(users);
         this.properties = properties;
     }
 
@@ -42,8 +43,9 @@ public final class BrowserOAuthTokenResolver {
         if (client == null || !BrowserOAuthClients.isBrowser(client)
             || !Set.of(PocketHiveBrowserAuth.SCOPE).equals(authorization.getAuthorizedScopes())
             || claims == null || !List.of(PocketHiveBrowserAuth.RESOURCE).equals(claims.get("aud"))) throw rejected();
-        return users.findByUsername(authorization.getPrincipalName()).filter(user -> user.active())
-            .orElseThrow(BrowserOAuthTokenResolver::rejected).toDto(properties.getProvider());
+        if (!(claims.get(JwtClaimNames.SUB) instanceof String subject)) throw rejected();
+        return principals.findActive(subject).orElseThrow(BrowserOAuthTokenResolver::rejected)
+            .toDto(properties.getProvider());
     }
 
     private static ResponseStatusException rejected() {

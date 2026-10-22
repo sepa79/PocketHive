@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../../lib/authContext'
 import type { PlannerRun } from './PlannerRun'
 import { usePlannerSelection } from './usePlannerSelection'
 import { linkPlannerRun, readCurrentPlannerRun } from './plannerApi'
@@ -9,7 +10,8 @@ import { PlannerPicker } from './PlannerPicker'
  * Must not: start work, replace prior associations or infer progress from runtime state.
  * Contract: RESP-POCKETPLANNER-INTEGRATION — docs/architecture/runtime-responsibilities.md#resp-pocketplanner-integration.
  */
-export function PlannerRunPanel({ swarmId, runId, canManage }: { swarmId: string; runId: string; canManage: boolean }) {
+export function PlannerRunPanel({ swarmId, runId }: { swarmId: string; runId: string }) {
+  const canLinkActivity = useAuth().canManageDeployment
   const picker = usePlannerSelection(true)
   const [loadedRun, setRun] = useState<PlannerRun | null>(null)
   const run = loadedRun?.swarmId === swarmId && loadedRun.runId === runId ? loadedRun : null
@@ -34,9 +36,9 @@ export function PlannerRunPanel({ swarmId, runId, canManage }: { swarmId: string
     <p>{run ? run.testPlan ? `Plan: ${plan?.name ?? 'Plan unavailable in the current catalogue'}` : 'This run is not linked to a plan.' : 'Loading run associations…'}</p>
     {activities.length > 0 && <ul>{activities.map(activity => <li key={activity.id}>{plan?.streams.find(stream => stream.id === activity.streamId)?.name} / {activity.name}</li>)}</ul>}
     {missing.length > 0 && <p className="warningText">{missing.length} linked Activities are no longer in the catalogue. References are retained.</p>}
-    <PlannerPicker state={picker} disabled={busy || !canManage || !run} testPlan={run?.testPlan} />
+    <PlannerPicker state={picker} disabled={busy || !canLinkActivity || !run} testPlan={run?.testPlan} />
     {error && <p role="alert" className="warningText">{error}</p>}
-    <button type="button" className="btnPrimary" disabled={busy || !canManage || !run || !picker.selection} onClick={async () => {
+    <button type="button" className="btnPrimary" disabled={busy || !canLinkActivity || !run || !picker.selection} onClick={async () => {
       if (!picker.selection) return
       setBusy(true); setError(null)
       try { setRun(await linkPlannerRun(swarmId, runId, picker.selection)) }

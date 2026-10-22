@@ -20,13 +20,13 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
  */
 public final class PocketHiveScopeAuthorizationValidator
     implements Consumer<OAuth2AuthorizationCodeRequestAuthenticationContext> {
-    private final InMemoryUserStore users;
+    private final OAuthPrincipalLookup principals;
     private final McpScopeAuthorizationValidator mcp;
     private final OAuth2AuthorizationCodeRequestAuthenticationValidator defaults =
         new OAuth2AuthorizationCodeRequestAuthenticationValidator();
 
     public PocketHiveScopeAuthorizationValidator(InMemoryUserStore users) {
-        this.users = users;
+        this.principals = new OAuthPrincipalLookup(users);
         mcp = new McpScopeAuthorizationValidator(users);
     }
 
@@ -46,7 +46,7 @@ public final class PocketHiveScopeAuthorizationValidator
         }
         Authentication principal = SecurityContextHolder.getContext().getAuthentication();
         if (principal != null && principal.isAuthenticated() && !(principal instanceof AnonymousAuthenticationToken)
-            && users.findByUsername(principal.getName()).filter(user -> user.active()).isEmpty()) {
+            && principals.findActive(principal.getName()).isEmpty()) {
             throw new OAuth2AuthenticationException(OAuth2ErrorCodes.ACCESS_DENIED);
         }
     }

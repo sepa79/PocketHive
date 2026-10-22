@@ -632,8 +632,15 @@ non-cacheable failure page with the appropriate HTTP status. These paths must
 not dispatch to the framework `/error` page. Machine-facing registration and
 token errors retain their documented JSON OAuth responses.
 
-The DEV provider asks for one configured active username. A future LDAP or OIDC
-provider changes only the principal-authentication adapter; it does not change
+The DEV provider asks for one configured active username, then binds the browser
+security context to that user's immutable UUID. Spring authorization, consent,
+device approval, code exchange and refresh retain that UUID; username remains a
+login input and display attribute. Reassigning a username cannot transfer a
+pending authorization, consent or refresh session to its new owner. Issuance
+reads the original user's current active state and grants; an inactive or
+missing original user fails rather than selecting another identity.
+A future LDAP or OIDC provider changes only the principal-authentication
+adapter and must establish the same immutable identity; it does not change
 the OAuth request, consent, code, token, or client contracts.
 
 ### 6.11 OAuth token endpoint
@@ -883,12 +890,16 @@ This keeps LDAP from leaking into product contracts.
 through the same `AuthAccessService.requireAuthenticated` path as `/me` and returns:
 
 ```json
-{"canAccessPocketHive":true,"canRunPocketHive":false,"canManageUsers":false}
+{"canAccessPocketHive":true,"canRunPocketHive":false,"canManageDeployment":false,"canManageUsers":false}
 ```
 
-All three fields are required booleans. `canAccessPocketHive` means an existing
+The response fields are defined by `AuthAccessView` and are required booleans. `canAccessPocketHive` means an existing
 PocketHive VIEW/RUN/ALL grant anywhere; `canRunPocketHive` means RUN/ALL anywhere.
-These are navigation/entrypoint hints, not authorization for a specific resource.
+Those two flags are navigation/entrypoint hints, not authorization for a specific resource.
+`canManageDeployment` projects the existing deployment-management decision: a
+PocketHive ALL grant at global deployment scope. Folder/bundle ALL and deployment
+RUN do not grant it. Planner association controls consume this decision; the
+Planner mutation endpoint independently enforces the same backend policy.
 The existing permission sets have one shared Java definition consumed by the
 backend policies and this projection; no permission or scope semantics change.
 `canManageUsers` delegates to `AuthGrantChecks.isAuthAdmin`, as admin commands do.

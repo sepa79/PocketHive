@@ -32,6 +32,7 @@ public final class PortableHttpCallParser {
     }
 
     public PortableHttpCall parse(Map<?, ?> source) {
+        new JsonDocumentReader().tree(source);
         fields(source, CALL_FIELDS);
         String profile = text(source.get("profile"), 40, false);
         if (!(source.get("requires") instanceof List<?> requested) || requested.isEmpty() || requested.size() > PortableCapability.values().length) throw invalid("Declare portable capabilities explicitly.");

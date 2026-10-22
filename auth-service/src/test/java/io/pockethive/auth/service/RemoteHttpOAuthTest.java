@@ -34,6 +34,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @AutoConfigureMockMvc
 class RemoteHttpOAuthTest {
     private static final String RESOURCE = "http://lab.example:8088/mcp";
+    private static final String ADMIN_ID = "11111111-1111-1111-1111-111111111111";
     private static final String REDIRECT = "http://127.0.0.1:38125/callback";
     private static final String CLIENT = "pockethive-vscode";
     private static final String VERIFIER = "remote-http-verifier-that-is-at-least-forty-three-characters-long";
@@ -52,7 +53,7 @@ class RemoteHttpOAuthTest {
     @Autowired ObjectMapper mapper;
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void explicitHttpPublishesMatchingMetadataAndPreservesPkceRefreshAndRevocation() throws Exception {
         mvc.perform(get("/.well-known/oauth-authorization-server"))
             .andExpect(status().isOk())
@@ -103,7 +104,7 @@ class RemoteHttpOAuthTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void allowanceDoesNotPermitMissingPkceOrRemoteCallback() throws Exception {
         mvc.perform(get("/oauth/authorize").queryParam("response_type", "code").queryParam("client_id", CLIENT)
                 .queryParam("redirect_uri", REDIRECT).queryParam("resource", RESOURCE)

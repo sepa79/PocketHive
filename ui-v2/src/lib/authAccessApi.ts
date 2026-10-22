@@ -14,8 +14,9 @@ export async function authAccessApi(token: string): Promise<AuthAccessView> {
   if (!value || typeof value !== 'object' ||
       !('canAccessPocketHive' in value) || typeof value.canAccessPocketHive !== 'boolean' ||
       !('canRunPocketHive' in value) || typeof value.canRunPocketHive !== 'boolean' ||
+      !('canManageDeployment' in value) || typeof value.canManageDeployment !== 'boolean' ||
       !('canManageUsers' in value) || typeof value.canManageUsers !== 'boolean') {
     throw new Error('Invalid permissions response')
   }
-  return { canAccessPocketHive: value.canAccessPocketHive, canRunPocketHive: value.canRunPocketHive, canManageUsers: value.canManageUsers }
+  return { canAccessPocketHive: value.canAccessPocketHive, canRunPocketHive: value.canRunPocketHive, canManageDeployment: value.canManageDeployment, canManageUsers: value.canManageUsers }
 }

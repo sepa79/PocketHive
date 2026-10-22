@@ -70,10 +70,10 @@ class OAuthBrowserControllerTest {
 
         assertThat(response.getRedirectedUrl()).isEqualTo("/");
         assertThat(SecurityContextHolder.getContext().getAuthentication().getName())
-            .isEqualTo("local-admin");
+            .isEqualTo("11111111-1111-1111-1111-111111111111");
         SecurityContext persisted = (SecurityContext) request.getSession(false).getAttribute(
             HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
-        assertThat(persisted.getAuthentication().getName()).isEqualTo("local-admin");
+        assertThat(persisted.getAuthentication().getName()).isEqualTo("11111111-1111-1111-1111-111111111111");
     }
 
     private static AuthServiceProperties properties(AuthProvider provider) {

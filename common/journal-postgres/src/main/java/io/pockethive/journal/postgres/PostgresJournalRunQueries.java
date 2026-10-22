@@ -6,6 +6,7 @@ import io.pockethive.journal.api.JournalRunSummary;
 import io.pockethive.journal.api.SwarmRunSummary;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.dao.support.DataAccessUtils;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -140,6 +141,6 @@ public final class PostgresJournalRunQueries implements JournalRunQueries {
           WHERE r.swarm_id = ? AND r.run_id = ?
           GROUP BY COALESCE(e.swarm_id, r.swarm_id), COALESCE(e.run_id, r.run_id), r.scenario_id, r.test_plan, r.description, r.tags
           """;
-        return jdbc.queryForObject(summarySql, (rs, rowNum) -> rows.full(rs, false), swarmId, runId);
+        return DataAccessUtils.singleResult(jdbc.query(summarySql, (rs, rowNum) -> rows.full(rs, false), swarmId, runId));
     }
 }

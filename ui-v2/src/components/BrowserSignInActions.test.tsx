@@ -32,7 +32,7 @@ beforeEach(() => {
         verification_uri_complete: 'http://localhost:8089/auth-service/oauth/device_verification?user_code=ABCD' }; break
       case '/auth-service/oauth/token': body = { access_token: 'phweb_synthetic', token_type: 'Bearer', scope: 'pockethive:web', expires_in: 600 }; break
       case '/auth-service/api/auth/me': body = identity; break
-      case '/auth-service/api/auth/access': body = { canAccessPocketHive: true, canRunPocketHive: false, canManageUsers: false }; break
+      case '/auth-service/api/auth/access': body = { canAccessPocketHive: true, canRunPocketHive: false, canManageDeployment: false, canManageUsers: false }; break
       default: throw new Error('Unexpected synthetic auth request')
     }
     return new Response(JSON.stringify(body))

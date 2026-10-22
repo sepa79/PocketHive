@@ -87,6 +87,15 @@ class PostgresJournalRunQueriesTest {
     }
 
     @Test
+    void metadataSummaryReturnsNullWhenTheExactSwarmRunDoesNotExist() {
+        metadata("alpha", "shared");
+        metadata("beta", "other");
+        assertThat(runs.metadataSummary("alpha", "other")).isNull();
+        assertThat(runs.metadataSummary("missing", "shared")).isNull();
+        assertThat(runs.metadataSummary("alpha", "shared").swarmId()).isEqualTo("alpha");
+    }
+
+    @Test
     void metadataSummarySupportsRunsWithoutLiveEventsAndKeepsWireFields() {
         metadata("alpha", "empty");
         capture("alpha", "empty", TIME, TIME, 9);

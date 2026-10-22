@@ -2,6 +2,10 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { PlannerRunPanel } from './PlannerRunPanel'
 
+vi.mock('../../lib/authContext', () => ({
+  useAuth: () => ({ canManageDeployment: true }),
+}))
+
 const swarmId = 'reused-synthetic-swarm'
 const catalogue = {
   schemaVersion: 1, instanceId: 'synthetic-planner', revision: 1,
@@ -40,14 +44,14 @@ it('resets choices on a new run and links only the displayed exact run', async (
     }
     throw new Error(`Unexpected request: ${input}`)
   }))
-  const view = render(<PlannerRunPanel key="old-run" swarmId={swarmId} runId="old-run" canManage />)
+  const view = render(<PlannerRunPanel key="old-run" swarmId={swarmId} runId="old-run" />)
   await screen.findByText('Run old-run')
   await screen.findByRole('option', { name: 'Master plan' })
   chooseActivity()
   expect((screen.getByRole('button', { name: 'Link Activity' }) as HTMLButtonElement).disabled).toBe(false)
 
   currentRunId = 'new-run'
-  view.rerender(<PlannerRunPanel key="new-run" swarmId={swarmId} runId="new-run" canManage />)
+  view.rerender(<PlannerRunPanel key="new-run" swarmId={swarmId} runId="new-run" />)
   await screen.findByText('Run new-run')
   await screen.findByRole('option', { name: 'Master plan' })
   expect((screen.getByRole('combobox', { name: 'Plan' }) as HTMLSelectElement).value).toBe('')
@@ -72,9 +76,9 @@ it('ignores a superseded exact-run read even when the transport completes after 
     }
     throw new Error(`Unexpected request: ${input}`)
   }))
-  const view = render(<PlannerRunPanel swarmId={swarmId} runId="old-run" canManage />)
+  const view = render(<PlannerRunPanel swarmId={swarmId} runId="old-run" />)
   await waitFor(() => expect(finishOldRead).toBeTypeOf('function'))
-  view.rerender(<PlannerRunPanel swarmId={swarmId} runId="new-run" canManage />)
+  view.rerender(<PlannerRunPanel swarmId={swarmId} runId="new-run" />)
   await screen.findByText('Run new-run')
   expect(oldSignal?.aborted).toBe(true)
   await act(async () => { finishOldRead(Response.json(runFixture('old-run'))) })
@@ -90,7 +94,7 @@ it('refuses a current-run response that does not match the displayed snapshot', 
     if (input === `/orchestrator/api/planner/swarms/${swarmId}`) return Response.json(runFixture('replacement-run'))
     throw new Error(`Unexpected request: ${input}`)
   }))
-  render(<PlannerRunPanel swarmId={swarmId} runId="displayed-run" canManage />)
+  render(<PlannerRunPanel swarmId={swarmId} runId="displayed-run" />)
   expect((await screen.findByRole('alert')).textContent).toContain('Swarm run changed')
   expect(screen.queryByText('Run replacement-run')).toBeNull()
   expect((screen.getByRole('button', { name: 'Link Activity' }) as HTMLButtonElement).disabled).toBe(true)

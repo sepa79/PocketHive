@@ -29,6 +29,7 @@ function usePocketHiveIdentity() {
     cancelSignIn: auth.cancelSignIn, openConfirmation: auth.openConfirmation,
     canAccessPocketHive: access.value?.canAccessPocketHive === true,
     canRunPocketHive: access.value?.canRunPocketHive === true,
+    canManageDeployment: access.value?.canManageDeployment === true,
     isAuthAdmin: access.value?.canManageUsers === true,
     accessStatus: access.status, accessError: access.error, reloadAccess: access.reload }
 }

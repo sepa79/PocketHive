@@ -3580,11 +3580,36 @@ invalid metadata is rejected before registry publication.
 **Verification:** `DynamicClientRegistrationServiceTest` and
 `OAuthAuthorizationServerTest`. Current implementation.
 
+## RESP-OAUTH-PRINCIPAL-IDENTITY
+
+`OAuthBrowserController` binds the authenticated Spring principal to the immutable
+user UUID at sign-in. Spring Authorization Server carries that same principal name
+through pending requests, consent, device approval, code exchange and refresh.
+`OAuthPrincipalLookup` is the sole OAuth subject-to-active-user lookup: it accepts
+only canonical UUID subjects and reads the current `InMemoryUserStore` user.
+It does not resolve a subject as a username, persist OAuth state or decide scopes.
+
+`PocketHiveAccessTokenGenerator`, `PocketHiveScopeAuthorizationValidator`,
+`McpScopeAuthorizationValidator` and
+`PocketHiveInteractiveAuthorizationRequestConverter` consume that identity for
+their existing issuance or scope policies. `BrowserOAuthTokenResolver` uses the
+same lookup for the access token's immutable `sub`. Username is a login input and
+display attribute; changing its owner cannot transfer an authorization or consent.
+Inactive or missing original users are rejected, and current grants remain owned
+by the user store. Spring retains all token/consent lifecycle state.
+
+The repair requires restarting Auth Service, clearing its existing in-memory OAuth
+and servlet sessions. There is no live conversion of username-based principals.
+Verification: `OAuthIssuanceIdentityTest`, `OAuthPrincipalLookupTest`, existing
+browser/device/code/refresh/consent tests. Contract: Auth Service API §6.10–6.11.
+
 ## RESP-OAUTH-AUTHORIZATION-INPUT
 
 **Current owner:** `auth-service` — `PocketHiveInteractiveAuthorizationRequestConverter`
 delegates request parsing to Spring and narrows declared interactive MCP scopes
 to the authenticated principal's current ceiling from `McpScopeAuthorizationValidator`.
+`McpScopeAuthorizationValidator` owns the existing MCP scope ceiling and request
+policy; both consume the immutable principal through `OAuthPrincipalLookup`.
 `PocketHiveOAuthConfiguration` installs this boundary converter.
 
 **Forbidden:** consent/client validation, authorization state mutation, a second
@@ -4121,7 +4146,9 @@ caller/token transitions and cancellation without retaining previous controls.
 Approved transfer: UI navigation and global toolbar decisions become read-only backend
 projections. Existing AuthGrantChecks remains the owner of Auth admin policy. The
 unchanged PocketHive read/run/manage combinations are owned by PocketHivePermissionSets
-under auth-contracts, consumed by existing service policies and AuthAccessProjection.
+under auth-contracts, consumed by existing service policies and AuthAccessProjection. The projection also exposes the existing
+global deployment-management decision for Planner association controls, through
+`PocketHiveGrantChecks.hasPermissionInScope` with the canonical MANAGE permission set.
 No new grant combinations or scope rules are introduced; null-caller behavior of each
 existing service boundary remains unchanged. Auth projection authenticates via the
 existing AuthAccessService and grants no authority to execute resource commands.

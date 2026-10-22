@@ -44,6 +44,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @AutoConfigureMockMvc
 class OAuthAuthorizationServerTest {
     private static final String CLIENT_ID = "pockethive-vscode";
+    private static final String ADMIN_ID = "11111111-1111-1111-1111-111111111111";
     private static final String REDIRECT_URI = "http://127.0.0.1:38125/callback";
     private static final String RESOURCE = "http://localhost:8080/mcp";
     private static final String VERIFIER = "test-verifier-that-is-at-least-forty-three-characters-long";
@@ -127,7 +128,7 @@ class OAuthAuthorizationServerTest {
             .path("client_id").asText();
 
         mvc.perform(get("/oauth/consent")
-                .with(user("local-admin"))
+                .with(user(users.findByUsername("local-admin").orElseThrow().id().toString()))
                 .param("client_id", clientId)
                 .param("state", "portable-consent")
                 .param("scope", PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ))
@@ -135,7 +136,7 @@ class OAuthAuthorizationServerTest {
             .andExpect(content().string(containsString("Portable MCP test client")));
 
         MvcResult authorization = mvc.perform(get("/oauth/authorize")
-                .with(user("local-admin"))
+                .with(user(users.findByUsername("local-admin").orElseThrow().id().toString()))
                 .queryParam("response_type", "code")
                 .queryParam("client_id", clientId)
                 .queryParam("redirect_uri", redirectUri)
@@ -198,7 +199,7 @@ class OAuthAuthorizationServerTest {
             .path("client_id").asText();
 
         MvcResult authorization = mvc.perform(get("/oauth/authorize")
-                .with(user("local-admin"))
+                .with(user(users.findByUsername("local-admin").orElseThrow().id().toString()))
                 .queryParam("response_type", "code")
                 .queryParam("client_id", clientId)
                 .queryParam("redirect_uri", runtimeRedirect)
@@ -226,7 +227,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void localhostPortRotationAcceptsPortlessRegistrationAndBoundaryPorts() throws Exception {
         MvcResult registration = mvc.perform(post("/oauth/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -252,7 +253,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void localhostPortRotationDoesNotRelaxAnyOtherRedirectComponent() throws Exception {
         String registeredRedirect = "http://localhost:52000/oauth/callback?channel=amazon-q";
         MvcResult registration = mvc.perform(post("/oauth/register")
@@ -364,7 +365,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void unknownAuthorizationClientRendersBoundedPocketHiveFailure() throws Exception {
         String untrustedClientId = "unknown-<script>alert(1)</script>";
         String untrustedState = "state-<img src=x onerror=alert(1)>";
@@ -390,7 +391,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void unknownConsentClientRendersBoundedPocketHiveFailure() throws Exception {
         mvc.perform(get("/oauth/consent")
                 .accept(MediaType.TEXT_HTML)
@@ -447,7 +448,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void consentFormBindsExplicitFieldsAndPostsToCanonicalIssuer() throws Exception {
         mvc.perform(get("/oauth/consent")
                 .param("client_id", CLIENT_ID)
@@ -476,7 +477,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void consentFormOmitsBlankScopeSegments() throws Exception {
         mvc.perform(get("/oauth/consent")
                 .param("client_id", CLIENT_ID)
@@ -490,7 +491,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void consentFormEscapesUntrustedBrowserValues() throws Exception {
         MvcResult registration = mvc.perform(post("/oauth/register")
                 .contentType("application/json")
@@ -532,7 +533,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void authorizationCodePkceIssuesAudienceBoundOpaqueTokenAndRejectsReplay() throws Exception {
         String state = "client-state-123";
         MvcResult authorization = mvc.perform(get("/oauth/authorize")
@@ -652,7 +653,7 @@ class OAuthAuthorizationServerTest {
                 PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ,
                 PocketHiveMcpScopes.OPERATE, PocketHiveMcpScopes.AUTHOR);
             MvcResult authorization = mvc.perform(get("/oauth/authorize")
-                    .with(user("local-runner"))
+                    .with(user(users.findByUsername("local-runner").orElseThrow().id().toString()))
                     .queryParam("response_type", "code")
                     .queryParam("client_id", CLIENT_ID)
                     .queryParam("redirect_uri", REDIRECT_URI)
@@ -691,7 +692,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void declaredInteractiveSubsetReceivesARotatingSession() throws Exception {
         MvcResult authorization = mvc.perform(get("/oauth/authorize")
                 .queryParam("response_type", "code")
@@ -722,7 +723,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void refreshAndRevocationFailClosedForMalformedPublicClientRequests() throws Exception {
         JsonNode token = issueBaseSession("public-client-boundary-state");
         String refreshToken = token.path("refresh_token").asText();
@@ -798,7 +799,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void rejectsMissingOrWrongResourcePlainPkceAndWrongRedirectWithoutFallback() throws Exception {
         invalidAuthorize(null, REDIRECT_URI, "S256");
         invalidAuthorize("http://localhost:8080/other", REDIRECT_URI, "S256");
@@ -915,7 +916,7 @@ class OAuthAuthorizationServerTest {
 
     private void assertCompanionSession(String username, List<String> grantedScopes) throws Exception {
         MvcResult authorization = mvc.perform(get("/oauth/authorize")
-                .with(user(username))
+                .with(user(users.findByUsername(username).orElseThrow().id().toString()))
                 .queryParam("response_type", "code")
                 .queryParam("client_id", CLIENT_ID)
                 .queryParam("redirect_uri", REDIRECT_URI)

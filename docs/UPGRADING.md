@@ -21,6 +21,13 @@ sign-in without redirecting to a preview port. Device clients do not require
 per-preview callback registrations. Exact-redirect clients keep their explicit
 callback/PKCE requirements; do not relax redirect validation or origins.
 
+The OAuth identity repair requires restarting Auth Service. Its in-memory
+OAuth authorizations, consent and browser security contexts must be cleared;
+users sign in again after the restart. Do not hot-migrate existing username-based
+principals into the UUID namespace: a former username can itself look like another
+user's UUID. New authorizations bind identity once at sign-in and never resolve a
+retained principal through a reassigned username.
+
 ### Optional PocketPlanner integration
 
 Configure `POCKETHIVE_PLANNER_BASE_URL` on Orchestrator only when enabling the

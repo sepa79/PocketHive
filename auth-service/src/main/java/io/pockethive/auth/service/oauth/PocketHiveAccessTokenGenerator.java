@@ -28,12 +28,12 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 
 public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerator<OAuth2AccessToken> {
     private final AuthServiceProperties properties;
-    private final InMemoryUserStore users;
+    private final OAuthPrincipalLookup principals;
     private final SecureRandom random = new SecureRandom();
 
     public PocketHiveAccessTokenGenerator(AuthServiceProperties properties, InMemoryUserStore users) {
         this.properties = properties;
-        this.users = users;
+        this.principals = new OAuthPrincipalLookup(users);
     }
 
     @Override
@@ -41,9 +41,8 @@ public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerato
         if (!OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
             return null;
         }
-        String principalName = context.getAuthorization().getPrincipalName();
-        StoredUser stored = users.findByUsername(principalName)
-            .filter(StoredUser::active)
+        String subject = context.getAuthorization().getPrincipalName();
+        StoredUser stored = principals.findActive(subject)
             .orElseThrow(PocketHiveAccessTokenGenerator::invalidGrant);
         Set<String> effectiveScopes = context.getAuthorizedScopes();
         boolean browser = BrowserOAuthClients.isBrowser(context.getRegisteredClient());
