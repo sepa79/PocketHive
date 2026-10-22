@@ -71,7 +71,10 @@ identity projection, copy validation logic or introduce another credential write
 
 `fetchWithAuth` accepts only the current origin, overwrites Authorization with the
 owned bearer, and refuses redirects. A 401 clears only the credential that made
-that request, never a newer login. Product HTTP errors other than 401 remain the
+that request, never a newer login. Credential invalidation also retires pending
+session restoration: a delayed refresh success cannot restore the cleared bearer
+or identity, and a delayed failure cannot overwrite the invalidation error. An
+explicit replacement sign-in remains independent. Product HTTP errors other than 401 remain the
 caller's concern. Token/device codes never appear in URLs, callbacks, cross-window
 messages or error text. Browser session storage is cleared on local expiry, logout
 and 401. No refresh, retry-on-failure or legacy PKCE adapter exists in this package.

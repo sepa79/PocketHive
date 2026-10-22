@@ -7,12 +7,8 @@ import { useAuth } from '../../lib/authContext'
 import { readBundleFile, readBundleTree, type BundleFilePayload, type BundleTreeNode } from '../../lib/scenariosApi'
 import { newUuid } from '../../lib/uuid'
 import { parseControlResponse } from '@pockethive/swarm-lifecycle-contract'
-import { usePlannerSelection } from '../../components/planner/usePlannerSelection'
-import { PlannerPicker } from '../../components/planner/PlannerPicker'
-import { plannerRequest } from '../../components/planner/plannerApi'
-import { completePlannerCreation } from '../../components/planner/completePlannerCreation'
-import type { PlannerCreation } from '../../components/planner/PlannerCreation'
-import styles from './CreateSwarmDialog.module.css'
+import { usePlannerCreation } from '../../components/planner/usePlannerCreation'
+import { CreateSwarmPlannerControls } from './CreateSwarmPlannerControls'
 
 import { CreateSwarmDialog } from './CreateSwarmDialog'
 import type { SwarmVariablesMeta as VariablesMeta } from './SwarmVariablesMeta'
@@ -130,9 +126,8 @@ export function CreateSwarmModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  const [linkPlanner, setLinkPlanner] = useState(false)
-  const [pendingCreation, setPendingCreation] = useState<PlannerCreation | null>(null)
-  const planner = usePlannerSelection(open && linkPlanner)
+  const plannerCreation = usePlannerCreation(open, auth.canManageDeployment)
+  const { pendingCreation } = plannerCreation
 
   const loadNetworkProfiles = useCallback(async () => {
     try {
@@ -381,14 +376,9 @@ export function CreateSwarmModal({
       setMessage(null)
 
       if (pendingCreation) {
-        if (!planner.selection) {
-          setError('Choose the intended Activity again before retrying the association.')
-          return
-        }
         setBusy(true)
         try {
-          await completePlannerCreation(pendingCreation, planner.selection)
-          setPendingCreation(null)
+          await plannerCreation.retry()
           setSwarmId('')
           onCreated()
           onClose()
@@ -437,17 +427,10 @@ export function CreateSwarmModal({
         return
       }
 
-      if (linkPlanner && !planner.selection) {
-        setError('Choose a PocketPlanner Plan, Stream and Activity. Reload plans after a conflict.')
-        return
-      }
-
       setBusy(true)
       try {
-        let creation: PlannerCreation | null = null
-        if (!creation) {
-          if (linkPlanner && planner.selection) await plannerRequest('/validate', planner.selection)
-          const response = await fetch(`${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(trimmedSwarmId)}/create`, {
+        const preparedPlanner = await plannerCreation.prepare()
+        const response = await fetch(`${ORCHESTRATOR_BASE}/swarms/${encodeURIComponent(trimmedSwarmId)}/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -459,19 +442,15 @@ export function CreateSwarmModal({
             networkMode,
             networkProfileId: networkMode === 'PROXIED' ? trimmedNetworkProfileId : null,
           }),
-          })
-          if (!response.ok) throw new Error(await readErrorMessage(response))
-          if (linkPlanner) {
-            creation = { swarmId: trimmedSwarmId, accepted: parseControlResponse(await response.json()) }
-            setPendingCreation(creation)
-          }
-        }
-        if (creation) {
-          if (!planner.selection) throw new Error('Select the intended Activity before retrying the association')
+        })
+        if (!response.ok) throw new Error(await readErrorMessage(response))
+        if (preparedPlanner) {
+          const creation = { swarmId: trimmedSwarmId, accepted: parseControlResponse(await response.json()) }
+          plannerCreation.remember(creation)
           setMessage(`CREATE accepted for ${creation.swarmId}. Confirming creation and saving the Planner association. If linking fails, retry only the association.`)
-          await completePlannerCreation(creation, planner.selection)
-          setPendingCreation(null)
+          await plannerCreation.complete(creation, preparedPlanner)
         }
+        plannerCreation.reset()
         setMessage(`Create request accepted for ${trimmedSwarmId}.`)
         setSwarmId('')
         setSelectedBundleKey('')
@@ -494,7 +473,7 @@ export function CreateSwarmModal({
         setBusy(false)
       }
     },
-    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, runnableTemplates, selectedBundleKey, swarmId, sutId, variablesProfileId, linkPlanner, planner.selection, pendingCreation],
+    [autoPullImages, busy, networkMode, networkProfileId, networkProfiles.length, onClose, onCreated, requiresProfile, requiresSut, runnableTemplates, selectedBundleKey, swarmId, sutId, variablesProfileId, plannerCreation, pendingCreation],
   )
 
   if (!open) return null
@@ -502,10 +481,8 @@ export function CreateSwarmModal({
   return (
     <CreateSwarmDialog
       creationPending={pendingCreation !== null}
-      plannerControls={<div className={styles.planner}>
-        <label><input type="checkbox" checked={linkPlanner} onChange={event => setLinkPlanner(event.target.checked)} disabled={busy || pendingCreation !== null} />Link to PocketPlanner</label>
-        {linkPlanner && <PlannerPicker state={planner} disabled={busy} />}
-      </div>}
+      associationBlocked={plannerCreation.retryBlocked}
+      plannerControls={<CreateSwarmPlannerControls planner={plannerCreation} busy={busy} />}
       swarmId={swarmId}
       networkMode={networkMode}
       sutIds={sutIds}
@@ -536,7 +513,7 @@ export function CreateSwarmModal({
       message={message}
       onClose={() => {
         if (busy) return
-        if (pendingCreation) { setPendingCreation(null); onCreated() }
+        if (pendingCreation) { plannerCreation.reset(); onCreated() }
         onClose()
       }}
       onSubmit={handleCreate}

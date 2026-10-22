@@ -13,7 +13,7 @@ describe('confirmed CREATE association', () => {
   it('uses the exact operation run, without another CREATE or fabricated metadata', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(Response.json(operation)).mockResolvedValueOnce(Response.json({ runId: 'exact-run' }))
     vi.stubGlobal('fetch', fetch)
-    await completePlannerCreation(creation, selection)
+    await completePlannerCreation(creation, selection, () => {})
     expect(fetch.mock.calls[0][0]).toBe('/orchestrator/api/swarms/swarm/operations/corr')
     expect(fetch.mock.calls[1][0]).toBe('/orchestrator/api/planner/runs/swarm/exact-run')
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual(selection)
@@ -24,7 +24,7 @@ describe('confirmed CREATE association', () => {
     for (const response of [{ ...operation, state: 'FAILED' }, { ...operation, correlationId: 'other' }, { ...operation, swarmId: 'other' }]) {
       const fetch = vi.fn().mockResolvedValue(Response.json(response))
       vi.stubGlobal('fetch', fetch)
-      await expect(completePlannerCreation(creation, selection)).rejects.toThrow()
+      await expect(completePlannerCreation(creation, selection, () => {})).rejects.toThrow()
       expect(fetch).toHaveBeenCalledTimes(1)
     }
   })
@@ -34,7 +34,7 @@ describe('confirmed CREATE association', () => {
     const fetch = vi.fn().mockResolvedValueOnce(Response.json({ ...operation, state: 'ACCEPTED' }))
       .mockResolvedValueOnce(Response.json(operation)).mockResolvedValueOnce(Response.json({ runId: 'exact-run' }))
     vi.stubGlobal('fetch', fetch)
-    const result = completePlannerCreation(creation, selection)
+    const result = completePlannerCreation(creation, selection, () => {})
     await vi.advanceTimersByTimeAsync(750)
     await result
     expect(fetch).toHaveBeenCalledTimes(3)
@@ -45,8 +45,8 @@ describe('confirmed CREATE association', () => {
       .mockResolvedValueOnce(Response.json({ message: 'Planner changed' }, { status: 409 }))
       .mockResolvedValueOnce(Response.json(operation)).mockResolvedValueOnce(Response.json({ runId: 'exact-run' }))
     vi.stubGlobal('fetch', fetch)
-    await expect(completePlannerCreation(creation, selection)).rejects.toThrow('Planner changed')
-    await completePlannerCreation(creation, { ...selection, revision: 8 })
+    await expect(completePlannerCreation(creation, selection, () => {})).rejects.toThrow('Planner changed')
+    await completePlannerCreation(creation, { ...selection, revision: 8 }, () => {})
     expect(fetch.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(2)
     expect(fetch.mock.calls.some(call => String(call[0]).endsWith('/create'))).toBe(false)
   })

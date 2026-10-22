@@ -22,6 +22,7 @@ export class PocketAuthController<Session extends PocketSession = PocketSession>
   private mounted = false
   private operation: AbortController | null = null
   private token: StoredToken | null = null
+  private credentialInvalidation = 0
   private cancelExpiry: (() => void) | null = null
 
   constructor(storageKey: string, private readonly onError: (error: PocketAuthError) => void,
@@ -136,10 +137,7 @@ export class PocketAuthController<Session extends PocketSession = PocketSession>
       const token = this.store.read()
       const validToken = token !== null && token.expiresAt > Date.now() ? token : null
       if (validToken === null) this.removeCredential()
-      const session = await this.api.session(validToken?.accessToken ?? null, operation.signal)
-      if (!this.isCurrent(operation)) return
-      if (validToken) this.install(validToken, session)
-      else this.publish({ session })
+      await this.restoreSession(validToken, operation)
     } catch (error) {
       if (!this.isCurrent(operation)) return
       if (error instanceof PocketAuthError && error.code === 'unauthorized') {
@@ -149,6 +147,20 @@ export class PocketAuthController<Session extends PocketSession = PocketSession>
     } finally {
       if (this.isCurrent(operation)) this.publish({ loading: false })
     }
+  }
+
+  private async restoreSession(token: StoredToken | null, operation: AbortController): Promise<void> {
+    const invalidation = this.credentialInvalidation
+    let session: Session
+    try {
+      session = await this.api.session(token?.accessToken ?? null, operation.signal)
+    } catch (error) {
+      if (this.isCurrent(operation) && invalidation === this.credentialInvalidation) throw error
+      return
+    }
+    if (!this.isCurrent(operation) || invalidation !== this.credentialInvalidation) return
+    if (token) this.install(token, session)
+    else this.publish({ session })
   }
 
   private begin(): AbortController {
@@ -178,6 +190,7 @@ export class PocketAuthController<Session extends PocketSession = PocketSession>
   }
 
   private removeCredential(): void {
+    this.credentialInvalidation++
     this.token = null
     this.cancelExpiry?.()
     this.cancelExpiry = null

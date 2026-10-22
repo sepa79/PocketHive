@@ -195,6 +195,66 @@ describe('usePocketAuth explicit session adapter', () => {
     expect(api.session).toHaveBeenCalledTimes(1)
   })
 
+  it.each(['success', 'failure'] as const)('ignores late refresh %s after a matching product 401 invalidates its credential', async outcome => {
+    stored()
+    const api = adapter()
+    const onError = vi.fn()
+    mockFetch(() => json({}, 401))
+    const { result } = renderHook(() => usePocketAuth({ storageKey, api, onError }))
+    await settle()
+    let finish!: (session: FullSession) => void
+    let fail!: (error: PocketAuthError) => void
+    api.session.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject }))
+    let refresh!: Promise<void>
+    act(() => { refresh = result.current.refresh() })
+    await settle()
+    await act(async () => { await result.current.fetchWithAuth('/api/protected') })
+    expect(result.current.session).toEqual(anonymousSession)
+    expect(result.current.getAccessToken()).toBeNull()
+    expect(new BrowserTokenStore(storageKey).read()).toBeNull()
+    expect(result.current.error?.code).toBe('unauthorized')
+    await act(async () => {
+      if (outcome === 'success') finish(fullSession)
+      else fail(new PocketAuthError('request_failed', 'Synthetic delayed failure'))
+      await refresh
+    })
+    expect(result.current.session).toEqual(anonymousSession)
+    expect(result.current.getAccessToken()).toBeNull()
+    expect(new BrowserTokenStore(storageKey).read()).toBeNull()
+    expect(result.current.error?.code).toBe('unauthorized')
+    expect(result.current.loading).toBe(false)
+    expect(api.session).toHaveBeenCalledTimes(2)
+    expect(api.start).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledTimes(1)
+    await advance(600000)
+    expect(result.current.getAccessToken()).toBeNull()
+    expect(new BrowserTokenStore(storageKey).read()).toBeNull()
+    expect(result.current.error?.code).toBe('unauthorized')
+    expect(onError).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an explicit replacement sign-in alive when its old credential gets a product 401', async () => {
+    stored()
+    const api = adapter()
+    let finishRequest!: (response: Response) => void
+    mockFetch(() => new Promise(resolve => { finishRequest = resolve }))
+    const { result } = renderHook(() => usePocketAuth({ storageKey, api }))
+    await settle()
+    const oldRequest = result.current.fetchWithAuth('/api/protected')
+    const replacement: FullSession = { ...fullSession, user: { ...fullSession.user!, id: 'explicit-replacement' } }
+    api.session.mockResolvedValueOnce(replacement)
+    act(() => { void result.current.signIn() })
+    await settle()
+    await act(async () => { finishRequest(json({}, 401)); await oldRequest })
+    expect(result.current.session).toEqual(anonymousSession)
+    expect(result.current.signingIn).toBe(true)
+    await advance(5000)
+    expect(result.current.session).toBe(replacement)
+    expect(result.current.getAccessToken()).toBe('phweb_new')
+    expect(new BrowserTokenStore(storageKey).read()?.accessToken).toBe('phweb_new')
+    expect(result.current.error).toBeNull()
+  })
+
   it('ignores a late product 401 for the old bearer after installing a new full identity', async () => {
     stored()
     const api = adapter()

@@ -21,11 +21,12 @@ export function CreateSwarmDialog({
   selectedFileLoading, selectedFileError, autoPullImages, busy, catalogueError, error, message,
   onClose, onSubmit, onSwarmIdChange, onNetworkModeChange, onSutIdChange, onNetworkProfileIdChange,
   onVariablesProfileIdChange, onTemplateFilterChange, onSelectBundle, onSelectFile, onAutoPullImagesChange,
-  plannerControls, creationPending,
+  plannerControls, creationPending, associationBlocked,
 }: {
   swarmId: string
   plannerControls: ReactNode
   creationPending: boolean
+  associationBlocked: boolean
   networkMode: NetworkMode
   sutIds: string[]
   sutId: string
@@ -172,7 +173,7 @@ export function CreateSwarmDialog({
             {variablesMeta.exists ? <span className={styles.variablesHint}>Variables: {variablesMeta.hasGlobalVars ? 'global' : '—'} · {variablesMeta.hasSutVars ? 'sut' : '—'}</span> : null}
             <div className={styles.actions}>
               <button type="button" className="actionButton actionButtonGhost" onClick={onClose} disabled={busy}>{creationPending ? 'Continue in swarm details' : 'Cancel'}</button>
-              <button type="submit" className="btnPrimary" disabled={busy || (!creationPending && (!selectedTemplate || selectedTemplate.defunct))}>{busy ? 'Working…' : creationPending ? 'Retry association only' : 'Create swarm'}</button>
+              <button type="submit" className="btnPrimary" disabled={busy || associationBlocked || (!creationPending && (!selectedTemplate || selectedTemplate.defunct))}>{busy ? 'Working…' : creationPending ? 'Retry association only' : 'Create swarm'}</button>
             </div>
           </div>
         </form>

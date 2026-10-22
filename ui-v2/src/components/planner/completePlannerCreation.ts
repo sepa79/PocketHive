@@ -8,12 +8,13 @@ import { linkPlannerRun } from './plannerApi'
  * Must not: infer running workload, mark Activities Started or silently select a different run.
  * Contract: RESP-POCKETPLANNER-INTEGRATION — docs/architecture/runtime-responsibilities.md#resp-pocketplanner-integration.
  */
-export async function completePlannerCreation(creation: PlannerCreation, selection: PlannerSelection) {
+export async function completePlannerCreation(creation: PlannerCreation, selection: PlannerSelection, assertCanAssociate: () => void) {
   const { swarmId, accepted } = creation
   const expectedPath = `/api/swarms/${swarmId}/operations/${accepted.correlationId}`
   if (accepted.operationUrl !== expectedPath) throw new Error('Unexpected CREATE operation resource')
   const deadline = Date.now() + Math.min(accepted.timeoutMs, 120000)
   while (Date.now() < deadline) {
+    assertCanAssociate()
     const response = await fetch(`/orchestrator${accepted.operationUrl}`, { headers: { Accept: 'application/json' } })
     if (!response.ok) throw new Error(`Cannot read accepted CREATE (${response.status}); do not create the swarm again`)
     const operation = await response.json()
@@ -22,6 +23,7 @@ export async function completePlannerCreation(creation: PlannerCreation, selecti
     const state = parseOperationState(operation.state)
     if (state === 'SUCCEEDED') {
       if (typeof operation.runtime?.runId !== 'string' || !operation.runtime.runId) throw new Error('Confirmed CREATE has no run ID')
+      assertCanAssociate()
       return linkPlannerRun(swarmId, operation.runtime.runId, selection)
     }
     if (state !== 'ACCEPTED' && state !== 'DISPATCHED') throw new Error(`CREATE ended in ${state}; no Planner association was saved`)

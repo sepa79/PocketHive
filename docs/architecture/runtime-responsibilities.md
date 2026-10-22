@@ -4470,6 +4470,18 @@ displayed identity, retaining existing read permissions. A replacement run reset
 its choices and discards superseded reads; another run is never substituted for
 the currently displayed run.
 
+`usePlannerCreation` owns the UI's optional Planner selection and accepted-CREATE
+association handoff. It consumes the exact backend `canManageDeployment` projection,
+discards an unaccepted optional choice when access is lost, and never blocks an
+otherwise permitted unlinked CREATE with that stale choice. Prepared selections
+carry the hook's access-invalidation generation across preflight, CREATE acceptance
+and operation reads; restored access cannot revive a discarded selection. Accepted
+CREATE identity remains retained across
+access loss or association failure; retry may only associate that same operation.
+`completePlannerCreation` checks the supplied current-access guard after operation
+reads and before the association write. `CreateSwarmPlannerControls` only presents
+that state; backend mutation authorization remains authoritative.
+
 ## RESP-SWARM-CATALOGUE-REMOVAL
 
 `SwarmCatalogueService` owns the explicit catalogue-only removal workflow. It reads

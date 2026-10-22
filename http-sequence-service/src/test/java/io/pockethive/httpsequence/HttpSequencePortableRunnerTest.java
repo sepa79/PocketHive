@@ -17,6 +17,7 @@ import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.PortableHttpBinding;
 import io.pockethive.templating.PortableHttpRenderer;
 import io.pockethive.templating.api.DisabledSequenceAccess;
+import io.pockethive.work.api.MutableStatus;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
@@ -219,13 +220,36 @@ class HttpSequencePortableRunnerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"{\"id\":1} {}", "{\"id\":1,\"id\":2}", "[]", "malformed"})
-    void invalidJourneyRecordFailsBeforeAnyRequest(String record) throws Exception {
+    void invalidJourneyRecordIsCountedAndPublishedBeforeTheNextSuccessfulJourney(String record) throws Exception {
         write("portable", jsonCall("portable", ""));
+        var values = new LinkedHashMap<String, Object>();
+        var snapshots = new ArrayList<Map<String, Object>>();
+        MutableStatus status = new MutableStatus() {
+            @Override
+            public MutableStatus data(String key, Object value) {
+                values.put(key, value);
+                return this;
+            }
+        };
+        when(context.statusPublisher()).thenReturn(update -> {
+            update.accept(status);
+            snapshots.add(Map.copyOf(values));
+        });
+        var config = config(List.of(step("portable")), Map.of());
         try (var runner = runner()) {
-            assertThatThrownBy(() -> runner.run(seed(record), context, config(List.of(step("portable")), Map.of())))
+            assertThatThrownBy(() -> runner.run(seed(record), context, config))
                 .isInstanceOf(TemplateDataException.class);
+            assertThat(requests).isEmpty();
+            assertThat(snapshots).singleElement().satisfies(snapshot -> assertThat(snapshot)
+                .containsEntry("journeys", 1L).containsEntry("okJourneys", 0L).containsEntry("errorJourneys", 1L));
+
+            responses.add(response(200, "{\"value\":\"ok\"}"));
+            runner.run(seed("{}"), context, config);
         }
-        assertThat(requests).isEmpty();
+        assertThat(requests).hasSize(1);
+        assertThat(snapshots).hasSize(2);
+        assertThat(snapshots.get(1))
+            .containsEntry("journeys", 2L).containsEntry("okJourneys", 1L).containsEntry("errorJourneys", 1L);
     }
 
     @ParameterizedTest

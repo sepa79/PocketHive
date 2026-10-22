@@ -90,17 +90,17 @@ final class HttpSequenceRunner implements AutoCloseable {
     journeys.increment();
     WorkerInfo info = context.info();
 
-    Map<String, Object> payload = new LinkedHashMap<>(new JsonDocumentReader().readObject(seed.payload()));
-    if (!config.vars().isEmpty()) {
-      Map<String, Object> headers = new java.util.LinkedHashMap<>(seed.headers());
-      headers.putIfAbsent("vars", config.vars());
-      seed = seed.toBuilder().headers(headers).build();
-    }
-
-    WorkItem current = seed;
-    boolean failed = false;
-    int totalCapturedBytes = 0;
     try {
+      Map<String, Object> payload = new LinkedHashMap<>(new JsonDocumentReader().readObject(seed.payload()));
+      if (!config.vars().isEmpty()) {
+        Map<String, Object> headers = new java.util.LinkedHashMap<>(seed.headers());
+        headers.putIfAbsent("vars", config.vars());
+        seed = seed.toBuilder().headers(headers).build();
+      }
+
+      WorkItem current = seed;
+      boolean failed = false;
+      int totalCapturedBytes = 0;
       List<HttpSequenceTargetResolver.BaseTarget> baseTargets = targetResolver.resolveBases(config);
       reloadTemplatesIfNeeded(config);
       List<TemplateDefinition> admitted = admitSteps(config);
