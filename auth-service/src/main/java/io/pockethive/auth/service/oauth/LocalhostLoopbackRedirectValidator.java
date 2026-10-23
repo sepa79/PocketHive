@@ -25,6 +25,10 @@ final class LocalhostLoopbackRedirectValidator
 
     @Override
     public void accept(OAuth2AuthorizationCodeRequestAuthenticationContext context) {
+        if (BrowserOAuthClients.isBrowser(context.getRegisteredClient())) {
+            delegate.accept(context);
+            return;
+        }
         try {
             delegate.accept(context);
         } catch (OAuth2AuthenticationException exception) {

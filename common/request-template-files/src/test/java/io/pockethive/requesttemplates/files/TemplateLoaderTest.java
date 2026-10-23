@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
+import io.pockethive.requesttemplates.PortableHttpCall;
+import io.pockethive.requesttemplates.RequestTemplateException;
 import io.pockethive.requesttemplates.TcpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -267,6 +270,37 @@ class TemplateLoaderTest {
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("existing directory");
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"{}", "true", "trailing"})
+  void rejectsTrailingJsonInput(String trailing) throws Exception {
+    Path root = Files.createTempDirectory("trailing-template-json");
+    Files.writeString(root.resolve("call.json"), """
+        {"protocol":"HTTP","serviceId":"svc","callId":"call","method":"GET","pathTemplate":"/"}
+        """ + trailing);
+    assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("Failed to parse template");
+  }
+
+  @Test
+  void acceptsTrailingJsonWhitespace() throws Exception {
+    Path root = Files.createTempDirectory("template-json-whitespace");
+    Files.writeString(root.resolve("call.json"), """
+        {"protocol":"HTTP","serviceId":"svc","callId":"call","method":"GET","pathTemplate":"/"}
+         \t\r\n
+        """);
+    assertThat(new TemplateLoader().load(root.toString())).containsKey("svc::call");
+  }
+
+  @Test
+  void rejectsDuplicateJsonKeys() throws Exception {
+    Path root = Files.createTempDirectory("duplicate-template-json");
+    Files.writeString(root.resolve("call.json"), """
+        {"protocol":"HTTP","serviceId":"svc","callId":"one","callId":"two","method":"GET","pathTemplate":"/"}
+        """);
+    assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
+        .isInstanceOf(IllegalStateException.class).hasMessageContaining("Failed to parse template");
+  }
+
   @Test
   void rejectsDuplicateTemplateKeys() throws Exception {
     Path root = Files.createTempDirectory("duplicate-templates");
@@ -275,6 +309,43 @@ class TemplateLoaderTest {
     Files.writeString(root.resolve("two.yaml"), template);
     assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Duplicate request template svc::call");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"json", "yaml"})
+  void rejectsPortableTemplatesWithUnpairedSurrogates(String extension) throws Exception {
+    Path root = Files.createTempDirectory("portable-invalid-unicode");
+    String source;
+    try (var resource = getClass().getResourceAsStream("/portable/examples/account-json.json")) {
+      assertThat(resource).isNotNull();
+      source = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+    }
+    Files.writeString(root.resolve("call." + extension),
+        source.replace("\"bodyTemplate\": \"", "\"bodyTemplate\": \"\\uD800"));
+
+    assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasCauseInstanceOf(RequestTemplateException.class)
+        .hasStackTraceContaining("paired UTF-16 surrogates");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"json", "yaml"})
+  void loadsPortableTemplatesWithPairedUnicode(String extension) throws Exception {
+    Path root = Files.createTempDirectory("portable-valid-unicode");
+    String source;
+    try (var resource = getClass().getResourceAsStream("/portable/examples/account-json.json")) {
+      assertThat(resource).isNotNull();
+      source = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+    }
+    Files.writeString(root.resolve("call." + extension),
+        source.replace("{{ endpoint.path }}", "/zażółć/\\uD83D\\uDE00"));
+
+    var loaded = new TemplateLoader().load(root.toString());
+    assertThat(loaded.get("accounts::create")).isInstanceOfSatisfying(PortableHttpCall.class, call -> {
+      assertThat(call.request().pathTemplate()).isEqualTo("/zażółć/😀");
+      assertThat(call.response().expectedStatus()).isEqualTo(201);
+    });
   }
 
 }

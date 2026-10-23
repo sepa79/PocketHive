@@ -33,6 +33,12 @@ Rule: when adding new UI functionality, implement it in `ui-v2/` unless a human 
   - Render modals via a portal (`document.body`) or an equivalent top-level container.
   - Use `vw/vh` caps (`max-w-[..]`, `h-[..vh]`) so modals don’t overflow on small screens.
 
+The New Swarm dialog uses a compact, wrapping configuration row, a scenario
+sidebar and an Overview/Files detail pane. Files receives the remaining height;
+metadata belongs in Overview. The footer actions remain visible while the
+scenario, file tree and preview panes scroll independently. Its styles are scoped
+to the dialog; tree rows and long paths must fit their allocated bounds at 1080p.
+
 ## 3) Component structure (keep it small)
 
 - Do not add new logic to mega-files unless unavoidable.
@@ -72,6 +78,12 @@ Rule: when adding new UI functionality, implement it in `ui-v2/` unless a human 
 - Use CSS Modules only when Tailwind becomes unreadable or when you need complex selectors/animations.
 - Do not add new global selectors unless the change is explicitly about the active UI theme.
 
+Native select controls and their option/optgroup popups use opaque theme colours
+with an explicit text/background pair. Do not reuse translucent panel fills for
+native popup surfaces: Chromium/Edge can paint them over a light system surface.
+The active theme owns `color-scheme`; preserve native keyboard interaction and
+the browser's forced-colours accessibility behaviour.
+
 ## 7) Accessibility & UX baseline
 
 - Every interactive element needs:
@@ -84,6 +96,11 @@ Rule: when adding new UI functionality, implement it in `ui-v2/` unless a human 
 ## 8) Tests (what to add, where)
 
 - Prefer `vitest` + React Testing Library for component logic.
+- Data-loading, decoder and hydration changes follow the
+  [data-contract coherence review](../REVIEW_RULES.md#data-contract-coherence-review).
+  Its producer-compatible fixture and visible-acceptance requirements apply even
+  when the backend API is unchanged; a mock tailored only to the component is not
+  proof that the current API can populate it.
 - Add tests when changing:
   - YAML merge/patch behaviour
   - parsing/normalisation logic

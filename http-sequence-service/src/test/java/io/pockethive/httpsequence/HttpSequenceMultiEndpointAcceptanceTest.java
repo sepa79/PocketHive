@@ -137,7 +137,7 @@ class HttpSequenceMultiEndpointAcceptanceTest {
         Clock.systemUTC(),
         new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE),
         new TemplateLoader(),
-        new ApacheHttpCallExecutor(client),
+        new ApacheHttpCallExecutor(client, client),
         new DefaultHttpSequenceTargetResolver(),
         redis);
   }

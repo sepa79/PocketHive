@@ -20,10 +20,10 @@ import org.springframework.security.web.authentication.AuthenticationConverter;
 public final class PocketHiveInteractiveAuthorizationRequestConverter implements AuthenticationConverter {
     private final OAuth2AuthorizationCodeRequestAuthenticationConverter delegate =
         new OAuth2AuthorizationCodeRequestAuthenticationConverter();
-    private final InMemoryUserStore users;
+    private final OAuthPrincipalLookup principals;
 
     public PocketHiveInteractiveAuthorizationRequestConverter(InMemoryUserStore users) {
-        this.users = java.util.Objects.requireNonNull(users, "users");
+        this.principals = new OAuthPrincipalLookup(users);
     }
 
     @Override
@@ -38,8 +38,7 @@ public final class PocketHiveInteractiveAuthorizationRequestConverter implements
         if (!principal.isAuthenticated() || principal instanceof AnonymousAuthenticationToken) {
             return candidate;
         }
-        return users.findByUsername(principal.getName())
-            .filter(user -> user.active())
+        return principals.findActive(principal.getName())
             .<Authentication>map(user -> narrowed(candidate,
                 McpScopeAuthorizationValidator.allowedScopes(user.grants())))
             .orElse(candidate);

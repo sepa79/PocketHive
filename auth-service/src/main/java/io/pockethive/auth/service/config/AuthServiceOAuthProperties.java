@@ -14,6 +14,7 @@ public final class AuthServiceOAuthProperties {
     private URI issuer;
     private URI resource;
     private Duration authorizationCodeTtl = Duration.ofMinutes(2);
+    private Duration deviceCodeTtl = Duration.ofMinutes(5);
     private Duration accessTokenTtl = Duration.ofHours(8);
     private Duration refreshTokenTtl = Duration.ofDays(30);
     private Duration dynamicClientTtl = Duration.ofDays(31);
@@ -23,6 +24,9 @@ public final class AuthServiceOAuthProperties {
     private URI vscodeRedirectUri;
     private String introspectionClientId;
     private String introspectionClientSecret;
+    private String pocketHiveBrowserRedirectUri = "";
+    private String pocketPlannerBrowserRedirectUri = "";
+    private String pocketDataBrowserRedirectUri = "";
 
     public boolean isAllowRemoteHttp() { return allowRemoteHttp; }
     public void setAllowRemoteHttp(boolean value) { this.allowRemoteHttp = value; }
@@ -32,6 +36,8 @@ public final class AuthServiceOAuthProperties {
     public void setResource(URI resource) { this.resource = resource; }
     public Duration getAuthorizationCodeTtl() { return authorizationCodeTtl; }
     public void setAuthorizationCodeTtl(Duration value) { this.authorizationCodeTtl = value; }
+    public Duration getDeviceCodeTtl() { return deviceCodeTtl; }
+    public void setDeviceCodeTtl(Duration value) { this.deviceCodeTtl = value; }
     public Duration getAccessTokenTtl() { return accessTokenTtl; }
     public void setAccessTokenTtl(Duration value) { this.accessTokenTtl = value; }
     public Duration getRefreshTokenTtl() { return refreshTokenTtl; }
@@ -50,4 +56,10 @@ public final class AuthServiceOAuthProperties {
     public void setIntrospectionClientId(String value) { this.introspectionClientId = value; }
     public String getIntrospectionClientSecret() { return introspectionClientSecret; }
     public void setIntrospectionClientSecret(String value) { this.introspectionClientSecret = value; }
+    public String getPocketHiveBrowserRedirectUri() { return pocketHiveBrowserRedirectUri; }
+    public void setPocketHiveBrowserRedirectUri(String value) { pocketHiveBrowserRedirectUri = value; }
+    public String getPocketPlannerBrowserRedirectUri() { return pocketPlannerBrowserRedirectUri; }
+    public void setPocketPlannerBrowserRedirectUri(String value) { pocketPlannerBrowserRedirectUri = value; }
+    public String getPocketDataBrowserRedirectUri() { return pocketDataBrowserRedirectUri; }
+    public void setPocketDataBrowserRedirectUri(String value) { pocketDataBrowserRedirectUri = value; }
 }

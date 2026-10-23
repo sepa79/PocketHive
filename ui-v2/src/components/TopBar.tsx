@@ -1,3 +1,4 @@
+import { AppHeader } from '@pockethive/ui'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { Breadcrumbs } from './Breadcrumbs'
@@ -217,12 +218,17 @@ const toolLinks: ToolLink[] = [
   { id: 'wiremock', title: 'WireMock', href: '/wiremock/', icon: '/icons/wiremock.svg' },
 ]
 
+/**
+ * Responsibility: supply PH branding, notices, search and account controls to the header.
+ * Must not: own shared header layout or decide authentication and permissions.
+ * Contract: RESP-POCKET-UI-SHELL — docs/architecture/runtime-responsibilities.md#resp-pocket-ui-shell.
+ */
 export function TopBar() {
   const navigate = useNavigate()
 
   return (
-    <div className="topBarInner">
-      <div className="topBarLeft">
+    <AppHeader
+      leading={<>
         <NavLink to="/" className="logoLink logoLinkBare" aria-label="PocketHive home" title="Home">
           <span className="brandMark" aria-hidden="true">
             <LogoMark size={28} />
@@ -233,12 +239,12 @@ export function TopBar() {
           </span>
         </NavLink>
         <Breadcrumbs />
-      </div>
-      <div className="topBarCenter">
+      </>}
+      center={<>
         <TopBarNotices onNavigate={navigate} />
         <TopBarSearch />
-      </div>
-      <div className="topBarRight">
+      </>}
+      trailing={<>
         <div className="topBarTools">
           {toolLinks.map((tool) => (
             <a
@@ -266,7 +272,7 @@ export function TopBar() {
           <span className="odysseyIcon" aria-hidden="true" />
         </button>
         <UserMenu />
-      </div>
-    </div>
+      </>}
+    />
   )
 }

@@ -56,6 +56,9 @@ Check:
 - durable behavior is documented before implementation,
 - public REST, event, schema, routing, and filesystem changes update their
   canonical contract first,
+- fixes to readers, projections or UI hydration apply the
+  [data-contract coherence review](#data-contract-coherence-review), even when
+  the producer and public schema are unchanged,
 - unrelated cleanup has not obscured the change.
 
 Reject when behavior exists only in code, a test fixture, or conversation.
@@ -212,6 +215,46 @@ The existing single import test and standard dependency/architecture checks rema
 within their approved scope. This policy does not waive ownership rules or excuse
 missing evidence for a required behavioral outcome.
 
+### Data-contract coherence review
+
+Apply this gate to changes that produce, project, decode or present structured
+data, including fixes to existing readers. Green producer and consumer unit tests
+in isolation do not establish that they exchange the same payload.
+
+The reviewer must provide the following evidence for the affected flow:
+
+| Evidence | Required check |
+|---|---|
+| Current contract and owners | Identify the canonical schema/DTO and actual producer, serialization/projection boundary and consumer entrypoint. Follow the path through REST and UI when present. Distinguish transport envelopes from read-only projections; a shared business name does not imply identical JSON. |
+| Compatible successful payload | Show a producer-serialized synthetic payload, or a producer-owned synthetic fixture, accepted by the canonical schema and exercised through the affected consumer. A fixture invented only to satisfy the reader, a TypeScript cast or an interface declaration is not this evidence. Do not copy operational data into test resources. |
+| Field semantics and transitions | Check required versus optional versus explicitly nullable fields, identity/run scope, authoritative state versus cached observations, timestamp/freshness meaning and full-versus-delta retention. Exercise relevant pre-observation, stale, missing/malformed and identity-change cases. A consumer may expose a named subset without becoming a second contract owner. |
+| Documentation agreement | Apply [contract-derived documentation](ENGINEERING_RULES.md#contract-derived-documentation): structural reference details come from the canonical contract, not a second handwritten specification. Verify the generation source and manually review narrative meaning, completeness and examples against the contract and producer. Label intentional fragments and negative examples explicitly. An archived design or an unverified JavaDoc is not evidence of current behavior. |
+| Visible acceptance | For affected UI flows, assert representative non-empty values and required controls, including their enabled/disabled state under backend permissions. An HTTP 200, a rendered page title, a screenshot alone, or the absence of an exception does not prove correct hydration. |
+
+For a reproduced reader defect, show that the regression test fails for that
+defect before the fix and passes after it, without changing the fixture into the
+reader's obsolete format. At least one successful boundary test must use the
+producer-compatible payload above. Keep deliberately malformed fixtures separate;
+they must fail for the intended contract violation, not an unrelated missing field.
+
+Use the existing canonical codec/schema validator and normal component/browser
+tests. Synthetic isolated fixtures are sufficient; this gate does not require
+starting a production stack, copying a live database, adding another validator,
+generating a parallel contract or scanning source for architectural compliance.
+Stack checks, when required, still use official ingress.
+
+Documentation agreement is a reviewer responsibility. Do not add documentation
+tests, example-extraction scripts or documentation-test build/CI hooks. Runtime
+serialization, schema and consumer behavior tests remain required at their own
+boundaries; they do not replace manual review of the documentation.
+
+Unresolved schema/table/producer/consumer disagreement on the affected path blocks
+approval, including inherited drift needed to establish the requested behavior.
+State which artifact disagrees and what intended contract must be confirmed; do
+not silently treat either the newest code or an old document as correct. Protected
+contract changes still require explicit human approval. Unrelated documentation
+debt may be deferred by name; do not broaden this gate into an unrelated rewrite.
+
 ### Sole source-scanning test exception
 
 Human approval: 2026-09-08, clarified to cover all Java modules. Keep only
@@ -259,6 +302,9 @@ Check:
 
 - tests use official ingress/API paths where required,
 - producer-derived wire payloads are validated by the canonical codec/schema,
+- affected data flows have the evidence required by the
+  [data-contract coherence review](#data-contract-coherence-review), not only
+  separately passing producer and consumer tests,
 - focused tests cover affected handler/state-machine behavior and concrete defects;
   extraction alone does not require a new test,
 - wrong target, wrong controller instance, stale `runId`, duplicate delivery,
@@ -304,7 +350,12 @@ Medium unless impact raises severity:
 State at least:
 
 - findings ordered by severity, or `no findings`,
+- inspected revision/worktree scope and, for deployed evidence, the actual
+  artifact version; limit `no findings` to the inspected scope,
 - canonical owners checked and repository-wide searches performed,
+- for affected data flows, the producer-to-consumer path, schema-validated
+  runtime fixture evidence, manual documentation review and observable acceptance
+  required above,
 - commands and tests run,
 - unverified areas,
 - merge recommendation and remaining risks.

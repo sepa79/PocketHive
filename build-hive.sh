@@ -27,6 +27,9 @@ done
 
 LOCAL_ARTIFACTS_DIR="${LOCAL_ARTIFACTS_DIR:-.local-jars}"
 COMPOSE_FILES=(-f docker-compose.yml)
+if [[ -n "${POCKETHIVE_COMPOSE_OVERRIDE:-}" ]]; then
+  COMPOSE_FILES+=(-f "${POCKETHIVE_COMPOSE_OVERRIDE}")
+fi
 MAVEN_CLI_OPTS="${MAVEN_CLI_OPTS:-}"
 RUNTIME_IMAGE="${POCKETHIVE_RUNTIME_IMAGE:-pockethive-jvm-base:latest}"
 
@@ -64,6 +67,7 @@ Behaviour:
 Environment:
   LOCAL_ARTIFACTS_DIR   Directory for staged jars (default: ${LOCAL_ARTIFACTS_DIR}).
   POCKETHIVE_RUNTIME_IMAGE  Tag for the shared JVM base image (default: ${RUNTIME_IMAGE}).
+  POCKETHIVE_COMPOSE_OVERRIDE Explicit additional compose file for isolated local integration tests.
   MAVEN_CLI_OPTS        Extra Maven flags appended to the build command.
   POCKETHIVE_AUTH_TOKEN Bearer token used by auth-protected local tooling (for example --sync-scenarios).
   POCKETHIVE_AUTH_USERNAME DEV username used to obtain a bearer token from auth-service for local tooling.

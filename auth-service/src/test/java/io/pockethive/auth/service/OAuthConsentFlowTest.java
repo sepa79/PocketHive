@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
+import io.pockethive.auth.service.service.InMemoryUserStore;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -52,12 +53,13 @@ class OAuthConsentFlowTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
+    @Autowired InMemoryUserStore users;
 
     @Test
     void renderedDeclineWithCheckedScopesDeniesWithoutSavingConsent() throws Exception {
         String client = registerClient();
         PendingConsent pending = begin(client, SCOPES);
-        String page = mvc.perform(get("/oauth/consent").with(user("local-admin"))
+        String page = mvc.perform(get("/oauth/consent").with(user(users.findByUsername("local-admin").orElseThrow().id().toString()))
                 .param("client_id", client).param("state", pending.handle()).param("scope", SCOPES))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(page).contains("name=\"consent_action\" value=\"cancel\"",
@@ -192,7 +194,7 @@ class OAuthConsentFlowTest {
     private MockHttpServletRequestBuilder authorizeAt(String client, String redirect, String... scopes) throws Exception {
         String challenge = Base64.getUrlEncoder().withoutPadding().encodeToString(
             MessageDigest.getInstance("SHA-256").digest(VERIFIER.getBytes(StandardCharsets.US_ASCII)));
-        return get("/oauth/authorize").with(user("local-admin"))
+        return get("/oauth/authorize").with(user(users.findByUsername("local-admin").orElseThrow().id().toString()))
             .queryParam("response_type", "code").queryParam("client_id", client)
             .queryParam("redirect_uri", redirect).queryParam("resource", RESOURCE)
             .queryParam("scope", String.join(" ", scopes)).queryParam("state", STATE)
@@ -204,7 +206,7 @@ class OAuthConsentFlowTest {
     }
 
     private MockHttpServletRequestBuilder submit(PendingConsent pending, String client, String state) {
-        return post("/oauth/authorize").with(user("local-admin")).with(csrf()).session(pending.session())
+        return post("/oauth/authorize").with(user(users.findByUsername("local-admin").orElseThrow().id().toString())).with(csrf()).session(pending.session())
             .param("client_id", client).param("state", state);
     }
 

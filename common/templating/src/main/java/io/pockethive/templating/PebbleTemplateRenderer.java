@@ -98,6 +98,7 @@ public final class PebbleTemplateRenderer implements TemplateRenderer, TemplateS
     private static PebbleEngine defaultEngine(SequenceAccess sequences, PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
         SpelTemplateEvaluator evaluator = new SpelTemplateEvaluator(sequences);
         return new PebbleEngine.Builder()
+            .extension(new PebbleDataExtension(java.util.Set.of(io.pockethive.requesttemplates.PortableCapability.values()), false))
             .extension(new PebbleEvalExtension(evaluator))
             .extension(new PebbleWeightedSelectionExtension(seededSelector))
             .autoEscaping(false)
@@ -107,6 +108,7 @@ public final class PebbleTemplateRenderer implements TemplateRenderer, TemplateS
 
     private static PebbleEngine validationEngine() {
         return new PebbleEngine.Builder()
+            .extension(new PebbleDataExtension(java.util.Set.of(io.pockethive.requesttemplates.PortableCapability.values()), true))
             .extension(new PebbleEvalExtension(new SpelTemplateEvaluator(DisabledSequenceAccess.INSTANCE), true))
             .extension(new PebbleWeightedSelectionExtension(new PebbleWeightedSelectionExtension.SeededSelector()))
             .autoEscaping(false)

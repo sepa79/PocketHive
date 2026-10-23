@@ -50,7 +50,6 @@ if (isPlugin) {
   })
 } else {
   startControlPlaneHealth()
-
   renderApp(
     <BrowserRouter basename={detectUiBasename(window.location.pathname) || undefined}>
       <App />

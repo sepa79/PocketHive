@@ -3,6 +3,7 @@ package io.pockethive.requesttemplates;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.templatedata.TemplateDataException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,6 +33,14 @@ public final class RequestTemplateParser {
 
     public TemplateDefinition parse(Map<?, ?> document) {
         Objects.requireNonNull(document, "document");
+        if (document.containsKey("profile")) {
+            try {
+                return new PortableHttpCallParser().parse(document);
+            } catch (TemplateDataException failure) {
+                throw new RequestTemplateException(List.of(new RequestTemplateProblem(
+                    RequestTemplateProblemKind.INVALID_VALUE, "", failure.getMessage())));
+            }
+        }
         List<RequestTemplateProblem> problems = new ArrayList<>();
         Map<String, String> required = new LinkedHashMap<>();
         for (String field : COMMON_REQUIRED_FIELDS) {

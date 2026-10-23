@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Tree, type NodeRendererProps, type TreeApi } from 'react-arborist'
+import { useMeasuredTreeHeight } from './useMeasuredTreeHeight'
 
 type ScenarioTreeEntry = {
   bundleKey: string
@@ -130,30 +131,6 @@ function collectFolderIds<T extends ScenarioTreeEntry>(nodes: readonly TreeNode<
   return ids
 }
 
-function useMeasuredHeight<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null)
-  const [height, setHeight] = useState<number>(MIN_TREE_HEIGHT)
-
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const updateHeight = (next: number) => {
-      setHeight(Math.max(MIN_TREE_HEIGHT, Math.floor(next)))
-    }
-    updateHeight(element.getBoundingClientRect().height)
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (!entry) return
-      updateHeight(entry.contentRect.height)
-    })
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [])
-
-  return { ref, height }
-}
-
 function ScenarioTreeNodeRenderer<T extends ScenarioTreeEntry>({ node, style, dragHandle }: NodeRendererProps<TreeNode<T>>) {
   const data = node.data
   const isFolder = data.kind === 'folder'
@@ -197,7 +174,7 @@ function ScenarioTreeNodeRenderer<T extends ScenarioTreeEntry>({ node, style, dr
         </span>
         <div className="scenarioTreeText">
           <div className="scenarioTreeTitleRow">
-            <span className={!isFolder && leaf?.defunct ? 'scenarioTreeTitle scenarioTreeTitleDefunct' : 'scenarioTreeTitle'}>
+            <span className={!isFolder && leaf?.defunct ? 'scenarioTreeTitle scenarioTreeTitleDefunct' : 'scenarioTreeTitle'} title={data.name}>
               {data.name}
             </span>
             {!isFolder && leaf?.defunct ? <span className="pill pillBad">DEFUNCT</span> : null}
@@ -208,6 +185,11 @@ function ScenarioTreeNodeRenderer<T extends ScenarioTreeEntry>({ node, style, dr
   )
 }
 
+/**
+ * Responsibility: render and select entries from a supplied scenario catalogue.
+ * Must not: fetch scenarios, resolve access grants or execute swarm commands.
+ * Contract: RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (presentation only).
+ */
 export function ScenarioTree<T extends ScenarioTreeEntry>({
   items,
   selectedBundleKey,
@@ -225,7 +207,7 @@ export function ScenarioTree<T extends ScenarioTreeEntry>({
   rowHeight?: number
   emptyMessage?: string
 }) {
-  const { ref, height } = useMeasuredHeight<HTMLDivElement>()
+  const { ref, height } = useMeasuredTreeHeight(MIN_TREE_HEIGHT)
   const treeRef = useRef<TreeApi<TreeNode<T>> | null>(null)
 
   const data = useMemo(() => buildTreeData(items), [items])

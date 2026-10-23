@@ -2,12 +2,14 @@ package io.pockethive.auth.service.oauth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
+import io.pockethive.auth.contract.PocketHiveDeviceAuth;
 import io.pockethive.auth.contract.PublicEndpointTransportPolicy;
 import io.pockethive.auth.service.config.AuthServiceOAuthProperties;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import io.pockethive.auth.service.service.InMemoryUserStore;
 import java.time.Clock;
 import java.util.List;
+import java.util.ArrayList;
 import org.springframework.boot.autoconfigure.security.SecurityProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -38,6 +40,8 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 
 /**
  * Responsibility: Configure the PocketHive OAuth authorization server from validated canonical properties.
@@ -75,7 +79,8 @@ public class PocketHiveOAuthConfiguration {
     @Bean
     PocketHiveRegisteredClientRepository registeredClients(AuthServiceProperties properties,
                                                             PasswordEncoder encoder, TokenSettings tokens,
-                                                            Clock clock, DynamicClientStateStore stateStore) {
+                                                            Clock clock, DynamicClientStateStore stateStore,
+                                                            BrowserOAuthClients browserClients) {
         AuthServiceOAuthProperties oauth = requireValid(properties);
         RegisteredClient vscode = RegisteredClient.withId("pockethive-vscode-public")
             .clientId(oauth.getVscodeClientId())
@@ -99,7 +104,9 @@ public class PocketHiveOAuthConfiguration {
             .authorizationGrantType(new AuthorizationGrantType("urn:pockethive:grant-type:introspection-only"))
             .tokenSettings(tokens)
             .build();
-        return new PocketHiveRegisteredClientRepository(List.of(vscode, introspection),
+        List<RegisteredClient> registered = new ArrayList<>(List.of(vscode, introspection));
+        registered.addAll(browserClients.registeredClients());
+        return new PocketHiveRegisteredClientRepository(registered,
             oauth.getDynamicClientCapacity(), oauth.getDynamicClientTtl(), clock, stateStore, tokens);
     }
 
@@ -130,6 +137,8 @@ public class PocketHiveOAuthConfiguration {
         return AuthorizationServerSettings.builder()
             .issuer(properties.getOauth().getIssuer().toString())
             .authorizationEndpoint("/oauth/authorize")
+            .deviceAuthorizationEndpoint(PocketHiveDeviceAuth.AUTHORIZATION_PATH)
+            .deviceVerificationEndpoint(PocketHiveDeviceAuth.VERIFICATION_PATH)
             .tokenEndpoint("/oauth/token")
             .tokenRevocationEndpoint("/oauth/revoke")
             .tokenIntrospectionEndpoint("/oauth/introspect")
@@ -156,6 +165,12 @@ public class PocketHiveOAuthConfiguration {
             OAuth2AuthorizationServerConfigurer.authorizationServer();
         http.securityMatcher(authorizationServer.getEndpointsMatcher())
             .with(authorizationServer, server -> server
+                .deviceAuthorizationEndpoint(endpoint -> endpoint.verificationUri(
+                    properties.getOauth().getIssuer() + PocketHiveDeviceAuth.VERIFICATION_PATH))
+                .deviceVerificationEndpoint(endpoint -> endpoint
+                    .consentPage(properties.getOauth().getIssuer() + PocketHiveDeviceAuth.CONSENT_PATH)
+                    .deviceVerificationResponseHandler((request, response, authentication) ->
+                        response.sendRedirect(properties.getOauth().getIssuer() + PocketHiveDeviceAuth.COMPLETE_PATH)))
                 .authorizationServerMetadataEndpoint(metadata -> metadata
                     .authorizationServerMetadataCustomizer(builder -> builder.claims(claims -> {
                         String issuer = properties.getOauth().getIssuer().toString();
@@ -190,10 +205,14 @@ public class PocketHiveOAuthConfiguration {
                             List.of(PKCE_S256));
                     })))
                 .clientAuthentication(client -> client
-                    .authenticationConverters(converters -> converters.add(0,
-                        new PocketHivePublicSessionClientAuthenticationConverter(settings)))
-                    .authenticationProviders(providers -> providers.add(0,
-                        new PocketHivePublicSessionClientAuthenticationProvider(clients))))
+                    .authenticationConverters(converters -> {
+                        converters.add(0, new PocketHivePublicSessionClientAuthenticationConverter(settings));
+                        converters.add(0, new DeviceClientAuthenticationConverter());
+                    })
+                    .authenticationProviders(providers -> {
+                        providers.add(0, new PocketHivePublicSessionClientAuthenticationProvider(clients));
+                        providers.add(0, new DeviceClientAuthenticationProvider(clients));
+                    }))
                 .authorizationEndpoint(endpoint -> endpoint
                     .consentPage("/oauth/consent")
                     .errorResponseHandler(authorizationFailureHandler)
@@ -202,7 +221,7 @@ public class PocketHiveOAuthConfiguration {
                     .authenticationProviders(providers -> providers.forEach(provider -> {
                         if (provider instanceof OAuth2AuthorizationCodeRequestAuthenticationProvider code) {
                             code.setAuthenticationValidator(new LocalhostLoopbackRedirectValidator(
-                                new McpScopeAuthorizationValidator(users)));
+                                new PocketHiveScopeAuthorizationValidator(users)));
                         }
                         if (provider instanceof OAuth2AuthorizationConsentAuthenticationProvider consent) {
                             consent.setAuthorizationConsentCustomizer(new PocketHiveAuthorizationConsentCustomizer());
@@ -213,8 +232,17 @@ public class PocketHiveOAuthConfiguration {
                 .anyRequest().authenticated())
             .exceptionHandling(errors -> errors.authenticationEntryPoint(
                 new LoginUrlAuthenticationEntryPoint("/oauth/dev/login")))
-            .csrf(csrf -> csrf.ignoringRequestMatchers(authorizationServer.getEndpointsMatcher()));
+            .csrf(csrf -> csrf.ignoringRequestMatchers(authorizationServer.getEndpointsMatcher()))
+            .addFilterBefore(deviceConfirmationCsrf(), CsrfFilter.class);
         return http.build();
+    }
+
+    private static CsrfFilter deviceConfirmationCsrf() {
+        CsrfFilter filter = new CsrfFilter(new HttpSessionCsrfTokenRepository());
+        filter.setBeanName("deviceConfirmationCsrf");
+        filter.setRequireCsrfProtectionMatcher(request -> "POST".equals(request.getMethod())
+            && request.getRequestURI().equals(request.getContextPath() + PocketHiveDeviceAuth.VERIFICATION_PATH));
+        return filter;
     }
 
     @Bean
@@ -227,6 +255,7 @@ public class PocketHiveOAuthConfiguration {
                 .requestMatchers("/.well-known/oauth-authorization-server", "/oauth/dev/login").permitAll()
                 .requestMatchers(DynamicClientRegistrationService.REGISTRATION_PATH).permitAll()
                 .requestMatchers("/oauth/consent").authenticated()
+                .requestMatchers(PocketHiveDeviceAuth.CONSENT_PATH).authenticated()
                 .anyRequest().permitAll())
             .exceptionHandling(errors -> errors
                 .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/oauth/dev/login"))
@@ -238,9 +267,9 @@ public class PocketHiveOAuthConfiguration {
 
     @Bean
     FilterRegistrationBean<OAuthResourceParameterFilter> oauthResourceParameterFilter(
-        AuthServiceProperties properties) {
+        AuthServiceProperties properties, RegisteredClientRepository clients) {
         var registration = new FilterRegistrationBean<>(
-            new OAuthResourceParameterFilter(properties.getOauth().getResource().toString()));
+            new OAuthResourceParameterFilter(properties.getOauth().getResource().toString(), clients));
         registration.setOrder(SecurityProperties.DEFAULT_FILTER_ORDER - 1);
         return registration;
     }
@@ -252,6 +281,8 @@ public class PocketHiveOAuthConfiguration {
             || blank(oauth.getIntrospectionClientId()) || blank(oauth.getIntrospectionClientSecret())
             || oauth.getAuthorizationCodeTtl() == null || oauth.getAuthorizationCodeTtl().isNegative()
             || oauth.getAuthorizationCodeTtl().isZero() || oauth.getAccessTokenTtl() == null
+            || oauth.getDeviceCodeTtl() == null || oauth.getDeviceCodeTtl().isNegative()
+            || oauth.getDeviceCodeTtl().isZero()
             || oauth.getAccessTokenTtl().isNegative() || oauth.getAccessTokenTtl().isZero()
             || oauth.getRefreshTokenTtl() == null || oauth.getRefreshTokenTtl().isNegative()
             || oauth.getRefreshTokenTtl().isZero()

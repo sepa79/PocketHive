@@ -10,12 +10,15 @@
 - [ ] Listeners/controllers remain thin boundaries and delegate domain behavior
 - [ ] Repository-wide SSOT search found no competing parser, resolver, mapper, state writer, topology owner, or outcome calculator
 - [ ] Applied the mandatory boundary review in docs/REVIEW_RULES.md: actual owners, effectful constructors/overloads, selected composition, update ordering, and explicit evidence/limits
+- [ ] For affected data readers/projections/producers, supplied the [data-contract coherence evidence](../REVIEW_RULES.md#data-contract-coherence-review): actual producer → serialized/projected payload → consumer, canonical-schema-validated successful fixture, field semantics and documentation agreement
+- [ ] For affected UI hydration, verified meaningful values and permission-aware controls, not just HTTP success/page presence; reader regressions fail before the fix with the same producer-compatible payload
 - [ ] No custom source preparser, heuristic architecture validator, or generic method-name blacklist introduced or recreated; only the existing named test in [the sole source-scanning exception](../REVIEW_RULES.md#sole-source-scanning-test-exception) is permitted, within its documented scope
 - [ ] Conventional Commit message
 - [ ] Tests cover new behaviour
 - [ ] Each added/retained test in the changed scope checks a concrete contract, behavior or reproduced defect; no module/bean-selection tests required for ownership (see [boundary-verification policy](../REVIEW_RULES.md#boundary-verification-and-test-value))
 - [ ] Static analysis and other automated checks pass
 - [ ] Documentation updated
+- [ ] Applied [contract-derived documentation](../ENGINEERING_RULES.md#contract-derived-documentation): generated structural references use the canonical source; narrative meaning/completeness and examples are manually reviewed, no documentation tests/hooks added, and unresolved affected-path drift is not reported as `no findings`
 - [ ] No secrets or sensitive data
 - [ ] Follows project policy and coding standards
 - [ ] No cascading defaults introduced; backward compatibility only when explicitly required

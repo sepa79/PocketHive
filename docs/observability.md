@@ -69,13 +69,19 @@ metrics, or an explicit disabled/test state for targets that intentionally do
 
 ## Queue depth snapshots
 
-Status events now include an optional `queueStats` object keyed by queue name. Each entry surfaces the latest broker snapshot for that queue:
+Raw worker `status-full` events may include `data.io.work.queueStats`, keyed by
+queue name. This is not a root envelope field or a REST
+`SwarmStateView.observation.workers[]` / `bees[]` field. Each entry surfaces the
+latest broker snapshot for that queue:
 
 - `depth` — current message count in the queue.
 - `consumers` — number of active consumers bound to the queue.
 - `oldestAgeSec` (optional) — age, in seconds, of the oldest message when the broker exposes it.
 
-Operators can correlate these numbers with the `queues` topology block to understand which bindings map to a growing backlog. Empty or unavailable stats simply omit the `queueStats` object.
+Operators can correlate these numbers with raw worker `data.io.work.queues` and
+Controller `data.context.bindings` (REST `observation.bindings`) to understand
+which bindings map to a growing backlog. Queue statistics are full-only, not
+delta fields. Empty or unavailable stats simply omit `data.io.work.queueStats`.
 
 ## Postprocessor ClickHouse tx-outcomes sink
 

@@ -1,0 +1,17 @@
+{
+  "id": "synthetic-detail-swarm",
+  "runId": "synthetic-detail-run",
+  "runtimeIntent": "PRESENT",
+  "workloadIntent": "STOPPED",
+  "controllerState": "PROVISIONING",
+  "workloadState": "UNAVAILABLE",
+  "health": "UNKNOWN",
+  "runtimeResourceState": "PRESENT",
+  "observedAt": null,
+  "observationStale": true,
+  "activeOperation": null,
+  "templateId": "synthetic-detail-scenario",
+  "controllerImage": "ghcr.io/pockethive/swarm-controller:synthetic",
+  "bees": [],
+  "observation": {}
+}

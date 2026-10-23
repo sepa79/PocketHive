@@ -632,8 +632,15 @@ non-cacheable failure page with the appropriate HTTP status. These paths must
 not dispatch to the framework `/error` page. Machine-facing registration and
 token errors retain their documented JSON OAuth responses.
 
-The DEV provider asks for one configured active username. A future LDAP or OIDC
-provider changes only the principal-authentication adapter; it does not change
+The DEV provider asks for one configured active username, then binds the browser
+security context to that user's immutable UUID. Spring authorization, consent,
+device approval, code exchange and refresh retain that UUID; username remains a
+login input and display attribute. Reassigning a username cannot transfer a
+pending authorization, consent or refresh session to its new owner. Issuance
+reads the original user's current active state and grants; an inactive or
+missing original user fails rather than selecting another identity.
+A future LDAP or OIDC provider changes only the principal-authentication
+adapter and must establish the same immutable identity; it does not change
 the OAuth request, consent, code, token, or client contracts.
 
 ### 6.11 OAuth token endpoint
@@ -763,6 +770,54 @@ Response shape:
 
 ### 8.1 UI integration
 
+The Pocket UIs use explicitly registered callback-free `pockethive-device`,
+`pocketplanner-device` and `pocketdata-device` clients. Their device authorization,
+confirmation and polling contract is [Callback free Pocket browser login](BROWSER_DEVICE_LOGIN.md).
+They share this service's existing identity/token owners and browser resource/scope;
+they have no redirect URI or refresh grant. Their shared browser controller owns
+polling, cancellation, token expiry and tab-scoped credential storage.
+Do not use it as a silent fallback for a failed authorization-code login.
+
+The Auth Service also supports explicitly configured registered public
+`pockethive-web`, `pocketplanner-web` and `pocketdata-web` clients. Explicit callback configuration
+is `POCKETHIVE_AUTH_WEB_PH_REDIRECT_URI`, `POCKETHIVE_AUTH_WEB_PP_REDIRECT_URI`
+and `POCKETHIVE_AUTH_WEB_PD_REDIRECT_URI`;
+an empty value disables that browser client. Callbacks are exact HTTPS or HTTP
+loopback `/auth/callback` URLs without credentials, query or fragment; unlike
+native clients, their ports cannot rotate. `GET /api/auth/browser/config?client_id=...`
+returns the canonical `clientId`, `issuer`, `redirectUri`, `resource` and `scope`.
+
+These fixed first-party clients use the existing Spring Authorization Server
+Authorization Code flow with S256 PKCE and state. Their resource is exactly
+`urn:pockethive:web` and their sole scope is `pockethive:web`, meaning active
+identity, not product permissions. No consent page or refresh token is issued
+for these preconfigured first-party clients. MCP scopes/resources and dynamic
+client registrations do not grant browser access. `phweb_` access tokens are
+resolved from the single canonical OAuth authorization store, including expiry
+and revocation, then hydrate current active user/grants for existing REST policies.
+The DEV/service-token API is a separate explicit machine/client contract,
+not an automatic browser fallback.
+
+The central login uses an HttpOnly, SameSite=Lax session cookie, scoped to
+`/auth-service`, Secure under HTTPS. Each device consumer owns only its own access
+token; PH confirms login in a separate tab, and the original app remains on its
+current origin and route. A PH journal waits for restoration before requests and
+offers confirmation controls when anonymous; the exact swarm/run query survives.
+Explicit redirect consumers retain bounded tab-local PKCE transactions.
+PP and PocketData public viewing does not initiate login. PocketData allows editing
+only for active `local-admin`, verified through the identity API on every mutation.
+Login errors are explicit, not redirect loops or a change to another protocol.
+Tokens never enter navigation URLs or cross-window messages.
+
+Device consumers revoke their own token and use the callback-free central logout
+documented in [the device contract](BROWSER_DEVICE_LOGIN.md#central-logout-without-callbacks).
+For explicit redirect clients, `GET /oauth/browser/logout?client_id=...` presents a confirmation form with CSRF;
+`POST /oauth/browser/logout` invalidates the central browser session and returns
+only to that registered callback with `signed_out=1`. Each tool first revokes
+its own access token through the existing OAuth revocation endpoint. Other
+already issued access tokens retain their expiry; immediate cross-client logout
+and refresh are outside this increment.
+
 PocketHive UI and HiveWatch UI:
 
 - authenticate through `auth-service`,
@@ -835,12 +890,16 @@ This keeps LDAP from leaking into product contracts.
 through the same `AuthAccessService.requireAuthenticated` path as `/me` and returns:
 
 ```json
-{"canAccessPocketHive":true,"canRunPocketHive":false,"canManageUsers":false}
+{"canAccessPocketHive":true,"canRunPocketHive":false,"canManageDeployment":false,"canManageUsers":false}
 ```
 
-All three fields are required booleans. `canAccessPocketHive` means an existing
+The response fields are defined by `AuthAccessView` and are required booleans. `canAccessPocketHive` means an existing
 PocketHive VIEW/RUN/ALL grant anywhere; `canRunPocketHive` means RUN/ALL anywhere.
-These are navigation/entrypoint hints, not authorization for a specific resource.
+Those two flags are navigation/entrypoint hints, not authorization for a specific resource.
+`canManageDeployment` projects the existing deployment-management decision: a
+PocketHive ALL grant at global deployment scope. Folder/bundle ALL and deployment
+RUN do not grant it. Planner association controls consume this decision; the
+Planner mutation endpoint independently enforces the same backend policy.
 The existing permission sets have one shared Java definition consumed by the
 backend policies and this projection; no permission or scope semantics change.
 `canManageUsers` delegates to `AuthGrantChecks.isAuthAdmin`, as admin commands do.

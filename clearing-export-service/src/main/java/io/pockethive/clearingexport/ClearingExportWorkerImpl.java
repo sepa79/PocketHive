@@ -1,6 +1,5 @@
 package io.pockethive.clearingexport;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.JournalEvent;
 import io.pockethive.work.api.PocketHiveWorkerFunction;
@@ -43,11 +42,11 @@ import org.springframework.stereotype.Component;
  * Responsibility: coordinate clearing record batches and their existing writer.
  * Must not: make rendering helpers persist files or create a second template evaluator.
  * Contract: RESP-CLEARING-EXPORT — docs/architecture/runtime-responsibilities.md#resp-clearing-export.
+ * Consumes RESP-CLEARING-TEMPLATE-DATA and RESP-TEMPLATE-DATA — docs/architecture/runtime-responsibilities.md#resp-template-data.
  */
 class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final Logger log = LoggerFactory.getLogger(ClearingExportWorkerImpl.class);
-  private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
   private static final String WORKER_BEAN_NAME = "clearingExportWorker";
   private static final String HEADER_BUSINESS_CODE = "x-ph-business-code";
   private static final String FAILURE_PHASE_PREFLIGHT = "preflight";
@@ -58,6 +57,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
   private final ClearingStructuredSchemaRegistry schemaRegistry;
   private final StructuredRecordProjector structuredRecordProjector;
   private final TemplateRenderer templateRenderer;
+  private final ClearingStepProjection stepProjection = new ClearingStepProjection();
   private final ObjectMapper objectMapper;
   private final Clock clock;
   private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -163,7 +163,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       WorkStep selectedStep
   ) {
     Map<String, Object> renderContext = new LinkedHashMap<>();
-    renderContext.put("steps", buildStepContext(steps, selectedStep));
+    renderContext.put("steps", stepProjection.project(steps, selectedStep));
     renderContext.put("now", Instant.now(clock).toString());
     return renderContext;
   }
@@ -422,67 +422,6 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
 
   private String statusValue(String value) {
     return value == null ? "" : value;
-  }
-
-  private Map<String, Object> projectStep(WorkStep step) {
-    String payload = step.payload();
-    Map<String, Object> record = new LinkedHashMap<>();
-    record.put("index", step.index());
-    record.put("payload", payload);
-    record.put("headers", step.headers());
-
-    if (payload != null && !payload.isBlank()) {
-      try {
-        record.put("json", objectMapper.readValue(payload, MAP_TYPE));
-      } catch (Exception ignored) {
-        // Payload is not JSON object; templates can still use steps.*.payload.
-      }
-    }
-    return Map.copyOf(record);
-  }
-
-  private Map<String, Object> buildStepContext(List<WorkStep> steps, WorkStep selectedStep) {
-    List<Map<String, Object>> all = new ArrayList<>(steps.size());
-    Map<String, Object> byIndex = new LinkedHashMap<>();
-    Map<String, Object> first = null;
-    Map<String, Object> latest = null;
-    Map<String, Object> previous = null;
-    Map<String, Object> selected = null;
-
-    for (int i = 0; i < steps.size(); i++) {
-      WorkStep step = steps.get(i);
-      Map<String, Object> projected = projectStep(step);
-      all.add(projected);
-      byIndex.put(Integer.toString(step.index()), projected);
-      if (i == 0) {
-        first = projected;
-      }
-      if (i == steps.size() - 1) {
-        latest = projected;
-      }
-      if (i == steps.size() - 2) {
-        previous = projected;
-      }
-      if (step == selectedStep) {
-        selected = projected;
-      }
-    }
-    if (selected == null) {
-      throw new IllegalStateException("Selected WorkStep is missing from WorkItem steps");
-    }
-
-    Map<String, Object> context = new LinkedHashMap<>();
-    context.put("all", List.copyOf(all));
-    context.put("byIndex", Map.copyOf(byIndex));
-    context.put("first", first);
-    context.put("latest", latest);
-    context.put("selected", selected);
-    context.put("selectedIndex", selectedStep.index());
-    context.put("count", steps.size());
-    if (previous != null) {
-      context.put("previous", previous);
-    }
-    return Map.copyOf(context);
   }
 
   private List<WorkStep> collectSteps(WorkItem item) {

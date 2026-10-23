@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Tree, type NodeRendererProps, type TreeApi } from 'react-arborist'
 import type { BundleTreeNode } from '../../lib/scenariosApi'
+import { useMeasuredTreeHeight } from './useMeasuredTreeHeight'
 
 type DirectoryNode = {
   id: string
@@ -95,11 +96,6 @@ function collectDirectoryIds(nodes: readonly FileTreeNode[]): string[] {
   return ids
 }
 
-function nodeLabel(node: FileTreeNode) {
-  if (node.kind === 'directory') return node.name
-  return `${node.name} (${node.item.editorKind})`
-}
-
 function Renderer({ node, style, dragHandle }: NodeRendererProps<FileTreeNode>) {
   const data = node.data
   const isDirectory = data.kind === 'directory'
@@ -138,7 +134,7 @@ function Renderer({ node, style, dragHandle }: NodeRendererProps<FileTreeNode>) 
         </span>
         <div className="scenarioTreeText">
           <div className="scenarioTreeTitleRow">
-            <span className="scenarioTreeTitle">{nodeLabel(data)}</span>
+            <span className="scenarioTreeTitle" title={data.path}>{data.name}</span>
           </div>
         </div>
       </div>
@@ -146,17 +142,23 @@ function Renderer({ node, style, dragHandle }: NodeRendererProps<FileTreeNode>) 
   )
 }
 
+/**
+ * Responsibility: render and select paths from a supplied bundle-file projection.
+ * Must not: fetch files, edit their contents or authorize bundle access.
+ * Contract: RESP-SCENARIO-CATALOGUE-ACCESS — docs/architecture/runtime-responsibilities.md#resp-scenario-catalogue-access (presentation only).
+ */
 export function BundleFileTree({
   nodes,
   selectedPath,
   onSelectFile,
-  height = 220,
+  height,
 }: {
   nodes: readonly BundleTreeNode[]
   selectedPath: string | null
   onSelectFile: (path: string) => void
-  height?: number
+  height: number | 'container'
 }) {
+  const measured = useMeasuredTreeHeight(180)
   const treeRef = useRef<TreeApi<FileTreeNode> | null>(null)
   const data = useMemo(() => buildTree(nodes), [nodes])
   const selectedNodeId = selectedPath ? `file:${selectedPath}` : undefined
@@ -170,37 +172,35 @@ export function BundleFileTree({
     treeRef.current?.openParents(selectedNodeId)
   }, [selectedNodeId, data])
 
-  if (data.length === 0) {
-    return <div className="muted">No files found.</div>
-  }
-
   return (
-    <div className="scenarioTreeShell scenarioFileTreeShell">
-      <Tree<FileTreeNode>
-        ref={treeRef}
-        data={data}
-        width="100%"
-        height={height}
-        rowHeight={30}
-        indent={18}
-        paddingTop={4}
-        paddingBottom={4}
-        overscanCount={6}
-        openByDefault={false}
-        initialOpenState={initialOpenState}
-        selection={selectedNodeId}
-        disableDrag
-        disableDrop
-        onActivate={(node) => {
-          if (node.data.kind === 'directory') {
-            node.toggle()
-            return
-          }
-          onSelectFile(node.data.path)
-        }}
-      >
-        {Renderer}
-      </Tree>
+    <div ref={measured.ref} className="scenarioTreeShell scenarioFileTreeShell">
+      {data.length === 0 ? <div className="muted">No files found.</div> : (
+        <Tree<FileTreeNode>
+          ref={treeRef}
+          data={data}
+          width="100%"
+          height={height === 'container' ? measured.height : height}
+          rowHeight={36}
+          indent={18}
+          paddingTop={4}
+          paddingBottom={4}
+          overscanCount={6}
+          openByDefault={false}
+          initialOpenState={initialOpenState}
+          selection={selectedNodeId}
+          disableDrag
+          disableDrop
+          onActivate={(node) => {
+            if (node.data.kind === 'directory') {
+              node.toggle()
+              return
+            }
+            onSelectFile(node.data.path)
+          }}
+        >
+          {Renderer}
+        </Tree>
+      )}
     </div>
   )
 }

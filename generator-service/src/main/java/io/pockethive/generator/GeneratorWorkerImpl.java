@@ -12,6 +12,7 @@ import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
+import io.pockethive.worker.sdk.templating.RenderedMessage;
 import io.pockethive.templating.api.TemplateRenderer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -139,7 +140,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
         .bodyTemplate(message.body())
         .headerTemplates(message.headers())
         .build();
-    MessageTemplateRenderer.RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
+    RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 
     Map<String, Object> baseHeaders = new HashMap<>(effectiveSeed.headers());
 

@@ -37,6 +37,15 @@ VS Code's **Extensions: Install from VSIX...** command.
 
 #### 2. Build and start PocketHive
 
+**Destructive local cleanup:** a full-stack `./build-hive.sh` or
+`./build-hive.sh --quick` first removes every local Docker container whose name
+contains `-bee-`, including stopped containers and workers/controllers from
+other Compose projects. It then stops the selected Compose stack. A different
+project name or an isolation overlay does not scope that initial bee cleanup.
+Use this deliberate development/E2E cleanup only when removing those local
+runtimes is acceptable; it is not a production deployment procedure. A partial
+build with `--clean` invokes the same cleanup.
+
 From the repository root, run:
 
 ```bash

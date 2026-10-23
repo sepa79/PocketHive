@@ -1,0 +1,7 @@
+.picker { min-width: 0; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin: 0; }
+.picker legend { padding: 0 6px; color: var(--text); font-weight: 700; }
+.choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.choices label { display: grid; min-width: 0; gap: 5px; }
+.choices select { width: 100%; min-width: 0; }
+.note { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 10px; color: var(--muted); font-size: 12px; }
+@media (max-width: 640px) { .choices { grid-template-columns: 1fr; } .note { align-items: start; } }

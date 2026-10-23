@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 /**
@@ -62,21 +63,38 @@ public final class SwarmLifecycleCommandService {
       String swarmId,
       String idempotencyKey,
       Duration timeout) {
+    Swarm swarm = swarms.find(swarmId)
+        .orElseThrow(() -> new IllegalStateException("Swarm " + swarmId + " is not registered"));
+    return dispatchAdmitted(operationType, swarm, idempotencyKey, timeout);
+  }
+
+  public synchronized SwarmOperationCoordinator.Reservation dispatchForRun(
+      OperationType operationType, String swarmId, String runId, String idempotencyKey, Duration timeout) {
+    Swarm swarm = swarms.find(swarmId)
+        .orElseThrow(() -> new IllegalStateException("Swarm " + swarmId + " is not registered"));
+    if (!swarm.getRunId().equals(requireText("runId", runId))) {
+      throw new IllegalStateException("Swarm run changed; reload before controlling it");
+    }
+    return dispatchAdmitted(operationType, swarm, idempotencyKey, timeout);
+  }
+
+  private SwarmOperationCoordinator.Reservation dispatchAdmitted(
+      OperationType operationType, Swarm swarm, String idempotencyKey, Duration timeout) {
     if (operationType != OperationType.START
         && operationType != OperationType.STOP
         && operationType != OperationType.REMOVE) {
       throw new IllegalArgumentException("Unsupported controller lifecycle operation: " + operationType);
     }
-    Swarm swarm = swarms.find(swarmId)
-        .orElseThrow(() -> new IllegalStateException("Swarm " + swarmId + " is not registered"));
     String controllerInstance = requireText("controller instance", swarm.getInstanceId());
     Target operationTarget = new Target(ControlPlaneRoles.SWARM_CONTROLLER, controllerInstance);
     return operations.dispatch(
-        swarmId,
+        swarm.getId(),
         operationType,
         operationTarget,
+        UUID.randomUUID().toString(),
         idempotencyKey,
         timeout,
+        swarm.runtimeMetadata(),
         correlationId -> execute(
             operationType, swarm, operationTarget, correlationId, idempotencyKey, timeout));
   }

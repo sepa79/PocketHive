@@ -29,7 +29,7 @@ class RepositoryImportBoundaryTest {
       rule("acceptance-no-legacy-or-service-implementation", "acceptance-tests",
           "io\\.pockethive\\.(e2e|orchestrator|scenarios|rabbit|artemis)\\..*"),
       rule("core-no-infrastructure",
-          "common/(work-api|work-config|request-templates|templating-api|observability-core|auth-contracts|control-plane-core"
+          "common/(work-api|work-config|request-templates|templating-api|template-data|observability-core|auth-contracts|control-plane-core"
               + "|topology-core|swarm-model|scenario-validation-contracts|scenario-api)",
           "(org\\.springframework|io\\.lettuce|redis\\.clients|com\\.rabbitmq|com\\.clickhouse"
               + "|com\\.github\\.dockerjava|java\\.sql|javax\\.sql)\\..*"),

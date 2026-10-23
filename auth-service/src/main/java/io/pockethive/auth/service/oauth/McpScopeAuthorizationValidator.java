@@ -21,17 +21,17 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 /**
  * Responsibility: Validate requested MCP scopes against the canonical principal grants.
  * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-OAUTH-AUTHORIZATION-INPUT — docs/architecture/runtime-responsibilities.md#resp-oauth-authorization-input.
  */
 
 public final class McpScopeAuthorizationValidator
     implements Consumer<OAuth2AuthorizationCodeRequestAuthenticationContext> {
-    private final InMemoryUserStore users;
+    private final OAuthPrincipalLookup principals;
     private final OAuth2AuthorizationCodeRequestAuthenticationValidator defaults =
         new OAuth2AuthorizationCodeRequestAuthenticationValidator();
 
     public McpScopeAuthorizationValidator(InMemoryUserStore users) {
-        this.users = users;
+        this.principals = new OAuthPrincipalLookup(users);
     }
 
     @Override
@@ -41,8 +41,7 @@ public final class McpScopeAuthorizationValidator
         if (authentication == null || !authentication.isAuthenticated()) {
             return;
         }
-        StoredUser user = users.findByUsername(authentication.getName())
-            .filter(StoredUser::active)
+        StoredUser user = principals.findActive(authentication.getName())
             .orElseThrow(() -> invalidScope("Authenticated principal is not an active Auth Service user"));
         Set<String> allowed = allowedScopes(user.grants());
         OAuth2AuthorizationCodeRequestAuthenticationToken request = context.getAuthentication();

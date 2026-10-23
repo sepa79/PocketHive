@@ -1,0 +1,64 @@
+{
+  "id": "synthetic-detail-swarm",
+  "runId": "synthetic-detail-run",
+  "runtimeIntent": "PRESENT",
+  "workloadIntent": "STOPPED",
+  "controllerState": "READY",
+  "workloadState": "STOPPED",
+  "health": "HEALTHY",
+  "runtimeResourceState": "PRESENT",
+  "observedAt": "2026-07-22T12:34:56Z",
+  "observationStale": false,
+  "activeOperation": null,
+  "templateId": "synthetic-detail-scenario",
+  "controllerImage": "ghcr.io/pockethive/swarm-controller:synthetic",
+  "bees": [
+    {
+      "role": "generator",
+      "instance": "synthetic-detail-swarm-generator-1",
+      "image": "ghcr.io/pockethive/generator:synthetic"
+    }
+  ],
+  "observation": {
+    "controllerState": "READY",
+    "workloadState": "STOPPED",
+    "health": "HEALTHY",
+    "startupReady": true,
+    "startupArtifactSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "watermarkAt": "2026-07-22T12:34:56Z",
+    "expectedWorkers": [
+      {
+        "role": "generator",
+        "instance": "synthetic-detail-swarm-generator-1"
+      }
+    ],
+    "workers": [
+      {
+        "role": "generator",
+        "instance": "synthetic-detail-swarm-generator-1",
+        "enabled": false,
+        "tps": 0,
+        "lastSeenAt": "2026-07-22T12:34:56Z",
+        "stale": false,
+        "ioState": {
+          "work": {
+            "input": "ok",
+            "output": "ok"
+          }
+        },
+        "runtime": {
+          "templateId": "synthetic-detail-scenario",
+          "runId": "synthetic-detail-run",
+          "image": "ghcr.io/pockethive/generator:synthetic",
+          "containerId": null,
+          "stackName": null
+        },
+        "config": {
+          "message": {
+            "body": "Synthetic payload for synthetic-detail-swarm-generator-1"
+          }
+        }
+      }
+    ]
+  }
+}

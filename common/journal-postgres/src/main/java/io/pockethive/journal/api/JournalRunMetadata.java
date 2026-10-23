@@ -9,4 +9,5 @@ package io.pockethive.journal.api;
 public interface JournalRunMetadata {
     void register(String swarmId, String runId, String scenarioId);
     SwarmRunSummary update(String runId, SwarmRunMetadataUpdate update) throws Exception;
+    SwarmRunSummary linkPlanner(String swarmId, String runId, PlannerRunLink link);
 }

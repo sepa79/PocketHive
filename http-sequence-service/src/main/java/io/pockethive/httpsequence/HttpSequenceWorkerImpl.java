@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
     config = HttpSequenceWorkerConfig.class
 )
 /**
- * Responsibility: delegate Work invocations and close this worker's owned runner and HTTP client.
+ * Responsibility: delegate Work invocations and close this worker's owned runner and HTTP clients.
  * Shutdown consumes RESP-HTTP-SEQUENCE-DEBUG-CAPTURE.
  * Must not: own another service's lifecycle or reimplement the shared template engine.
  * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
@@ -36,6 +36,7 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction, AutoCloseable 
 
   private final HttpSequenceRunner runner;
   private final CloseableHttpClient httpClient;
+  private final CloseableHttpClient portableHttpClient;
   private boolean closed;
 
   @Autowired
@@ -47,23 +48,24 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction, AutoCloseable 
   ) {
     this.httpClient = newPooledClient();
     try {
+      this.portableHttpClient = newPortableClient();
+    } catch (RuntimeException | Error failure) {
+      closeAfterFailure(httpClient, failure);
+      throw failure;
+    }
+    try {
       this.runner = new HttpSequenceRunner(
         mapper,
         Clock.systemUTC(),
         templateRenderer,
         new TemplateLoader(),
-        new ApacheHttpCallExecutor(httpClient),
+        new ApacheHttpCallExecutor(httpClient, portableHttpClient),
         new DefaultHttpSequenceTargetResolver(),
         redisProperties
       );
     } catch (RuntimeException | Error failure) {
-      try {
-        httpClient.close();
-      } catch (IOException | RuntimeException | Error cleanupFailure) {
-        if (failure != cleanupFailure) {
-          failure.addSuppressed(cleanupFailure);
-        }
-      }
+      closeAfterFailure(portableHttpClient, failure);
+      closeAfterFailure(httpClient, failure);
       throw failure;
     }
   }
@@ -79,16 +81,35 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction, AutoCloseable 
   public synchronized void close() throws IOException {
     if (!closed) {
       closed = true;
-      try (httpClient; runner) {
+      try (httpClient; portableHttpClient; runner) {
         // Reverse declaration order closes capture first and always attempts the HTTP pool.
       }
     }
   }
 
   private static CloseableHttpClient newPooledClient() {
+    return HttpClients.custom().setConnectionManager(newConnectionManager()).build();
+  }
+
+  private static CloseableHttpClient newPortableClient() {
+    return HttpClients.custom().setConnectionManager(newConnectionManager())
+        .disableAutomaticRetries().disableRedirectHandling().disableCookieManagement().disableAuthCaching().build();
+  }
+
+  private static PoolingHttpClientConnectionManager newConnectionManager() {
     PoolingHttpClientConnectionManager manager = new PoolingHttpClientConnectionManager();
     manager.setMaxTotal(GLOBAL_MAX_CONNECTIONS);
     manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);
-    return HttpClients.custom().setConnectionManager(manager).build();
+    return manager;
+  }
+
+  private static void closeAfterFailure(CloseableHttpClient client, Throwable failure) {
+    try {
+      client.close();
+    } catch (IOException | RuntimeException | Error cleanupFailure) {
+      if (failure != cleanupFailure) {
+        failure.addSuppressed(cleanupFailure);
+      }
+    }
   }
 }

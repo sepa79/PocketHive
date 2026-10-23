@@ -42,8 +42,8 @@ class HttpSequenceRunnerTest {
     writeTemplate("B");
 
     RecordingExecutor executor = new RecordingExecutor();
-    executor.enqueue(new HttpCallExecutor.HttpCallResult(500, Map.of(), "fail", null));
-    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "ok", null));
+    executor.enqueue(new HttpCallResult(500, Map.of(), "fail", null));
+    executor.enqueue(new HttpCallResult(200, Map.of(), "ok", null));
 
     HttpSequenceRunner runner = newRunner(executor);
     WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
@@ -77,9 +77,9 @@ class HttpSequenceRunnerTest {
     writeTemplate("A");
 
     RecordingExecutor executor = new RecordingExecutor();
-    executor.enqueue(new HttpCallExecutor.HttpCallResult(500, Map.of(), "fail-1", null));
-    executor.enqueue(new HttpCallExecutor.HttpCallResult(500, Map.of(), "fail-2", null));
-    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of("location", List.of("/ok")), "ok", null));
+    executor.enqueue(new HttpCallResult(500, Map.of(), "fail-1", null));
+    executor.enqueue(new HttpCallResult(500, Map.of(), "fail-2", null));
+    executor.enqueue(new HttpCallResult(200, Map.of("location", List.of("/ok")), "ok", null));
 
     HttpSequenceRunner runner = newRunner(executor);
     WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
@@ -126,8 +126,8 @@ class HttpSequenceRunnerTest {
   void retryKeepsTheSameResolvedSutEndpointUri() throws Exception {
     writeTemplate("A");
     RecordingExecutor executor = new RecordingExecutor();
-    executor.enqueue(new HttpCallExecutor.HttpCallResult(503, Map.of(), "retry", null));
-    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "ok", null));
+    executor.enqueue(new HttpCallResult(503, Map.of(), "retry", null));
+    executor.enqueue(new HttpCallResult(200, Map.of(), "ok", null));
     HttpSequenceRunner runner = newRunner(executor);
     WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
     WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();

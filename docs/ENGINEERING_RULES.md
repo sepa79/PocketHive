@@ -26,6 +26,21 @@ Existing violations are debt, not precedent. A change must not add another
 responsibility to an already mixed file. Extract the affected responsibility
 before extending its behavior.
 
+## Contract-derived documentation
+
+The canonical contract is the source of structural details. Generate reference
+tables for fields, types, required/optional/nullability rules, enums and constraints
+from that owner rather than maintaining a second handwritten specification. Keep
+the source identifiable; regenerate derived sections when the contract changes
+and do not edit generated output by hand. Do not introduce parallel metadata just
+to feed documentation.
+
+Handwritten documentation explains purpose, semantics, workflows and usage.
+Reviewers check its meaning and completeness and verify that generated reference
+sections derive from the correct contract. Do not add documentation-conformance
+tests, example-extraction tests or documentation-test build/CI hooks. Test actual
+producers, serialization and consumers against the contract instead.
+
 ## File shape
 
 ### Responsibility header

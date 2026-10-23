@@ -1,4 +1,4 @@
-// Generated from docs/spec/swarm-lifecycle.schema.json. Do not edit.
+// Generated from docs/spec/swarm-lifecycle.schema.json and control-events.schema.json. Do not edit.
 
 const lifecycleEnumValues = Object.freeze({
   "RuntimeIntent": [

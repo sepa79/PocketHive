@@ -1,5 +1,7 @@
+import '@pockethive/ui/styles.css'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { JournalSessionGate } from './components/JournalSessionGate'
 import { HelpPage } from './pages/HelpPage'
 import { HealthPage } from './pages/HealthPage'
 import { HivePage } from './pages/HivePage'
@@ -27,7 +29,7 @@ export default function App() {
         <Route path="/hive/:swarmId/view" element={<SwarmViewPage />} />
         <Route path="/proxy" element={<ProxyPage />} />
         <Route path="/debug/taps/:tapId" element={<DebugTapViewerPage />} />
-        <Route path="/journal/*" element={<JournalPage />} />
+        <Route path="/journal/*" element={<JournalSessionGate><JournalPage /></JournalSessionGate>} />
         <Route path="/other/*" element={<OtherPage />} />
         <Route path="/buzz" element={<WireLogPage />} />
 

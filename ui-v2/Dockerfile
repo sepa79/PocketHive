@@ -3,6 +3,10 @@ FROM node:20-alpine AS build
 
 WORKDIR /workspace/ui-v2
 COPY packages/swarm-lifecycle-contract/ /workspace/packages/swarm-lifecycle-contract/
+COPY packages/ui/ /workspace/packages/ui/
+RUN npm ci --prefix /workspace/packages/ui --ignore-scripts
+COPY packages/browser-auth/ /workspace/packages/browser-auth/
+RUN npm ci --prefix /workspace/packages/browser-auth --ignore-scripts && npm run build --prefix /workspace/packages/browser-auth
 COPY ui-v2/package.json ui-v2/package-lock.json ./
 RUN npm ci
 COPY ui-v2/ .

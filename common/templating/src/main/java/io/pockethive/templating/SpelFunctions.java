@@ -1,7 +1,5 @@
 package io.pockethive.templating;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -24,7 +22,6 @@ import java.nio.charset.StandardCharsets;
  * Contract: RESP-TEMPLATE-RENDER — docs/architecture/runtime-responsibilities.md#resp-template-render.
  */
 final class SpelFunctions {
-    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
   private SpelFunctions() {
   }
 
@@ -107,27 +104,6 @@ final class SpelFunctions {
     }
     String result = matcher.group(group);
     return result == null ? "" : result;
-  }
-
-  static String jsonPath(Object payload, String path) {
-    if (payload == null || path == null || path.isBlank()) {
-      return "";
-    }
-    try {
-      JsonNode node;
-      if (payload instanceof String str) {
-        node = MAPPER.readTree(str);
-      } else {
-        node = MAPPER.valueToTree(payload);
-      }
-      JsonNode target = node.at(path);
-      if (target.isMissingNode() || target.isNull()) {
-        return "";
-      }
-      return target.isValueNode() ? target.asText("") : target.toString();
-    } catch (Exception e) {
-      return "";
-    }
   }
 
   static String dateFormat(Object instant, String pattern) {

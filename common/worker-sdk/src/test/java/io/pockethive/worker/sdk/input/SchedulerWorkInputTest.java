@@ -45,9 +45,9 @@ class SchedulerWorkInputTest {
         settings.setRatePerSec(5);
         settings.setMaxMessages(2);
         settings.setInitialDelayMs(600_000);
-        var input = SchedulerWorkInput.builder().workerDefinition(definition).controlPlaneRuntime(control)
-            .workerRuntime(runtime).identity(new ControlPlaneIdentity("swarm", "generator", "instance"))
-            .schedulerState(new RateSchedulePolicy()).scheduling(settings).build();
+        var input = (SchedulerWorkInput<?>) new SchedulerWorkInputFactory(
+            runtime, control, new ControlPlaneIdentity("swarm", "generator", "instance"),
+            new RateSchedulePolicy(), java.util.function.UnaryOperator.identity()).create(definition, settings);
         input.start();
         try {
             listener.get().accept(snapshot(Map.of()));
@@ -55,6 +55,10 @@ class SchedulerWorkInputTest {
             input.tick(1_000);
             assertThat(dispatched).extracting(item -> item.headers().get("x-ph-scheduler-remaining"))
                 .containsExactly(1L, 0L);
+            assertThat(dispatched).allSatisfy(seed -> {
+                assertThat(seed.payload()).isEmpty();
+                assertThat(seed.steps()).singleElement().satisfies(step -> assertThat(step.payload()).isEmpty());
+            });
 
             listener.get().accept(snapshot(Map.of("maxMessages", "3")));
             input.tick(2_000);

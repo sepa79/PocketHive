@@ -6,6 +6,7 @@ import io.pockethive.controlplane.spring.WorkerControlTopology;
 
 import io.pockethive.templating.api.SequenceAccess;
 import io.pockethive.work.api.ScheduledInvocationPolicy;
+import io.pockethive.work.api.WorkItem;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -60,6 +61,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -316,6 +318,13 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         return new RedisWorkOutputFactory(controlPlaneRuntime, templateRenderer);
     }
 
+    @Bean(name = SchedulerWorkInputFactory.SEED_CUSTOMIZER_BEAN_NAME)
+    @ConditionalOnMissingBean(name = SchedulerWorkInputFactory.SEED_CUSTOMIZER_BEAN_NAME)
+    @ConditionalOnProperty(prefix = "pockethive.inputs", name = "type", havingValue = "SCHEDULER")
+    UnaryOperator<WorkItem> schedulerSeedCustomizer() {
+        return UnaryOperator.identity();
+    }
+
     @Bean
     @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class})
     @ConditionalOnProperty(prefix = "pockethive.inputs", name = "type", havingValue = "SCHEDULER")
@@ -323,9 +332,10 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkerRuntime workerRuntime,
         WorkerControlPlaneRuntime controlPlaneRuntime,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
-        ScheduledInvocationPolicy<?> policy
+        ScheduledInvocationPolicy<?> policy,
+        @Qualifier(SchedulerWorkInputFactory.SEED_CUSTOMIZER_BEAN_NAME) UnaryOperator<WorkItem> seedCustomizer
     ) {
-        return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, policy);
+        return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, policy, seedCustomizer);
     }
 
     @Bean

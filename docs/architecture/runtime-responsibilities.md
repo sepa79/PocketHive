@@ -17,6 +17,10 @@ owns the Rabbit boundary contract. Unrelated records below may retain historical
 those labels do not reopen completed Rabbit transfers or authorize deferred behavior changes.
 This is not a complete repository SSOT certification.
 
+The portable-v1 records were reconciled with implemented local source on
+2026-10-20. Their current ownership labels do not assert deployed qualification;
+runtime/ingress evidence remains a separate acceptance gate.
+
 Each ID names a bounded concern. Where several classes appear, the record states
 their distinct roles (value contract, selected implementation, projection or delegate),
 not competing authorities over one fact. Current mixed implementations and incomplete
@@ -175,6 +179,35 @@ Worker functions contribute data; WorkerControlPlaneRuntime builds/emits the con
 
 **Migration status:** Current; canonical worker state is separately scoped under RESP-WORK-STATE.
 
+## RESP-POCKET-BROWSER-AUTH
+
+`packages/browser-auth` owns the shared browser credential lifecycle, not the UI
+theme or application permissions. `PocketAuthController` owns the mounted session;
+its React hook only binds subscriptions. `DeviceTokenPoller` owns polling,
+`SessionHttpClient` owns bounded same-origin HTTP I/O. `SessionApiPort` declares
+an explicit typed session projection and wire operations; `SessionApi` maps the
+PP/PD session endpoints, while PH's `PocketHiveSessionApi` maps its existing
+OAuth/current-user endpoints. They do not select one another after a failure.
+`BrowserTokenStore` owns tab storage and
+`ConfirmationTab` owns PH confirmation tabs. Parsers validate wire responses;
+none issues identity or replaces PH grant state. PH, PP and PocketData consume
+this module. Read-only credential projections do not introduce another lifecycle
+writer. API and verification live
+in [the shared browser consumer contract](BROWSER_DEVICE_LOGIN.md#shared-consumer-boundary).
+
+## RESP-POCKET-AUTH-HTTP
+
+`common/auth-client` owns the shared JVM authentication transport.
+`AuthServiceRestClients` composes strict JSON decoding, `AuthServiceRequestFactory`
+connection/read deadlines and redirect rejection, and `BoundedAuthResponse`'s
+one-MiB response limit. `AuthServiceClient` maps typed identity operations;
+`DeviceAuthClient` maps the registered first-party device protocol, canonical
+logout discovery and revocation. Device response DTOs belong to `auth-contracts`.
+No client caches roles, retries protocol operations, resolves alternate ingress
+addresses or owns authorization state. Applications own product access policy;
+PH's existing OAuth stores own pending grants and tokens. See
+[browser consumer boundary](BROWSER_DEVICE_LOGIN.md#shared-consumer-boundary).
+
 ## RESP-AUTH-VALUES
 
 **Current module(s):** `common/auth-contracts`.
@@ -289,6 +322,16 @@ Identity composition consumes the generated value; it is not a Work queue/exchan
 
 PebbleTemplateRenderer owns rendering and syntax validation through the API ports; its SpEL/weighted-selection helpers implement the engine's expression facilities.
 
+PortableTemplateRenderer implements the explicit bounded portable-v1 profile.
+PortableSyntaxExtension/PortableSyntaxVisitor admit that profile through Pebble's
+compiled AST; PebbleDataExtension/PebbleDataFunction register/adapt its declared
+data functions. TemplateDataFunctions delegates data operations to
+RESP-TEMPLATE-DATA, rather than parsing documents in either engine adapter.
+Portable grammar and bounds are defined in the
+[portable contract](../contracts/portable-http-templates.md#functions-and-capabilities).
+Native engine entrypoints and their existing context interfaces remain distinct;
+they are not implicitly restricted to, or treated as, portable-v1.
+
 SpelTemplateEvaluator registers the three new crypto functions through
 CryptoSpelFunctions; their boundaries and byte operations are owned below.
 
@@ -301,6 +344,60 @@ SDK and service consumers supply templates/context. Sequence calls use the injec
 **Verification entrypoints:** `PebbleTemplateRendererTest`, `SequencePortRenderingTest`.
 
 **Migration status:** Port extraction current; retained engine behavior is not newly certified as a complete sandbox.
+
+## RESP-TEMPLATE-DATA
+
+**Current module:** `common/template-data`.
+
+JsonDocumentReader owns strict JSON text/UTF-8-byte decoding, JSON-shaped input
+validation and object projection. JsonPointerSelector owns RFC6901 validation and
+node/required-scalar selection. JsonStringValidation owns shared JSON UTF-16
+validation; JsonEscaping reuses it to encode complete quoted JSON strings.
+JsonViews owns only the named optional native projections derived from that reader,
+not document decoding or payload transport. XmlDocumentReader owns secure bounded
+XML parsing, XmlDocumentView keeps its DOM outside the public API, and XPathSelector
+owns namespace-aware preflight and scalar selection. XmlEscaping owns XML 1.0
+character validation/escaping. Numeric, Unicode, UTF-8 and error-category behavior
+is defined once in the linked portable contract. Consumers delegate rather than
+retain their own readers; SOAP semantics remain with RESP-TEMPLATE-SOAP.
+Each is a separate implementation unit; the library has no Spring, WorkItem,
+SDK, Pebble, filesystem or transport dependency. Errors never echo source values.
+
+**Contract:** [portable-v1](../contracts/portable-http-templates.md).
+**Required effect:** the portable PH/PD adapters and named SDK/clearing/native
+sequence projections use the same data boundary, preserving real empty/whitespace
+values and string identifiers without assigning workflow or transport ownership.
+**Verification:** reader/selector/escaping/UTF-8 regression tests and actual consumer
+adapter tests; these are not evidence of deployed behavior.
+
+## RESP-TEMPLATE-SOAP
+
+**Current module:** `common/template-data`.
+
+SoapEnvelope/SoapVersion own only SOAP version, Envelope/Body/Fault and
+Content-Type/action semantics, using the generic XML owner. They do not execute
+requests, retry, modify workflows or decide product completion.
+
+**Contract:** [portable-v1](../contracts/portable-http-templates.md).
+**Verification:** SOAP11/12, namespace, HTTP200 Fault and response selection.
+
+## RESP-PORTABLE-HTTP
+
+**Current modules:** `common/request-templates`, `common/templating`.
+
+PortableCapability names the admitted capabilities; PortableHttpCallParser owns
+the explicit portable call boundary and delegates the inner HTTP definition to
+RequestTemplateParser. PortableResponseExtractor interprets its response through
+the shared data/SOAP owners and checks the declared status, not product completion.
+PortableHttpBinding validates the supplied endpoint/record/params;
+PortableHttpRenderer compiles/renders through RESP-TEMPLATE-RENDER and enforces
+fixed-origin rendered paths/headers. No configuration/network lookup occurs here.
+PD and PH adapters own only product binding and mapping; runtime state, network
+execution and durable CSV/Redis remain with existing product owners.
+
+**Contract:** [portable-v1](../contracts/portable-http-templates.md).
+**Verification:** identical authored call/input/output through both adapters;
+unsupported capabilities fail preflight, without executing requests.
 
 ## RESP-TEMPLATE-CRYPTO-ADAPTER
 
@@ -1193,13 +1290,35 @@ WorkerInvocation supplies execution context; meters observe execution rather tha
 
 **Migration status:** Current SDK projection.
 
+## RESP-WORK-TEMPLATE-CONTEXT
+
+**Current module:** `common/worker-sdk`.
+
+WorkerTemplateContext assembles existing message/Redis/interceptor template
+contexts from the supplied WorkItem. It consumes JsonViews' optional projections;
+JsonDocumentReader remains the JSON decoding owner under RESP-TEMPLATE-DATA.
+Object contexts expose JSON fields directly through their map keys.
+Text contexts keep raw payload plus optional payloadAsJson; interceptor contexts
+retain their object-or-text interface. Headers, vars and WorkItem are projections,
+not new state owners. No XML detection or additional payload alias is inferred.
+
+**Contract:** [portable data boundary](../contracts/portable-http-templates.md).
+**Forbidden:** read envelope bytes, decode JSON/XML independently, mutate WorkItem
+or select clients/configuration.
+**Verification:** WorkerTemplateContextTest, MessageTemplateRendererTest,
+TemplatingInterceptorTest and RedisPushSupportTest use actual authored templates.
+
 ## RESP-WORK-MESSAGE-TEMPLATE
+
+WorkerTemplateContext supplies named SDK projections (RESP-WORK-TEMPLATE-CONTEXT).
+RenderedMessage and TemplateConfigResolver are separate types. The renderer and
+interceptor do not decode JSON themselves.
 
 **Current module(s):** `common/worker-sdk`.
 
 MessageTemplateRenderer maps a MessageTemplate's body/path/method/headers through the injected TemplateRenderer for Generator, Request Builder and ScenarioTemplateValidator diagnostics. MessageTemplate defines those fields; request-template bundle/file loading remains separate.
 
-TemplatingInterceptor separately applies an invocation body template directly through TemplateRenderer and appends the rendered payload as a Work step. It does not call MessageTemplateRenderer. Each caller currently builds its own context; both delegate expression evaluation to the same template engine contract.
+TemplatingInterceptor applies an invocation body through TemplateRenderer and appends a Work step; it does not call MessageTemplateRenderer. Both consumers receive their explicitly named projections from WorkerTemplateContext and delegate expression evaluation to the same template engine.
 
 **Forbidden:** open transport connections or implement a second Pebble/SpEL evaluator.
 
@@ -1207,7 +1326,10 @@ TemplatingInterceptor separately applies an invocation body template directly th
 
 **Verification entrypoints:** `MessageTemplateRendererTest`, `TemplatingInterceptorTest`.
 
-**Migration status:** Current SDK callers have separate payload-context construction and default handling; B02 must address that retained parsing/context debt. This record does not claim those mappings are consolidated or approve their duplication.
+**Migration status:** Context construction is consolidated in WorkerTemplateContext;
+JsonViews supplies named optional projections through the sole JsonDocumentReader
+decoder. Different documented payload views remain consumer projections, not
+competing parsers or runtime compatibility layers.
 
 ## RESP-WORK-SCHEDULE-CONTRACT
 
@@ -1261,7 +1383,11 @@ runtime tests; no new boundary scanner or wiring tests.
 **Current module(s):** `common/worker-sdk`.
 
 `SchedulerWorkInput` owns timed intake and dispatch; its factory/builder wire the
-selected `ScheduledInvocationPolicy` and callbacks. It projects worker snapshots
+selected `ScheduledInvocationPolicy` and callbacks. The factory applies the named
+`schedulerSeedCustomizer` through the existing builder seed factory, after canonical
+seed metadata is created. The SDK customizer preserves that seed; a service may
+supply its explicit scheduled-input shape without adding another input factory.
+It projects worker snapshots
 into ordered `SchedulingState` revisions and invokes the policy's update/plan port.
 Runtime controls and finite-run accounting delegate to RESP-WORK-SCHEDULER-RUN.
 Its builder consumes validated timing without local defaults or clamping.
@@ -1955,9 +2081,43 @@ metrics or result construction in TcpTransportRuntime.
 reconfiguration and per-thread isolation; existing processor TCP/ISO8583 tests for
 framing, auth options, results and failures; existing transport IO tests.
 
+## RESP-HTTP-SEQUENCE-PORTABLE
+
+**Current modules:** `http-sequence-service`, `common/request-templates`.
+
+HttpSequencePortableCalls delegates definition admission for every selected
+portable call before auth/HTTP effects. HttpSequencePortablePolicy is the single
+pure owner of the no-retry/continueOnNon2xx/native-extract constraints; both this
+runtime adapter and Scenario Manager project their settings into that policy.
+It delegates rendering/extraction to shared
+PortableHttpRenderer/PortableResponseExtractor, supplying explicit
+record/params/endpoint bindings. Data-dependent binding/rendering validation occurs
+per step before that request. It does not duplicate contract validation, execute
+HTTP, mutate workflow data or settle outcomes. The existing target resolver owns
+configured endpoints. File loading stays with TemplateLoader.
+
+**Contract:** [portable-v1](../contracts/portable-http-templates.md).
+**Verification:** actual HttpSequenceRunner with the shared authored JSON/SOAP
+files, synthetic payloads and mock HTTP executor, including later-step admission.
+
 ## RESP-HTTP-SEQUENCE-WORK
 
+Portable definitions delegate admission/binding to RESP-HTTP-SEQUENCE-PORTABLE;
+the runner remains the workflow payload/history writer. Native HTTP steps retain
+their own retry/extract policies; portable calls cannot inherit them.
+Native result projection delegates to RESP-HTTP-SEQUENCE-NATIVE-RESULTS;
+HTTP transport delegates to RESP-HTTP-SEQUENCE-HTTP-EXECUTION.
+The portable adapter rejects transport failures before document extraction,
+retaining the transport diagnostic rather than reporting a JSON/XML parse error.
+It does not retry or interpret a failed transport's body as a response document.
+
 **Current module(s):** `http-sequence-service`.
+
+For SCHEDULER input, HttpSequenceSchedulingConfiguration supplies the named seed
+customizer: one initial JSON-object step (`{}`, application/json), preserving
+canonical scheduler headers, step tracking and observability. Other worker seeds
+retain the SDK default. This production-time binding does not repair transported
+payloads; the shared strict JSON reader remains the sole input parser.
 
 HttpSequenceWorkerImpl delegates the configured sequence to HttpSequenceRunner,
 which owns ordered step execution, retries, capture selection and journey budgets.
@@ -1973,10 +2133,12 @@ interruption; Redis cache entries and refresh leases retain their existing owner
 
 **Required effect:** Configured steps execute in sequence and return the observed result through the worker; renderer and auth capabilities retain their owners.
 
-**Verification entrypoints:** `HttpSequenceRunnerTest`.
+**Verification entrypoints:** `HttpSequenceRunnerTest`, `HttpSequenceSchedulerInputTest`.
 
-**Migration status:** Request rendering and capture projection/storage have distinct owners;
-remaining mixed orchestration/template/extraction responsibilities remain B06/B07 debt.
+**Migration status:** Portable adaptation, native request rendering, native result
+extraction and capture projection/storage have separate source owners. The runner
+retains orchestration and journey/history writes; broader IO/core separation is
+outside this portable slice, not claimed complete by it.
 
 ## RESP-DB-QUERY-WORK
 
@@ -2010,7 +2172,21 @@ Existing sink adapters consume the projected transaction; upstream protocol outc
 
 **Migration status:** Current sink separation retained. Projection fallback/unknown-value semantics still require separate review.
 
+## RESP-CLEARING-TEMPLATE-DATA
+
+**Current module:** `clearing-export-service`.
+
+ClearingStepProjection projects already-selected WorkSteps into all/byIndex/
+first/latest/previous/selected views. Optional JSON objects come only from
+JsonViews; raw payload remains unchanged. Selection, rendering, batching and
+persistence stay with the clearing runtime. No document parser or second writer.
+
+**Contract:** [portable data boundary](../contracts/portable-http-templates.md).
+**Verification:** ClearingStepProjectionTest and ClearingTemplateConsumerTest.
+
 ## RESP-CLEARING-EXPORT
+
+Template history projection delegates to RESP-CLEARING-TEMPLATE-DATA.
 
 **Current module(s):** `clearing-export-service`.
 
@@ -2368,8 +2544,14 @@ Both use the canonical template API with DisabledSequenceAccess; diagnostic rend
 Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
 AuthProfileStorageFindings projects authored auth type/storage checks using the
 shared auth-contracts policy; see RESP-SCENARIO-AUTH-STORAGE-FINDINGS.
-RequestTemplateFindings projects its problems into bundle findings; profile existence and
-bundle visibility stay here. The offline diagnostic delegates file loading to
+RequestTemplateFindings projects its problems into bundle findings and invokes
+PortableHttpRenderer for portable syntax/capability admission. Native templates
+retain the native syntax validator; portable documents are never compiled through
+that engine. Selected HTTP Sequence steps also delegate adapter admission to
+HttpSequencePortablePolicy. Bundle admission also rejects portable calls referenced by
+Request Builder, whose native protocol renderer does not implement that profile;
+unreferenced portable files may share its template root.
+Profile existence and bundle visibility stay here. The offline diagnostic delegates file loading to
 request-template-files. See RESP-REQUEST-TEMPLATE-PARSE for these transferred owners.
 WorkConfigurationFindings projects one injected WorkConfigurationParser AUTHORING result,
 prefixing canonical errors/deferred paths without adapter-specific decisions. The existing
@@ -2461,6 +2643,12 @@ request-template construction. HTTP/TCP/ISO8583 share the existing public templa
 contract: explicit protocol, serviceId and callId; HTTP also requires method/pathTemplate.
 The parser owns key construction. It performs no filesystem reads or template evaluation.
 
+An explicit top-level `profile` delegates portable-call semantics to
+RESP-PORTABLE-HTTP. Native HTTP/TCP/ISO8583 definitions retain their existing
+interfaces; neither the loader nor this dispatch duplicates portable grammar or
+data decoding. PortableHttpCallParser uses RequestTemplateParser for its inner
+native HTTP definition.
+
 TemplateLoader enumerates and decodes files once, delegates parsing and rejects missing
 roots and duplicate keys explicitly. Runtime workers and offline diagnostics use that
 adapter. Scenario Manager delegates template semantics to the parser and retains bundle
@@ -2478,6 +2666,10 @@ shape/auth/protocol decisions; silent missing-root, serviceId or duplicate-key f
 **Required effect:** The same decoded template receives the same semantic decision in
 runtime loading and authoring. Validation failures carry field/category evidence for
 Scenario Manager; auth reference values retain their owner in AuthRef.
+RequestTemplateParser translates portable TemplateDataException failures to its
+canonical RequestTemplateException diagnostics; the portable library keeps its own
+data-error contract. Bundle findings retain the source file path without duplicating
+portable validation rules.
 
 **Verification entrypoints:** request parser unit tests, migrated TemplateLoaderTest
 component tests, existing ScenarioRepositoryValidationTest and worker behavior suites.
@@ -3017,6 +3209,32 @@ unchanged. Arbitrary URL/body redaction is not claimed by this header boundary.
 **Migration status:** Request diagnostic responsibility extracted from
 HttpProtocolHandler; broader HTTP result and transport behavior unchanged.
 
+## RESP-HTTP-SEQUENCE-NATIVE-RESULTS
+
+**Current module:** `http-sequence-service`.
+
+HttpSequenceNativeResults derives native extract/set updates from supplied
+responses and workflow state. It delegates JSON reading/selection to template-data
+and template evaluation to the injected renderer. HttpSequenceRunner alone applies
+those updates. Native optional extraction remains distinct from portable required
+response selection; neither is a second document parser or state writer.
+
+**Forbidden:** execute HTTP, mutate the journey or decide retries/outcomes.
+**Verification:** HttpSequenceNativeResultsTest and native runner regressions.
+
+## RESP-HTTP-SEQUENCE-HTTP-EXECUTION
+
+**Current module:** `http-sequence-service`.
+
+HttpCallExecutor declares native and explicitly single-attempt execution.
+ApacheHttpCallExecutor consumes the separately supplied configured clients;
+portable requests use no redirects/retries/cookie jar, bounded UTF-8 responses,
+and never silently delegate to a native transport. The worker owns both clients'
+lifecycle. RenderedCall/HttpCallResult are transport projections, not outcomes.
+
+**Forbidden:** render, select targets, interpret JSON/SOAP or settle workflow state.
+**Verification:** ApacheHttpCallExecutorTest and portable transport regressions.
+
 ## RESP-HTTP-SEQUENCE-REQUEST-RENDERING
 
 **Current module(s):** `http-sequence-service`.
@@ -3201,8 +3419,10 @@ for Java services; `vscode-pockethive/src/connection/endpointSecurityPolicy.ts`
 for the companion boundary in its TypeScript runtime.
 
 Auth Service and MCP bind the same `POCKETHIVE_ALLOW_REMOTE_HTTP` deployment
-setting and delegate to the Java policy. The companion requires an independent,
-explicit saved transport selection. Profile creation, persisted profile decoding,
+setting and delegate to the Java policy. The Java device client also delegates
+returned public endpoints to that policy using its explicit consumer permission;
+its response DTOs validate URI structure without selecting the permission. The
+companion requires an independent, explicit saved transport selection. Profile creation, persisted profile decoding,
 command decoding and metadata validation consume its canonical policy. UI labels
 are a read-only presentation of the available modes.
 
@@ -3380,11 +3600,36 @@ invalid metadata is rejected before registry publication.
 **Verification:** `DynamicClientRegistrationServiceTest` and
 `OAuthAuthorizationServerTest`. Current implementation.
 
+## RESP-OAUTH-PRINCIPAL-IDENTITY
+
+`OAuthBrowserController` binds the authenticated Spring principal to the immutable
+user UUID at sign-in. Spring Authorization Server carries that same principal name
+through pending requests, consent, device approval, code exchange and refresh.
+`OAuthPrincipalLookup` is the sole OAuth subject-to-active-user lookup: it accepts
+only canonical UUID subjects and reads the current `InMemoryUserStore` user.
+It does not resolve a subject as a username, persist OAuth state or decide scopes.
+
+`PocketHiveAccessTokenGenerator`, `PocketHiveScopeAuthorizationValidator`,
+`McpScopeAuthorizationValidator` and
+`PocketHiveInteractiveAuthorizationRequestConverter` consume that identity for
+their existing issuance or scope policies. `BrowserOAuthTokenResolver` uses the
+same lookup for the access token's immutable `sub`. Username is a login input and
+display attribute; changing its owner cannot transfer an authorization or consent.
+Inactive or missing original users are rejected, and current grants remain owned
+by the user store. Spring retains all token/consent lifecycle state.
+
+The repair requires restarting Auth Service, clearing its existing in-memory OAuth
+and servlet sessions. There is no live conversion of username-based principals.
+Verification: `OAuthIssuanceIdentityTest`, `OAuthPrincipalLookupTest`, existing
+browser/device/code/refresh/consent tests. Contract: Auth Service API §6.10–6.11.
+
 ## RESP-OAUTH-AUTHORIZATION-INPUT
 
 **Current owner:** `auth-service` — `PocketHiveInteractiveAuthorizationRequestConverter`
 delegates request parsing to Spring and narrows declared interactive MCP scopes
 to the authenticated principal's current ceiling from `McpScopeAuthorizationValidator`.
+`McpScopeAuthorizationValidator` owns the existing MCP scope ceiling and request
+policy; both consume the immutable principal through `OAuthPrincipalLookup`.
 `PocketHiveOAuthConfiguration` installs this boundary converter.
 
 **Forbidden:** consent/client validation, authorization state mutation, a second
@@ -3841,6 +4086,11 @@ shadowing the valid swarm ID `access`. Background catalogue polling joins an
 in-flight load rather than invalidating it; explicit refresh may supersede that
 load. Caller change/unmount invalidate old work, and old completions cannot clear
 a newer in-flight marker or publish permissions for another caller.
+For the same caller, an in-flight catalogue refresh retains the last successful
+access observation until the new catalogue/access result is published. Starting
+a poll is not a permission change. Failed reads clear the observation and a
+successful response replaces it, including revoked or missing permissions.
+Caller identity mismatch immediately hides the previous caller's observation.
 
 ## RESP-SCENARIO-CATALOGUE-ACCESS
 
@@ -3856,6 +4106,10 @@ UI useScenarioCatalogue consumes backend-filtered read/run lists and bundle edit
 projections, invalidating observations on caller change/close. CreateSwarmModal
 uses the existing /api/templates run-filtered catalogue; ScenariosPage uses the
 existing read-filtered workspace catalogue. Neither interprets grant scopes.
+CreateSwarmModal retains creation inputs, bundle loading and request dispatch;
+CreateSwarmDialog renders those inputs and the runnable picker, while
+CreateSwarmScenarioDetail owns only the Overview/Files presentation selection.
+These views do not fetch bundles, resolve grants or decide creation outcomes.
 Both use scenariosApi's existing BundleTemplateEntry parser; its duplicate template
 parser in CreateSwarmModal is removed. Malformed bundles remain visible when their bundle grant permits access; visibility
 does not make a defunct bundle executable.
@@ -3864,12 +4118,57 @@ Global navigation/admin/toolbar projections are implemented as described below.
 Forbidden: copying grant matching rules, treating projection as command authority,
 or supplying edit permission after a missing/failed observation.
 
+## RESP-UI-SWARM-DETAIL
+
+`parseSwarmStateSnapshot` owns the UI read-only projection of the existing
+`GET /orchestrator/api/swarms/{swarmId}` state response documented in
+`ORCHESTRATOR-REST.md`. Root fields own swarm state, run/template identity and
+observation freshness; `observation.workers` supplies per-instance telemetry and
+config. Worker telemetry follows the existing `WorkerObservation` definition in
+`docs/spec/control-events.schema.json` (including required boolean flags and
+integer TPS). The removed raw status-full envelope wrapper is not an accepted format.
+The approved state contract requires an object `observation`, never null or
+absent; `{}` before the first Controller report must not hide owned swarm state.
+`SwarmStateView` enforces that shape in Java. The existing lifecycle-contract
+generator packages byte-identical lifecycle and control-event schemas and their
+referenced observation types for TypeScript consumers; generated resources are
+checked for drift, not separately authored contracts. Hive's boundary parser
+validates the complete REST shape and non-empty Controller context with those
+canonical schemas, then projects display values. It must not implement another
+set of required/nullable/enum rules. Semantic selection and duplicate-instance
+checks remain local to the read projection. Producer-owned synthetic fixtures
+verified against serialized `SwarmStateView` are reused by consumer tests.
+
+`useSwarmSnapshot` owns fetching, polling and request cancellation for that
+projection, scoped to the selected swarm and current caller/token. Superseded or
+unmounted requests cannot publish results; retained reload callbacks from an old
+selection cannot start or join a current request. A failed read clears the detail
+projection instead of retaining actionable controls from a previous observation.
+`SwarmSnapshotPanel` presents state and server-provided observation freshness;
+it must not invent stack metadata, freshness thresholds or lifecycle state.
+`useHiveScenario` owns the authored scenario read, scoped to the current
+swarm/run/template and caller/token, and cancels or discards superseded responses.
+It clears its projection after a missing or failed runtime read. `parseHiveScenario`
+owns only Hive's existing display subset and exact requested-scenario match;
+Scenario validation remains owned by the Scenario contract. `SwarmDetailStatus`
+presents runtime loading/errors and retry across every detail tab, not just Snapshot.
+HivePage composes these owners and consumes the existing backend access projection
+for controls. It must not infer permission from telemetry or scenario images.
+
+Verification: decoder and hook tests cover the current REST shape, invalid/empty
+observations, failures and selection/caller races. HivePage UI tests cover visible
+state, run identity, retry after malformed/failed reads and worker config controls
+using synthetic ingress responses. Scenario tests cover selection, run, template,
+caller/token transitions and cancellation without retaining previous controls.
+
 ## RESP-UI-GLOBAL-ACCESS
 
 Approved transfer: UI navigation and global toolbar decisions become read-only backend
 projections. Existing AuthGrantChecks remains the owner of Auth admin policy. The
 unchanged PocketHive read/run/manage combinations are owned by PocketHivePermissionSets
-under auth-contracts, consumed by existing service policies and AuthAccessProjection.
+under auth-contracts, consumed by existing service policies and AuthAccessProjection. The projection also exposes the existing
+global deployment-management decision for Planner association controls, through
+`PocketHiveGrantChecks.hasPermissionInScope` with the canonical MANAGE permission set.
 No new grant combinations or scope rules are introduced; null-caller behavior of each
 existing service boundary remains unchanged. Auth projection authenticates via the
 existing AuthAccessService and grants no authority to execute resource commands.
@@ -4038,8 +4337,9 @@ TcpMockIdentity. WorkspaceController passes its provider-qualified owner ID to t
 catalogue owner; WorkspaceService persists attribution, not access-control decisions.
 
 The browser selects NativeAuthSession or PocketHiveAuthSession only from `/api/auth/config`.
-`ui-v2/src/lib/authSession.ts` owns PocketHive session parsing/storage and is published
-as `/auth-session.js`; the native provider does not load it. All TCP UI API paths use
+`ui-v2/src/lib/authSession.ts` projects the shared `BrowserTokenStore` credential
+as `/auth-session.js`; it owns no duplicate parser, identity cache or login. The native
+provider does not load it. All TCP UI API paths use
 the existing HttpClient endpoint resolver. CurrentUserController exposes only the
 server-selected identity/configuration projections. No duplicate login/user directory
 is created for PocketHive mode. Contract: [authentication provider](../tcp-mock/legacy-workspaces.md#authentication-provider-and-ownership).
@@ -4126,6 +4426,17 @@ infer command completion from a heartbeat alone.
 
 ## RESP-SWARM-COMMAND-ADMISSION
 
+Exact-run browser controls: `SwarmRunLifecycleController` is a thin HTTP consumer
+of `SwarmLifecycleCommandService.dispatchForRun`. The lifecycle owner checks the
+requested run ID and supplies the captured runtime identity to the existing
+`OperationDispatchService` admission check, so replacement runtimes cannot receive
+commands intended for an old run. Existing scoped permissions and canonical
+ControlResponse/operation outcomes remain authoritative. No second state machine,
+terminal outcome mapper, automatic Planner update or implicit current-run fallback
+is introduced. Exact-run operation reads consume the same coordinator and require
+scoped READ for that current run, never permissions inherited from a replacement.
+See ORCHESTRATOR-REST.md, Exact-run Start/Stop.
+
 User-approved behavior change, 2026-09-26. START requires initialization, readiness
 and no pending bootstrap acknowledgements. STOP requires initialization only; stale
 heartbeats and bootstrap acknowledgements do not prevent attempted shutdown. STOP
@@ -4158,6 +4469,39 @@ projections and current request/operation feedback. Pending START leaves Stop av
 after HTTP acceptance; pending STOP and an in-flight HTTP request block repeat actions.
 UI availability does not decide backend admission or operation outcomes.
 
+## RESP-POCKETPLANNER-INTEGRATION
+
+PocketPlanner is the sole owner of Plan/Stream/Activity definitions. `PocketPlannerClient`
+reads its authenticated catalogue from one explicitly configured base URL, without
+redirects, and resolves a revision-checked selection. `PlannerRunService` composes
+that selection with an exact historical swarm/run reference; it never starts work
+or writes Planner state. The current-run projection uses the existing `SwarmStore`
+identity, not the latest journal entry or a cached status snapshot.
+`PlannerController` maps HTTP and applies existing PH
+deployment read/manage authorization. `PostgresJournalRunMetadata` remains the sole
+metadata writer: Planner assignments append Activity tags under a row lock, preserve
+description and unrelated tags, and reject another plan or the tag limit. Generic
+metadata replacement cannot remove Planner-owned associations. UI consumes these
+owners; it does not generate references or write SQL. See ORCHESTRATOR-REST.md,
+PocketPlanner integration section, for the wire contract and partial-success rules.
+The Hive association panel is mounted for the snapshot's exact swarm/run identity.
+It uses the scoped current-run endpoint and requires the response to match the
+displayed identity, retaining existing read permissions. A replacement run resets
+its choices and discards superseded reads; another run is never substituted for
+the currently displayed run.
+
+`usePlannerCreation` owns the UI's optional Planner selection and accepted-CREATE
+association handoff. It consumes the exact backend `canManageDeployment` projection,
+discards an unaccepted optional choice when access is lost, and never blocks an
+otherwise permitted unlinked CREATE with that stale choice. Prepared selections
+carry the hook's access-invalidation generation across preflight, CREATE acceptance
+and operation reads; restored access cannot revive a discarded selection. Accepted
+CREATE identity remains retained across
+access loss or association failure; retry may only associate that same operation.
+`completePlannerCreation` checks the supplied current-access guard after operation
+reads and before the association write. `CreateSwarmPlannerControls` only presents
+that state; backend mutation authorization remains authoritative.
+
 ## RESP-SWARM-CATALOGUE-REMOVAL
 
 `SwarmCatalogueService` owns the explicit catalogue-only removal workflow. It reads
@@ -4170,3 +4514,87 @@ reservation under that same monitor. External inventory and journal IO remain ou
 these monitors. `SwarmCatalogueController` maps HTTP and reuses `SwarmAccessService`.
 The authorized contract is ORCHESTRATOR-REST §3.3.1. No queues, files or network bindings
 are removed, and no successful lifecycle REMOVE outcome is emitted.
+
+## RESP-BROWSER-SSO
+
+`BrowserOAuthClients` owns explicit first-party web-client registration and its
+config projection for PocketHive, PocketPlanner and PocketData, each with its own
+exact configured callback; `BrowserOAuthTokenResolver` projects valid web OAuth tokens
+to the current identity through the canonical OAuth store, never another token
+database. `PocketHiveScopeAuthorizationValidator` dispatches by registered client
+kind to browser identity or existing MCP scope policy. `BrowserAuthController`
+maps config/logout requests; the existing OAuth browser owner authenticates
+users, Spring Authorization Server consumes codes and owns token state.
+`BrowserLogoutPageRenderer` owns escaped logout presentation only.
+`BrowserSessionCookieCustomizer` applies Secure from the canonical public issuer,
+after container properties, so an internal HTTP reverse-proxy hop cannot weaken it.
+PH's React UI uses the shared device controller rather than a PKCE callback consumer.
+`PocketHiveSessionApi` maps existing PH OAuth/current-user HTTP responses through
+the shared bounded transport; `AuthProvider` projects identity and composes backend
+access observations. `JournalSessionGate` waits for identity before journal loading
+and offers the shared confirmation controls without navigating away from the exact
+run URL. Product authorization remains in existing API owners.
+`AuthAccessNotice` presents identity/restore/sign-out failures alongside the
+existing access observation; it does not derive permissions or switch providers.
+Contract: `AUTH_SERVICE_API_SPEC.md#81-ui-integration`.
+
+## RESP-BROWSER-DEVICE-LOGIN
+
+`BrowserOAuthClients` owns the explicit callback-free first-party registrations;
+these include PH's own UI client, `pockethive-device`, as well as PP and PD.
+`PocketHiveDeviceAuth` names their wire contract. `AuthServiceOAuthProperties`
+owns device-code TTL, validated by the existing OAuth composition owner.
+`DeviceClientAuthenticationConverter` decodes only marked public device requests;
+`DeviceClientAuthenticationProvider` checks those requests against registration.
+Neither owns consent, tokens, identity state or permissions. Their grant-specific
+markers do not overlap the refresh/revocation authentication adapter.
+
+Spring Authorization Server's existing authorization and consent services are the
+only device/user-code, consent and token writers. The existing browser-token
+resolver projects current identity; there is no second OAuth or product session
+store. `DeviceConfirmationController` maps presentation, and
+`DeviceConfirmationPageRenderer` escapes markup only. OAuth composition adds a
+narrow Spring CSRF filter for device confirmation because the server configurer
+exempts protocol endpoints globally. That filter does not own login state.
+
+`DeviceLogoutController` maps device-client logout discovery, confirmation and
+CSRF-protected submission. Discovery projects only the configured public issuer
+and canonical device registration into a logout URL; it does not infer callbacks.
+`DeviceLogoutPageRenderer` owns escaped PH-themed confirmation and fixed completion
+markup. Spring's `SecurityContextLogoutHandler` clears the central browser context
+and invalidates its session. Issued access tokens remain owned by the OAuth store
+and separate revocation endpoint. Exact-redirect browser logout remains a distinct
+flow. No additional session state, token writer or app redirect is introduced.
+
+Contract: [Callback free Pocket browser login](BROWSER_DEVICE_LOGIN.md).
+Verification: `DeviceBrowserSignInTest`, `DeviceLogoutTest`,
+`DeviceLogoutPageRendererTest`, existing `BrowserSingleSignOnTest` and real
+local-ingress browser confirmation. PH, PP and PD explicitly consume the device
+flow. Local alternate-origin checks and the actual desktop forwarding path are
+separate acceptance boundaries; passing one does not imply the other.
+
+## RESP-POCKET-UI-SHELL
+
+`packages/ui` (`@pockethive/ui`) is the sole owner of the Pocket application shell,
+header region layout, controlled navigation rail, navigation item presentation and
+shared theme tokens. `AppShell` composes header/navigation/toolbar/content slots;
+`AppHeader` arranges leading/centre/trailing content; `NavigationRail` renders the
+collapse control and reports the requested expanded state; `NavigationItem`
+supplies presentation props to an application-owned link renderer. Each component
+and its scoped styles has one file. `styles.css` exposes the shared theme baseline;
+the PH application stylesheet no longer defines the extracted tokens or shell rules.
+
+PH `components/AppShell` owns its existing navigation preference and routed page
+composition, `SideNav` selects PH links using existing access projections, and
+`TopBar` owns PH branding, notifications, search and account controls. React Router,
+authentication, permissions, domain menus, persistence and API calls must not move
+into the shared package. Consumers explicitly supply their own slots and state;
+there is no shared application store or automatic permission inference.
+
+Verification: shared component interaction tests cover controlled collapse/expand,
+accessible links, slot placement and independent consumer state. PH component
+integration tests cover its persisted navigation preference and unchanged menu
+selection. Production and plugin UI builds consume the same source package.
+This slice transfers only shell presentation; domain widgets and auth remain with
+their existing owners. The package is consumed from its repository path, not copied
+into each application.

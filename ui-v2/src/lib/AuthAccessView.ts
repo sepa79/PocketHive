@@ -1,1 +1,1 @@
-export type AuthAccessView = { canAccessPocketHive: boolean; canRunPocketHive: boolean; canManageUsers: boolean }
+export type AuthAccessView = { canAccessPocketHive: boolean; canRunPocketHive: boolean; canManageDeployment: boolean; canManageUsers: boolean }

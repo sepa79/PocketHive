@@ -19,6 +19,11 @@ Use both identifiers on every command signal, executor result and public outcome
 - Both fields are top-level envelope fields.
 - They are non-empty and identical across the `signal`, executor `result` and public `outcome` for one operation.
 - Metrics and uncorrelated alerts carry explicit `null` values. A correlated alert echoes both operation identifiers.
+- Command signals forbid `runtime`. For non-signal envelopes, `runtime` is required
+  when `scope.swarmId != "ALL"` and forbidden when `scope.swarmId == "ALL"`.
+  Its `templateId` and `runId` are required non-empty strings; optional
+  `containerId`, `image` and `stackName` may be non-empty strings or `null`.
+  Runtime identity is additional evidence, not a replacement for either operation identifier.
 
 ---
 
@@ -81,6 +86,7 @@ This contract intentionally does not model transport retries as separate domain 
   "scope": { "swarmId": "swarm-42", "role": "swarm-controller", "instance": "swarm-42-marshal-1" },
   "correlationId": "operation-001",
   "idempotencyKey": "request-001",
+  "runtime": { "templateId": "baseline-demo", "runId": "run-20260722-123000Z" },
   "data": {
     "status": "Succeeded",
     "retryable": false,
@@ -106,6 +112,7 @@ This contract intentionally does not model transport retries as separate domain 
   "scope": { "swarmId": "swarm-42", "role": "orchestrator", "instance": "orchestrator-1" },
   "correlationId": "operation-001",
   "idempotencyKey": "request-001",
+  "runtime": { "templateId": "baseline-demo", "runId": "run-20260722-123000Z" },
   "data": {
     "status": "Succeeded",
     "retryable": false,

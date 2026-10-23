@@ -8,6 +8,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.contract.DeviceAuthorizationDto;
+import io.pockethive.auth.contract.DeviceClientConfigDto;
+import io.pockethive.auth.contract.PocketHiveBrowserAuth;
+import io.pockethive.auth.contract.PocketHiveDeviceAuth;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -34,6 +38,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @AutoConfigureMockMvc
 class RemoteHttpOAuthTest {
     private static final String RESOURCE = "http://lab.example:8088/mcp";
+    private static final String ADMIN_ID = "11111111-1111-1111-1111-111111111111";
     private static final String REDIRECT = "http://127.0.0.1:38125/callback";
     private static final String CLIENT = "pockethive-vscode";
     private static final String VERIFIER = "remote-http-verifier-that-is-at-least-forty-three-characters-long";
@@ -52,7 +57,7 @@ class RemoteHttpOAuthTest {
     @Autowired ObjectMapper mapper;
 
     @Test
-    @WithMockUser(username = "local-admin")
+    @WithMockUser(username = ADMIN_ID)
     void explicitHttpPublishesMatchingMetadataAndPreservesPkceRefreshAndRevocation() throws Exception {
         mvc.perform(get("/.well-known/oauth-authorization-server"))
             .andExpect(status().isOk())
@@ -103,7 +108,26 @@ class RemoteHttpOAuthTest {
     }
 
     @Test
-    @WithMockUser(username = "local-admin")
+    void explicitHttpDeviceResponsesAreAcceptedByTheSharedContracts() throws Exception {
+        var authorization = mvc.perform(post(PocketHiveDeviceAuth.AUTHORIZATION_PATH)
+                .param("client_id", PocketHiveDeviceAuth.DATA_CLIENT_ID)
+                .param("resource", PocketHiveBrowserAuth.RESOURCE).param("scope", PocketHiveBrowserAuth.SCOPE))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        var device = mapper.readValue(authorization, DeviceAuthorizationDto.class);
+        assertThat(device.verificationUri().toString())
+            .isEqualTo("http://lab.example:8088/auth-service" + PocketHiveDeviceAuth.VERIFICATION_PATH);
+        assertThat(device.verificationUriComplete().getRawQuery()).startsWith("user_code=");
+
+        var configuration = mvc.perform(get(PocketHiveDeviceAuth.CONFIG_PATH)
+                .param("client_id", PocketHiveDeviceAuth.DATA_CLIENT_ID))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+        assertThat(mapper.readValue(configuration, DeviceClientConfigDto.class).logoutUri().toString())
+            .isEqualTo("http://lab.example:8088/auth-service" + PocketHiveDeviceAuth.LOGOUT_PATH
+                + "?client_id=" + PocketHiveDeviceAuth.DATA_CLIENT_ID);
+    }
+
+    @Test
+    @WithMockUser(username = ADMIN_ID)
     void allowanceDoesNotPermitMissingPkceOrRemoteCallback() throws Exception {
         mvc.perform(get("/oauth/authorize").queryParam("response_type", "code").queryParam("client_id", CLIENT)
                 .queryParam("redirect_uri", REDIRECT).queryParam("resource", RESOURCE)
