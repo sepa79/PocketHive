@@ -7,7 +7,7 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 /**
  * Responsibility: Configure bounded-time HTTP connections without credential-bearing redirects.
  * Must not: Resolve alternative endpoints, retry or decide identity.
- * Contract: docs/architecture/BROWSER_DEVICE_LOGIN.md#shared-consumer-boundary.
+ * Contract: RESP-POCKET-AUTH-HTTP — docs/architecture/runtime-responsibilities.md#resp-pocket-auth-http.
  */
 final class AuthServiceRequestFactory {
     private AuthServiceRequestFactory() {}

@@ -11,7 +11,7 @@ import org.springframework.http.client.ClientHttpResponse;
 /**
  * Responsibility: Materialize at most one MiB and close/cancel the selected JDK response body before decoding.
  * Must not: Drain a rejected body, parse identity, expose upstream error bodies or follow redirects.
- * Contract: docs/architecture/BROWSER_DEVICE_LOGIN.md#shared-consumer-boundary.
+ * Contract: RESP-POCKET-AUTH-HTTP — docs/architecture/runtime-responsibilities.md#resp-pocket-auth-http.
  */
 final class BoundedAuthResponse implements ClientHttpResponse {
     private static final int MAX_BYTES = 1_048_576;

@@ -12,7 +12,7 @@ import org.springframework.web.client.RestClient;
 /**
  * Responsibility: Construct the one shared hardened auth HTTP/JSON boundary.
  * Must not: Cache tokens, infer endpoints or decide product access.
- * Contract: docs/architecture/BROWSER_DEVICE_LOGIN.md#shared-consumer-boundary.
+ * Contract: RESP-POCKET-AUTH-HTTP — docs/architecture/runtime-responsibilities.md#resp-pocket-auth-http.
  */
 public final class AuthServiceRestClients {
     private AuthServiceRestClients() {}
