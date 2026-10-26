@@ -1,27 +1,26 @@
 package io.pockethive.generator;
 
+import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.templating.sources.GeneratorTemplateSources;
 import io.pockethive.work.api.HttpRequest;
-
-import io.pockethive.work.api.PocketHiveWorkerFunction;
 import io.pockethive.work.api.HttpRequestEnvelope;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkStep;
-import io.pockethive.work.api.WorkerContext;
-import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.work.api.WorkerCapability;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
 import io.pockethive.worker.sdk.templating.RenderedMessage;
-import io.pockethive.templating.api.TemplateRenderer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.util.MimeTypeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
+import org.springframework.util.MimeTypeUtils;
 /**
  * PocketHive's generator service is the "source" side of the default swarm pipeline. It runs
  * alongside the orchestrator in most deployments and continuously emits HTTP request work items
@@ -133,13 +132,9 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
       effectiveSeed = effectiveSeed.toBuilder().header("vars", config.vars()).build();
     }
     GeneratorWorkerConfig.Message message = config.message();
-    MessageTemplate template = MessageTemplate.builder()
-        .bodyType(message.bodyType())
-        .pathTemplate(message.path())
-        .methodTemplate(message.method())
-        .bodyTemplate(message.body())
-        .headerTemplates(message.headers())
-        .build();
+    var sources = new GeneratorTemplateSources(
+        message.path(), message.method(), message.body(), message.headers());
+    MessageTemplate template = new MessageTemplate(message.bodyType(), sources.path(), sources.method(), sources.body(), sources.headers());
     RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 
     Map<String, Object> baseHeaders = new HashMap<>(effectiveSeed.headers());

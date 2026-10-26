@@ -1,15 +1,14 @@
 package io.pockethive.httpsequence;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.PortableHttpCall;
 import io.pockethive.requesttemplates.PortableHttpCallParser;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HttpSequencePortableCallsTest {
     private final HttpSequencePortableCalls calls = new HttpSequencePortableCalls();
     private final PortableHttpCall call = new PortableHttpCallParser().parse("""
@@ -58,7 +57,7 @@ class HttpSequencePortableCallsTest {
             .isInstanceOf(IllegalStateException.class).hasMessageContaining("transport failed (status -1)");
     }
 
-    private HttpSequenceWorkerConfig.Step step() {
-        return new HttpSequenceWorkerConfig.Step("portable", "portable", null, false, null, List.of(), List.of());
+    private HttpSequenceStep step() {
+        return new HttpSequenceStep("portable", "portable", null, false, null, List.of(), List.of());
     }
 }

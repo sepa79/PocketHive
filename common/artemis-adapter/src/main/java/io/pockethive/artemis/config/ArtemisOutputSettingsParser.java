@@ -1,16 +1,15 @@
 package io.pockethive.artemis.config;
 
-import static io.pockethive.artemis.config.ArtemisConfigurationFields.*;
-
 import io.pockethive.artemis.api.ArtemisOutputSettings;
 import io.pockethive.artemis.api.ArtemisOutputTuning;
 import io.pockethive.artemis.api.ArtemisWorkIoType;
 import io.pockethive.work.config.*;
+import io.pockethive.work.config.WorkConfigurationTemplate;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-
+import static io.pockethive.artemis.config.ArtemisConfigurationFields.*;
 /**
  * Responsibility: decode Artemis output maps through the canonical scalar rules and typed settings.
  * Must not: resolve physical addresses, publish or accept authored destinations.
@@ -40,5 +39,9 @@ public final class ArtemisOutputSettingsParser implements WorkOutputSettingsPars
 
     public static Map<String, Object> configuration(ArtemisOutputSettings settings) {
         return Map.of(ADDRESS, settings.address(), PERSISTENT, settings.persistent());
+    }
+    @Override
+    public java.util.List<WorkConfigurationTemplate> templateSources(java.util.Map<?, ?> settings, String path) {
+        return java.util.List.of();
     }
 }

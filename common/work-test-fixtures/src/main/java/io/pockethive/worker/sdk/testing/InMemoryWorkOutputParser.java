@@ -1,9 +1,9 @@
 package io.pockethive.worker.sdk.testing;
 
 import io.pockethive.work.config.*;
+import io.pockethive.work.config.WorkConfigurationTemplate;
 import java.util.List;
 import java.util.Map;
-
 /**
  * Responsibility: project canonical memory settings validation to the output parser port.
  * Must not: select another type or create resources.
@@ -17,5 +17,9 @@ public final class InMemoryWorkOutputParser implements WorkOutputSettingsParser 
         } catch (IllegalArgumentException | NullPointerException failure) {
             return new WorkOutputSettingsParseResult(null, List.of(new WorkConfigurationProblem(path, failure.getMessage())), List.of());
         }
+    }
+    @Override
+    public java.util.List<WorkConfigurationTemplate> templateSources(java.util.Map<?, ?> settings, String path) {
+        return java.util.List.of();
     }
 }

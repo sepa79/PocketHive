@@ -78,6 +78,15 @@ class PortableTemplateValidationTest extends ScenarioComponentTestFixture {
     }
 
     @Test
+    void deferredRetryDoesNotHideConcretePortableRestrictions() throws Exception {
+        createPortableBundle();
+        Path scenario = scenariosDir.resolve("portable/scenario.yaml");
+        Files.writeString(scenario, Files.readString(scenario).replace("- callId: create",
+            "- callId: create\n            retry: {maxAttempts: \"{{ eval('1') }}\"}\n            continueOnNon2xx: true"));
+        assertRejected("scenario.yaml:template.bees.http-sequence.config.steps[0]");
+    }
+
+    @Test
     void nativeEvalAndRetryRemainValidOnTheNativePath() throws Exception {
         Path template = createPortableBundle();
         ObjectNode portable = (ObjectNode) json.readTree(Files.readString(template));
@@ -107,6 +116,40 @@ class PortableTemplateValidationTest extends ScenarioComponentTestFixture {
         Files.writeString(template.resolveSibling("native.json"), json.writeValueAsString(nativeRequest));
         configureRequestBuilder("native");
         assertAccepted();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "true", "trailing"})
+    void rejectsTrailingJsonLikeTheRuntimeLoader(String trailing) throws Exception {
+        Path template = createPortableBundle();
+        Files.writeString(template, Files.readString(template) + trailing);
+        scenarios.reload();
+        var result = bundleService().validateExisting("portable");
+        assertThat(result.ok()).as("findings: %s", result.findings()).isFalse();
+        assertThat(result.findings()).anySatisfy(finding ->
+            assertThat(finding.code()).isEqualTo("TEMPLATE_PARSE_ERROR"));
+        assertThat(scenarios.listAvailableSummaries()).isEmpty();
+    }
+
+    @Test
+    void numericCallIdCannotBypassPortableAdmission() throws Exception {
+        Path template = createPortableBundle();
+        Files.writeString(template, Files.readString(template).replace("create", "123"));
+        Path scenario = scenariosDir.resolve("portable/scenario.yaml");
+        Files.writeString(scenario, Files.readString(scenario)
+            .replace("- callId: create", "- callId: 123\n            retry: {maxAttempts: 2}"));
+        assertRejected("scenario.yaml:template.bees.http-sequence.config.steps[0]");
+    }
+
+    @Test
+    void blankStepServiceKeepsTheExistingSequenceDefault() throws Exception {
+        createPortableBundle();
+        Path scenario = scenariosDir.resolve("portable/scenario.yaml");
+        Files.writeString(scenario, Files.readString(scenario)
+            .replace("- callId: create", "- callId: missing\n            serviceId: ' '"));
+        scenarios.reload();
+        assertThat(bundleService().validateExisting("portable").findings()).anySatisfy(finding ->
+            assertThat(finding.code()).isEqualTo("TEMPLATE_CALL_ID_MISSING"));
     }
 
     private void configureRequestBuilder(String callId) throws Exception {
@@ -139,6 +182,8 @@ class PortableTemplateValidationTest extends ScenarioComponentTestFixture {
                     outputs:
                       type: RABBITMQ
                     message:
+                      bodyType: SIMPLE
+                      body: '{}'
                       headers:
                         x-ph-call-id: %s
             """.formatted(callId);

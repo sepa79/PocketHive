@@ -80,6 +80,12 @@ preserves existing seconds-to-milliseconds conversion and queue behavior.
 
 ## 4. Configuration and topology SSOT
 
+Selected output parsers expose read-only `WorkConfigurationTemplate` sources through
+`WorkOutputSettingsParser.templateSources`. The existing Work validation operation
+notifies an optional observer after selecting the same single provider. Sources remain
+available when unrelated settings are deferred; authoring never selects an adapter a
+second time. Providers without runtime templates return an explicit empty list.
+
 One Rabbit owner defines each setting, default, normalization and constraint. All producers
 and consumers use its API/result: Spring startup, Scenario authoring, Controller plans,
 environment projections, runtime and diagnostics. Boundary decoding may adapt the input

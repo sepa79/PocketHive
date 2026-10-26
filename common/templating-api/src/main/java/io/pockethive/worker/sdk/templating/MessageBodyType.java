@@ -1,7 +1,9 @@
 package io.pockethive.worker.sdk.templating;
 
 /**
- * Selects how a templated message should be shaped before dispatch.
+ * Responsibility: select the existing SIMPLE or HTTP shape of a rendered message.
+ * Must not: render templates, parse worker configuration or dispatch messages.
+ * Contract: RESP-WORK-MESSAGE-TEMPLATE — docs/architecture/runtime-responsibilities.md#resp-work-message-template.
  */
 public enum MessageBodyType {
     /**

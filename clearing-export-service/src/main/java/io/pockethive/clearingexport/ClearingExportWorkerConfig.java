@@ -1,10 +1,10 @@
 package io.pockethive.clearingexport;
 
-import java.util.Locale;
+import io.pockethive.templating.sources.ClearingTemplateSources;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
-
 /**
  * Responsibility: validate exporter record, batching and file-format settings.
  * Must not: choose the runtime output directory or persist files.
@@ -37,8 +37,8 @@ public record ClearingExportWorkerConfig(
     String businessCodeSourceStep,
     Integer businessCodeSourceStepIndex
 ) {
-  private static final String MODE_TEMPLATE = "template";
-  private static final String MODE_STRUCTURED = "structured";
+  private static final String MODE_TEMPLATE = ClearingTemplateSources.TEMPLATE_MODE;
+  private static final String MODE_STRUCTURED = ClearingTemplateSources.STRUCTURED_MODE;
 
   public ClearingExportWorkerConfig(
       String mode,

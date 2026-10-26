@@ -1,14 +1,12 @@
 package io.pockethive.httpsequence;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.requesttemplates.PortableHttpCallParser;
+import io.pockethive.requesttemplates.HttpSequenceExtract;
+import io.pockethive.requesttemplates.HttpSequenceRetry;
+import io.pockethive.requesttemplates.HttpSequenceSetValue;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.PortableHttpCall;
+import io.pockethive.requesttemplates.PortableHttpCallParser;
 import io.pockethive.requesttemplates.PortableResponseExtractor;
 import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.templatedata.JsonDocumentReader;
@@ -22,8 +20,8 @@ import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
@@ -49,7 +47,11 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 class HttpSequencePortableRunnerTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final WorkerInfo info = new WorkerInfo("http-sequence", "swarm", "worker", null, null);
@@ -183,10 +185,10 @@ class HttpSequencePortableRunnerTest {
     void laterUnsupportedPortableStepFailsBeforeEarlierNativeAuthOrNetwork(String invalid) throws Exception {
         writeNative(true);
         write("portable", jsonCall("portable", ""));
-        var retry = new HttpSequenceWorkerConfig.Retry(invalid.equals("retry") ? 2 : 1, 0, 1, 0, List.of());
+        var retry = new HttpSequenceRetry(invalid.equals("retry") ? 2 : 1, 0, 1, 0, List.of());
         var extracts = invalid.equals("extracts")
-            ? List.of(new HttpSequenceWorkerConfig.Extract("/value", null, false, "legacy", true)) : List.<HttpSequenceWorkerConfig.Extract>of();
-        var portable = new HttpSequenceWorkerConfig.Step("portable", "portable", null, invalid.equals("continue"),
+            ? List.of(new HttpSequenceExtract("/value", null, false, "legacy", true)) : List.<HttpSequenceExtract>of();
+        var portable = new HttpSequenceStep("portable", "portable", null, invalid.equals("continue"),
             retry, extracts, List.of());
         try (var runner = runner()) {
             assertThatThrownBy(() -> runner.run(seed("{}"), context,
@@ -312,9 +314,9 @@ class HttpSequencePortableRunnerTest {
     void nativeAliasesExtractsAndSettersRemainOnTheirExistingPath() throws Exception {
         writeNative(false);
         responses.add(response(200, "{\"id\":\"000123\"}"));
-        var nativeStep = new HttpSequenceWorkerConfig.Step("native", "native", null, false, null,
-            List.of(new HttpSequenceWorkerConfig.Extract("/id", null, false, "result.id", true)),
-            List.of(new HttpSequenceWorkerConfig.SetValue("setter", "{{ payload.result.id }}:{{ vars.marker }}", false)));
+        var nativeStep = new HttpSequenceStep("native", "native", null, false, null,
+            List.of(new HttpSequenceExtract("/id", null, false, "result.id", true)),
+            List.of(new HttpSequenceSetValue("setter", "{{ payload.result.id }}:{{ vars.marker }}", false)));
         try (var runner = runner()) {
             WorkItem output = runner.run(seed("{\"customerId\":\"000001\"}"), context,
                 config(List.of(nativeStep), Map.of("marker", "native")));
@@ -328,10 +330,10 @@ class HttpSequencePortableRunnerTest {
     void nativeExtractsPreserveDuplicateAndOverlappingDestinationOrder() throws Exception {
         writeNative(false);
         responses.add(response(200, "{\"first\":1,\"second\":2,\"last\":3}"));
-        var nativeStep = new HttpSequenceWorkerConfig.Step("native", "native", null, false, null,
-            List.of(new HttpSequenceWorkerConfig.Extract("/first", null, false, "result.id", true),
-                new HttpSequenceWorkerConfig.Extract("/second", null, false, "result", true),
-                new HttpSequenceWorkerConfig.Extract("/last", null, false, "result.id", true)), List.of());
+        var nativeStep = new HttpSequenceStep("native", "native", null, false, null,
+            List.of(new HttpSequenceExtract("/first", null, false, "result.id", true),
+                new HttpSequenceExtract("/second", null, false, "result", true),
+                new HttpSequenceExtract("/last", null, false, "result.id", true)), List.of());
         try (var runner = runner()) {
             WorkItem output = runner.run(seed("{\"customerId\":\"000001\"}"), context,
                 config(List.of(nativeStep), Map.of("marker", "native")));
@@ -361,18 +363,18 @@ class HttpSequencePortableRunnerTest {
         return WorkItem.text(info, body).contentType("application/json").build();
     }
 
-    private HttpSequenceWorkerConfig config(List<HttpSequenceWorkerConfig.Step> steps, Map<String, Object> params) {
+    private HttpSequenceWorkerConfig config(List<HttpSequenceStep> steps, Map<String, Object> params) {
         return new HttpSequenceWorkerConfig("https://sut/base/service", root.toString(), "default", 1, steps,
             new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE,
                 0, 1, 1, false, false, 0, 1), params);
     }
 
-    private HttpSequenceWorkerConfig.Step step(String callId) {
-        return new HttpSequenceWorkerConfig.Step(callId, callId, null, false, null, List.of(), List.of());
+    private HttpSequenceStep step(String callId) {
+        return new HttpSequenceStep(callId, callId, null, false, null, List.of(), List.of());
     }
 
-    private HttpSequenceWorkerConfig.Step fixtureStep(String serviceId) {
-        return new HttpSequenceWorkerConfig.Step("create", "create", serviceId, false, null, List.of(), List.of());
+    private HttpSequenceStep fixtureStep(String serviceId) {
+        return new HttpSequenceStep("create", "create", serviceId, false, null, List.of(), List.of());
     }
 
     private PortableHttpCall loadFixture(String name) throws Exception {

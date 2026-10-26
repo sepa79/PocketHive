@@ -26,6 +26,7 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>redis-config</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>template-data</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>request-templates</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-config</artifactId><version>${project.version}</version></dependency>

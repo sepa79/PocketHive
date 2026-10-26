@@ -1,12 +1,12 @@
 package io.pockethive.rabbit.config;
+
 import io.pockethive.rabbit.api.RabbitOutputSettings;
 import io.pockethive.rabbit.api.RabbitOutputTuning;
-
-
 import io.pockethive.work.config.WorkConfigurationExpressions;
 import io.pockethive.work.config.WorkConfigurationMode;
-import io.pockethive.work.config.WorkOutputSettings;
 import io.pockethive.work.config.WorkConfigurationProblem;
+import io.pockethive.work.config.WorkConfigurationTemplate;
+import io.pockethive.work.config.WorkOutputSettings;
 import io.pockethive.work.config.WorkOutputSettingsParseResult;
 import io.pockethive.work.config.WorkOutputSettingsParser;
 import io.pockethive.work.config.WorkerOutputType;
@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-
 /**
  * Responsibility: validate Rabbit output settings and provide them through the neutral Work output parser port.
  * Must not: resolve connections, publish messages or retain accepted Work configuration.
@@ -120,5 +119,9 @@ public final class RabbitOutputSettingsParser implements WorkOutputSettingsParse
             problems.add(new WorkConfigurationProblem(path, invalid.getMessage()));
             return null;
         }
+    }
+    @Override
+    public java.util.List<WorkConfigurationTemplate> templateSources(java.util.Map<?, ?> settings, String path) {
+        return java.util.List.of();
     }
 }

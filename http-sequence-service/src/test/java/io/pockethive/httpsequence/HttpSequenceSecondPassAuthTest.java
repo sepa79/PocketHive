@@ -1,18 +1,15 @@
 package io.pockethive.httpsequence;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsServer;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.pockethive.requesttemplates.HttpSequenceRetry;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
@@ -54,7 +51,10 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 /** Ordinary YAML -> sequence runner -> Apache resource traffic, using only test-owned endpoints/Redis. */
 @Timeout(60)
 class HttpSequenceSecondPassAuthTest {
@@ -168,7 +168,7 @@ class HttpSequenceSecondPassAuthTest {
   void interruptedRetryReleasesRedisConnectionAndPreservesInterruption() throws Exception {
     RedisClient observer = RedisClient.create(RedisURI.create(System.getenv("AUTH_REDIS_TEST_HOST"),
         Integer.parseInt(System.getenv("AUTH_REDIS_TEST_PORT"))));
-    var retry = new HttpSequenceWorkerConfig.Retry(3, 100, 1.0, 100, List.of("5xx"));
+    var retry = new HttpSequenceRetry(3, 100, 1.0, 100, List.of("5xx"));
     // Observe runner retries exactly: Apache's independent 503 retry would precede our interruption.
     try (var connection = observer.connect();
          Fixture f = new Fixture(null, false, retry, HttpClients.custom().disableAutomaticRetries().build())) {
@@ -232,7 +232,7 @@ class HttpSequenceSecondPassAuthTest {
       this(existingHeader, mixed, null, HttpClients.createDefault());
     }
 
-    Fixture(String existingHeader, boolean mixed, HttpSequenceWorkerConfig.Retry retry,
+    Fixture(String existingHeader, boolean mixed, HttpSequenceRetry retry,
         CloseableHttpClient transport) throws Exception {
       this.transport = transport;
       token = HttpsServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -272,11 +272,11 @@ class HttpSequenceSecondPassAuthTest {
               token: static-test-only
           """.formatted(token.getAddress().getPort(), RAW_TARGET, keyFile.toString().replace("\\", "/")));
       writeTemplate(templates, "A", "signed", "/signed", existingHeader);
-      List<HttpSequenceWorkerConfig.Step> steps = new ArrayList<>();
-      steps.add(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, retry, List.of(), List.of()));
+      List<HttpSequenceStep> steps = new ArrayList<>();
+      steps.add(new HttpSequenceStep("s1", "A", null, false, retry, List.of(), List.of()));
       if (mixed) {
         writeTemplate(templates, "B", "static", "/static", null);
-        steps.add(new HttpSequenceWorkerConfig.Step("s2", "B", null, false, null, List.of(), List.of()));
+        steps.add(new HttpSequenceStep("s2", "B", null, false, null, List.of(), List.of()));
       }
       var info = new WorkerInfo("http-sequence", "audit-" + UUID.randomUUID(), "audit-worker", null, null);
       context = mock(WorkerContext.class);

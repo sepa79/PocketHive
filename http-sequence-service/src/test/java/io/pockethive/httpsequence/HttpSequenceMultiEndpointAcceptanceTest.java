@@ -1,14 +1,14 @@
 package io.pockethive.httpsequence;
 
-import io.pockethive.templating.api.DisabledSequenceAccess;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.templating.api.DisabledSequenceAccess;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
@@ -31,10 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 class HttpSequenceMultiEndpointAcceptanceTest {
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpSequenceMultiEndpointAcceptanceTest.class);
@@ -174,9 +172,9 @@ class HttpSequenceMultiEndpointAcceptanceTest {
         """.formatted(callId, path));
   }
 
-  private static HttpSequenceWorkerConfig.Step step(
+  private static HttpSequenceStep step(
       String id, String callId, String sutEndpointId, String baseUrl) {
-    return new HttpSequenceWorkerConfig.Step(
+    return new HttpSequenceStep(
         id, callId, null, false, null, List.of(), List.of(), sutEndpointId, baseUrl);
   }
 
