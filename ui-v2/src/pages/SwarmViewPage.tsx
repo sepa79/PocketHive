@@ -2,23 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { subscribeStatusSnapshots } from '../lib/controlPlane/stateStore'
 import {
-  Background,
-  Controls,
-  Handle,
-  MarkerType,
-  Position,
-  ReactFlow,
   applyEdgeChanges,
   applyNodeChanges,
-  type Edge,
-  type Node,
-  type NodeProps,
-  type NodeTypes,
   type OnEdgesChange,
   type OnNodesChange,
   type ReactFlowInstance,
 } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
+import { SwarmTopologyCanvas } from './hive/SwarmTopologyCanvas'
+import type { SwarmTopologyFlowEdge, SwarmTopologyFlowNode, SwarmTopologyNodeData } from './hive/SwarmTopologyModel'
 
 type ScenarioBeePort = { id: string; direction: 'in' | 'out' }
 
@@ -119,34 +110,6 @@ function isIoKnown(value: string | null | undefined) {
   const v = value.trim().toLowerCase()
   return v.length > 0 && v !== 'unknown'
 }
-
-type FlowNodeData = {
-  title: string
-  subtitle: string
-  dim: boolean
-}
-
-type WorkerFlowNode = Node<FlowNodeData, 'worker'>
-
-function WorkerNode({ data, selected }: NodeProps<WorkerFlowNode>) {
-  const cls = selected
-    ? 'swarmFlowNode swarmFlowNodeSelected'
-    : data.dim
-      ? 'swarmFlowNode swarmFlowNodeDim'
-      : 'swarmFlowNode'
-  return (
-    <div className={cls}>
-      <Handle type="target" position={Position.Left} className="swarmFlowHandle" />
-      <Handle type="source" position={Position.Right} className="swarmFlowHandle" />
-      <div className="swarmFlowNodeTitle">{data.title}</div>
-      <div className="swarmFlowNodeSubtitle" title={data.subtitle}>
-        {data.subtitle}
-      </div>
-    </div>
-  )
-}
-
-const nodeTypes: NodeTypes = { worker: WorkerNode }
 
 function loadStoredPositions(swarmId: string) {
   if (!swarmId) return {} as Record<string, { x: number; y: number }>
@@ -400,7 +363,7 @@ function buildGraphModel(args: {
 
   const startX = 60
   const startY = 50
-  const colGap = 300
+  const colGap = 420
   const rowGap = 110
   layers.forEach((layerNodes, col) => {
     layerNodes.forEach((id, row) => {
@@ -459,6 +422,11 @@ function buildGraphModel(args: {
   return { nodes: positionedNodes, edges: positionedEdges, beeByRole, allQueueStats }
 }
 
+/**
+ * Responsibility: compose swarm observations, graph semantics, selection and persisted positions.
+ * Must not: duplicate topology rendering or maintain an independent theme writer.
+ * Contract: RESP-UI-SWARM-TOPOLOGY-PRESENTATION — docs/architecture/runtime-responsibilities.md#resp-ui-swarm-topology-presentation.
+ */
 export function SwarmViewPage() {
   const { swarmId: swarmIdParam } = useParams<{ swarmId: string }>()
   const swarmId = swarmIdParam ? swarmIdParam.trim() : ''
@@ -472,8 +440,8 @@ export function SwarmViewPage() {
   const coalesceTimer = useRef<number | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [rawModal, setRawModal] = useState<{ title: string; json: string } | null>(null)
-  const [flowNodes, setFlowNodes] = useState<Node<FlowNodeData>[]>([])
-  const [flowEdges, setFlowEdges] = useState<Edge[]>([])
+  const [flowNodes, setFlowNodes] = useState<SwarmTopologyFlowNode[]>([])
+  const [flowEdges, setFlowEdges] = useState<SwarmTopologyFlowEdge[]>([])
   const storedPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
   const didInitialFitRef = useRef(false)
   const isBusyTop = scenarioLoading
@@ -601,16 +569,16 @@ export function SwarmViewPage() {
     return buildGraphModel({ swarmId, scenario, snapshotsByRole })
   }, [scenario, snapshotsByRole, swarmId])
 
-  const onNodesChange: OnNodesChange = useCallback(
+  const onNodesChange: OnNodesChange<SwarmTopologyFlowNode> = useCallback(
     (changes) => {
-      setFlowNodes((nodes) => applyNodeChanges(changes, nodes) as Node<FlowNodeData>[])
+      setFlowNodes((nodes) => applyNodeChanges(changes, nodes))
     },
     [setFlowNodes],
   )
 
-  const onEdgesChange: OnEdgesChange = useCallback(
+  const onEdgesChange: OnEdgesChange<SwarmTopologyFlowEdge> = useCallback(
     (changes) => {
-      setFlowEdges((edges) => applyEdgeChanges(changes, edges) as Edge[])
+      setFlowEdges((edges) => applyEdgeChanges(changes, edges))
     },
     [setFlowEdges],
   )
@@ -624,7 +592,7 @@ export function SwarmViewPage() {
     [swarmId],
   )
 
-  const onFlowInit = useCallback((instance: ReactFlowInstance<Node<FlowNodeData>, Edge>) => {
+  const onFlowInit = useCallback((instance: ReactFlowInstance<SwarmTopologyFlowNode, SwarmTopologyFlowEdge>) => {
     if (didInitialFitRef.current) return
     didInitialFitRef.current = true
     instance.fitView({ padding: 0.2, maxZoom: 1.6 })
@@ -646,36 +614,27 @@ export function SwarmViewPage() {
         const subtitle = snap ? (shorten(snap.instance, 26) ?? snap.instance) : 'no status'
         const dim = selected ? selected !== n.id : false
         const existingData = existing?.data
-        const nextData: FlowNodeData = { title: n.label, subtitle, dim }
+        const nextData: SwarmTopologyNodeData = { title: n.label, subtitle, dim }
         return {
           id: n.id,
           type: 'worker',
           position,
           data: existingData && existingData.title === nextData.title && existingData.subtitle === nextData.subtitle && existingData.dim === nextData.dim ? existingData : nextData,
-        } satisfies Node<FlowNodeData>
+        } satisfies SwarmTopologyFlowNode
       })
     })
 
     setFlowEdges(() => {
       return graph.edges.map((e) => {
-        const depth = e.depth ?? 0
-        const stroke = depth > 0 ? 'rgba(255, 95, 95, 0.85)' : 'rgba(51, 225, 255, 0.7)'
-        const strokeWidth = 1.5 + Math.log(depth + 1)
-        const dim = selected ? (e.from === selected || e.to === selected ? 1 : 0.25) : 1
         return {
           id: e.id,
           source: e.from,
           target: e.to,
           type: 'smoothstep',
           animated: false,
-          markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
-          style: { stroke, strokeWidth, opacity: dim },
+          data: { depth: e.depth ?? 0 },
           label: e.label,
-          labelStyle: { fill: 'rgba(255,255,255,0.8)', fontSize: 11 },
-          labelBgStyle: { fill: 'rgba(0,0,0,0.55)', stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 },
-          labelBgPadding: [6, 3],
-          labelBgBorderRadius: 6,
-        } satisfies Edge
+        } satisfies SwarmTopologyFlowEdge
       })
     })
   }, [graph, selectedNodeId, snapshotsByRole])
@@ -852,33 +811,16 @@ export function SwarmViewPage() {
             </div>
           </div>
 
-          <div className="card swarmViewCanvas">
-            <div className="row between" style={{ marginBottom: 8 }}>
-              <div className="h2">Topology</div>
-              <div className="muted" title="Logical topology from Scenario Manager; edge style uses live queue stats when available.">
-                {flowEdges.length} edge(s)
-              </div>
-            </div>
-
-            <div className="swarmGraphSurface" role="img" aria-label="Swarm topology view">
-              <ReactFlow
-                nodes={flowNodes}
-                edges={flowEdges}
-                nodeTypes={nodeTypes}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onInit={onFlowInit}
-                minZoom={0.2}
-                maxZoom={2.4}
-                onNodeClick={(_event, node) => setSelectedNodeId((prev) => (prev === node.id ? null : node.id))}
-                onNodeDragStop={(_event, node) => persistNodePosition(node.id, node.position)}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Background />
-                <Controls />
-              </ReactFlow>
-            </div>
-          </div>
+          <SwarmTopologyCanvas
+            nodes={flowNodes}
+            edges={flowEdges}
+            selectedNodeId={selectedNodeId}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onInit={onFlowInit}
+            onSelectNode={(id) => setSelectedNodeId((prev) => (prev === id ? null : id))}
+            onNodePositionChange={persistNodePosition}
+          />
         </div>
       )}
 
