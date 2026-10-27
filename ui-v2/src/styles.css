@@ -445,7 +445,7 @@
 }
 
 .warningText {
-  color: #f8c15c;
+  color: var(--status-warning);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -2615,7 +2615,7 @@ select.tapIoSelect optgroup {
 .scenarioValidationFinding {
   border: 1px solid var(--border2);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.16);
+  background: var(--panel2);
   padding: 8px;
   font-size: 12px;
 }
@@ -2629,7 +2629,13 @@ select.tapIoSelect optgroup {
 }
 
 .scenarioValidationWarning {
-  color: rgba(255, 218, 120, 0.92);
+  color: var(--status-warning);
+  font-weight: 600;
+}
+
+.scenarioValidationError {
+  color: var(--status-error);
+  font-weight: 600;
 }
 
 .scenarioWorkspaceActions {
@@ -3176,7 +3182,7 @@ select.tapIoSelect optgroup {
 }
 
 .wireLogStatus.bad {
-  color: rgba(255, 95, 95, 0.9);
+  color: var(--status-error);
 }
 
 .wireLogOrigin {
@@ -3476,7 +3482,7 @@ select.tapIoSelect optgroup {
   border: 1px solid rgba(255, 93, 93, 0.28);
   border-radius: 8px;
   background: rgba(255, 93, 93, 0.08);
-  color: #ffb4b4;
+  color: var(--status-error);
   padding: 10px 12px;
   margin-top: 10px;
   font-size: 12px;
@@ -3876,7 +3882,7 @@ select.tapIoSelect optgroup {
 .loginError {
   border: 1px solid rgba(255, 111, 111, 0.35);
   background: rgba(255, 111, 111, 0.08);
-  color: #ffb8b8;
+  color: var(--status-error);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 12px;

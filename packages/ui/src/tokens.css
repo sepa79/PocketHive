@@ -13,6 +13,7 @@
   --accent: rgba(51, 225, 255, 0.75);
   --status-success: #69d391;
   --status-error: #ff7b7b;
+  --status-warning: #ffda78;
   --font-ui: Inter, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   --nav-header-height: 40px;
   --app-header-height: 52px;
@@ -53,6 +54,7 @@
   --accent: rgba(20, 120, 210, 0.85);
   --status-success: #147a3d;
   --status-error: #c62828;
+  --status-warning: #6b4600;
   --header-bg: rgba(255, 255, 255, 0.9);
   --rail-bg: rgba(255, 255, 255, 0.92);
   --nav-heading-text: rgba(10, 20, 30, 0.6);

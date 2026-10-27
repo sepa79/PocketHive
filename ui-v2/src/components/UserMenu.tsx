@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
-import { getTheme, setTheme, type Theme } from '../lib/theme'
+import { setTheme, type Theme } from '../lib/theme'
+import { useTheme } from '../lib/useTheme'
 import { useAuth } from '../lib/authContext'
 
+/**
+ * Responsibility: present account actions and the applied application theme.
+ * Must not: own authentication or an independent theme preference.
+ * Contract: RESP-POCKET-UI-SHELL — docs/architecture/runtime-responsibilities.md#resp-pocket-ui-shell.
+ */
 export function UserMenu() {
   const navigate = useNavigate()
   const auth = useAuth()
   const [open, setOpen] = useState(false)
-  const [theme, setThemeState] = useState<Theme>(() => getTheme())
+  const theme = useTheme()
   const rootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -30,12 +36,7 @@ export function UserMenu() {
     }
   }, [])
 
-  const nextTheme = useMemo<Theme>(() => (theme === 'dark' ? 'light' : 'dark'), [theme])
-
-  const applyTheme = (t: Theme) => {
-    setTheme(t)
-    setThemeState(t)
-  }
+  const nextTheme: Theme = theme === 'dark' ? 'light' : 'dark'
 
   return (
     <div className="menuRoot" ref={rootRef}>
@@ -66,7 +67,7 @@ export function UserMenu() {
             </div>
           </div>
           <div className="menuSep" role="separator" />
-          <button type="button" className="menuItem" role="menuitem" onClick={() => applyTheme(nextTheme)}>
+          <button type="button" className="menuItem" role="menuitem" onClick={() => setTheme(nextTheme)}>
             Theme: <span className="menuItemValue">{theme}</span>
           </button>
           <div className="menuSep" role="separator" />

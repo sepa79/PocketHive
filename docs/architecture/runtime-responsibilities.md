@@ -4591,6 +4591,12 @@ authentication, permissions, domain menus, persistence and API calls must not mo
 into the shared package. Consumers explicitly supply their own slots and state;
 there is no shared application store or automatic permission inference.
 
+PH `lib/theme.ts` owns theme bootstrap, the applied root `data-theme` and the
+best-effort persisted preference. `useTheme` is its read-only React projection;
+`useMonacoTheme` maps that projection for editors. Account controls request changes
+through the same writer; editors and topology presentation must not maintain
+independent theme state or select a fixed theme.
+
 Verification: shared component interaction tests cover controlled collapse/expand,
 accessible links, slot placement and independent consumer state. PH component
 integration tests cover its persisted navigation preference and unchanged menu
@@ -4598,3 +4604,20 @@ selection. Production and plugin UI builds consume the same source package.
 This slice transfers only shell presentation; domain widgets and auth remain with
 their existing owners. The package is consumed from its repository path, not copied
 into each application.
+
+## RESP-UI-SWARM-TOPOLOGY-PRESENTATION
+
+`SwarmTopologyCanvas` owns the compact swarm graph's ReactFlow presentation,
+native graph controls and theme-derived edge/label palette. `SwarmTopologyNode`
+renders the existing worker-node projection; `SwarmTopologyModel` holds their
+shared presentation types. These are read-only projections of the page's graph
+and the applied theme owned by `lib/theme.ts`.
+
+`SwarmViewPage` retains API/control-plane observations, graph semantics, selection
+and persisted positions. The canvas reports user interaction to that owner; it
+must not fetch runtime state, choose adapters, persist positions, alter lifecycle
+state or maintain a separate theme writer. Existing saved positions are retained.
+
+Verification covers graph theme changes without remounting, native controls and
+node/edge interaction, plus local browser checks of controls, arrowheads and edge
+captions in both themes through the official UI ingress.

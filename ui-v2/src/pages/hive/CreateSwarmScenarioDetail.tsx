@@ -2,6 +2,7 @@ import { useId, useState, type KeyboardEvent } from 'react'
 import { BundleFileTree } from '../../components/scenarios/BundleFileTree'
 import { MonacoEditorHost } from '../../components/MonacoEditorHost'
 import { monacoLanguageForBundleFile } from '../../lib/bundleEditor'
+import { useMonacoTheme } from '../../lib/useMonacoTheme'
 import type { BundleFilePayload, BundleTemplateEntry, BundleTreeNode } from '../../lib/scenariosApi'
 import styles from './CreateSwarmDialog.module.css'
 
@@ -33,6 +34,7 @@ export function CreateSwarmScenarioDetail({
   fileError: string | null
   onSelectFile: (path: string) => void
 }) {
+  const monacoTheme = useMonacoTheme()
   const [tab, setTab] = useState<DetailTab>('files')
   const id = useId()
 
@@ -138,7 +140,7 @@ export function CreateSwarmScenarioDetail({
                     className="monacoSurface"
                     value={selectedFile.content}
                     language={monacoLanguageForBundleFile(selectedFile.editorKind)}
-                    theme="vs-dark"
+                    theme={monacoTheme}
                     options={{
                       readOnly: true,
                       automaticLayout: true,

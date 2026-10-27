@@ -9,6 +9,7 @@ import { MonacoEditorHost } from '../components/MonacoEditorHost'
 import { ScenarioWorkspaceTree } from '../components/scenarios/ScenarioWorkspaceTree'
 import { useAuth } from '../lib/authContext'
 import { monacoLanguageForBundleFile } from '../lib/bundleEditor'
+import { useMonacoTheme } from '../lib/useMonacoTheme'
 import {
   type BundleValidationResult,
   type BundleFilePayload,
@@ -66,6 +67,7 @@ type BundleValidationPanelState = {
  */
 export function ScenariosPage() {
   const auth = useAuth()
+  const monacoTheme = useMonacoTheme()
   const operations = useAccessObservation(auth.user, auth.session?.accessToken ?? null, scenarioOperationsAccessApi, auth.canAccessPocketHive)
   const canReload = operations.value?.canReload === true
   const canUpload = operations.value?.canUpload === true
@@ -644,7 +646,7 @@ export function ScenariosPage() {
                             className="scenarioValidationFinding"
                           >
                             <div className="scenarioValidationFindingHeader">
-                              <span className={finding.severity === 'error' ? 'warningText' : 'scenarioValidationWarning'}>
+                              <span className={finding.severity === 'error' ? 'scenarioValidationError' : 'scenarioValidationWarning'}>
                                 {finding.severity}
                               </span>
                               <span className="mono">{finding.code}</span>
@@ -710,7 +712,7 @@ export function ScenariosPage() {
                         className="monacoSurface"
                         value={fileDraft}
                         language={monacoLanguageForBundleFile(selectedFile.editorKind)}
-                        theme="vs-dark"
+                        theme={monacoTheme}
                         onChange={(value) => setFileDraft(value ?? '')}
                         options={{
                           readOnly: !canManageSelected,

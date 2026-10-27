@@ -8,10 +8,7 @@ import {
 import type { ControlPlaneEnvelope } from '../lib/controlPlane/types'
 import { useToolsBar } from '../components/ToolsBarContext'
 import { MonacoEditorHost } from '../components/MonacoEditorHost'
-
-function resolveMonacoTheme() {
-  return document.documentElement.dataset.theme === 'light' ? 'vs' : 'vs-dark'
-}
+import { useMonacoTheme } from '../lib/useMonacoTheme'
 
 function formatFileName() {
   const now = new Date()
@@ -34,6 +31,7 @@ function downloadJsonl() {
 }
 
 export function WireLogPage() {
+  const monacoTheme = useMonacoTheme()
   const [entries, setEntries] = useState<WireLogEntry[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tail, setTail] = useState(true)
@@ -62,15 +60,6 @@ export function WireLogPage() {
     if (!list || !tail) return
     list.scrollTop = list.scrollHeight
   }, [entries, tail])
-
-  useEffect(() => {
-    const root = document.documentElement
-    const observer = new MutationObserver(() => {
-      setMonacoTheme(resolveMonacoTheme())
-    })
-    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => observer.disconnect()
-  }, [])
 
   const ordered = useMemo(() => [...entries], [entries])
   const filtered = useMemo(
@@ -122,7 +111,6 @@ export function WireLogPage() {
     [entries, selectedId],
   )
   const payloadText = selectedEntry ? prettyPayload(selectedEntry.payload) : ''
-  const [monacoTheme, setMonacoTheme] = useState(resolveMonacoTheme)
   const toolsBar = useMemo(
     () => (
       <div className="pageToolsBarContent">
