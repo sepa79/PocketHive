@@ -1,0 +1,27 @@
+{
+  "mode": "Built-in image_gen",
+  "references": "Four images supplied in the conversation: white MCP slide, dark HiveForge slide, original NFT van, piShowcase title.",
+  "assets": [
+    {
+      "key": "van-cutout",
+      "prompt": "Use case: background-extraction. Create a reusable PocketHive presentation asset from the ORIGINAL square NFT van reference in the user's four attached images. Other images are style references only. Isolate that exact black vintage van, preserving front-right three-quarter view, red diagonal stripe, red wheel trim, proportions, grille, and exact side lettering THE N TEAM NFT. Refine only illumination with restrained purple/cyan rim highlights matching the old night slides. Entire van including wheels visible, generous clear margin. GENUINELY TRANSPARENT alpha background, no floor, no city, no backdrop, no checkerboard baked into image. High resolution polished illustration. One van only. Do not add logos, people or captions."
+    },
+    {
+      "key": "robot-cutout",
+      "prompt": "Use case: stylized-concept. Asset type: isolated PocketHive presentation mascot. Reference the chrome cylindrical floating robot in the user's first old MCP slide, preserve its recognizable polished cylindrical body, black glass face with expressive cyan eyes and smiling mouth, articulated metal hands, purple cape with fine gold trim and gold hexagonal pendant with a small red central lens. Full body at slight three-quarter angle, welcoming explaining pose with one hand gesturing outward. No admiral hat, drink or dinosaur. Strong clean silhouette and restrained cyan propulsion glow. GENUINELY TRANSPARENT alpha background, no floor, no text, no panel, no city, no checkerboard baked in. One polished premium 3D mascot, all parts inside frame with ample margin."
+    },
+    {
+      "key": "background-night",
+      "prompt": "Use case: ads-marketing. Asset type: reusable 16:9 PocketHive presentation background, 1536x864 or larger exact 16:9. Reference the user's dark PocketHive/HiveForge slides and original NFT van. Cinematic near-black midnight scene with subtle purple/cyan distant city lights only along the far right edge and very bottom, wet asphalt reflections and a faint amber trail toward the horizon. LOWER RIGHT contains the recognizable black NFT van with red diagonal stripe and red wheel trim, faithfully matching the original reference proportions and exact THE N TEAM NFT side branding, occupies about 30 percent width. Left 62 percent and upper 20 percent remain quiet deep ink negative space for editable slide copy. No robot, no dinosaur, no UI panels, no titles, no other typography, no invented branding. Elegant controlled contrast, honey gold #FFC107 secondary highlights, purple #8B5CF6 cyan #36DFFF accents, premium cinematic illustration."
+    },
+    {
+      "key": "background-day",
+      "prompt": "Use case: productivity-visual. Asset type: reusable exact 16:9 PocketHive light presentation background, 1536x864 or larger exact 16:9. Reference the user's FIRST white MCP slide for the airy white/lavender palette and faint network corner graphics. Empty beautiful pearl-white canvas, very faint cool lavender bloom and delicate hexagonal connected node pattern only in upper-right and lower-left corners, a subtle tiny honey gold accent in one corner. Keep center and left 75 percent very clean for dark text, no objects, no mascot, no vehicle, no logos, no text, no boxes, no visible watermark. Premium minimal technical editorial background. This should pair with dark cyberpunk slides through tiny cyan/purple accents, not look like a different brand."
+    }
+  ],
+  "additionalIteration": {
+    "prompt": "Use case: background-extraction. Edit this van image ONLY to remove ALL background, black floor and purple/cyan atmospheric halo. Preserve the van itself exactly including all lettering, wheels, red stripe, grille and its rim lighting. Output actual transparent alpha pixels everywhere outside the van, including between wheels and underneath body. No black backdrop, no white backdrop, no checkerboard graphic, no drop shadow. This is a PNG cutout for arbitrary slide backgrounds.",
+    "selected": false,
+    "note": "Initial van output already had valid alpha; first variant retained."
+  }
+}
