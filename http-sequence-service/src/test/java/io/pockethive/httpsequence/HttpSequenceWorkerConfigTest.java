@@ -1,10 +1,13 @@
 package io.pockethive.httpsequence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.requesttemplates.HttpSequenceStep;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class HttpSequenceWorkerConfigTest {
@@ -30,6 +33,17 @@ class HttpSequenceWorkerConfigTest {
       assertThat(step.sutEndpointId()).isNull();
       assertThat(step.baseUrl()).isNull();
     });
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"baseUrl", "templateRoot", "serviceId"})
+  void rejectsMissingRequiredTextFieldsDuringConfigBinding(String field) {
+    ObjectNode document = mapper.valueToTree(config(step(null, null)));
+    document.remove(field);
+
+    assertThatThrownBy(() -> mapper.treeToValue(document, HttpSequenceWorkerConfig.class))
+        .hasRootCauseInstanceOf(IllegalArgumentException.class)
+        .hasRootCauseMessage(field + " is required");
   }
 
   @Test

@@ -65,14 +65,6 @@ public record HttpSequenceWorkerConfig(
     return threadCount;
   }
 
-
-
-
-
-
-
-
-
   public enum DebugCaptureMode {
     NONE,
     ERROR_ONLY,
@@ -118,10 +110,6 @@ public record HttpSequenceWorkerConfig(
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static String trim(String value) {
-    return value == null ? null : value.trim();
   }
 
   private static void validateStepTarget(HttpSequenceStep step, int index) {
