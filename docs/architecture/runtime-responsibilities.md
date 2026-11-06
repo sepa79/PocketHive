@@ -64,11 +64,11 @@ Worker functions and transport codecs use the same item model; payload JSON conv
 
 WorkItemJsonCodec owns the Work envelope encode/decode boundary; its package-private WorkItemSchemaValidator performs schema validation.
 
-RabbitWorkItemConverter calls the codec; packaged docs/spec/workitem-envelope.schema.json remains the wire authority. Redis payload capture is not a consumer of this envelope codec.
+RabbitWorkItemConverter and ArtemisWorkInputChannel call the codec; packaged docs/spec/workitem-envelope.schema.json remains the wire authority. Redis payload capture is not a consumer of this envelope codec.
 
 **Forbidden:** load a runtime schema from a configurable filesystem path or create another envelope codec.
 
-**Required effect:** Valid envelopes round-trip through one codec; invalid wire documents and missing packaged schema fail explicitly.
+**Required effect:** Accept exactly one JSON envelope, allowing trailing whitespace but rejecting trailing documents/text and duplicate properties at every envelope nesting level before schema validation. Step payload strings remain opaque, including JSON/XML-looking contents. Valid envelopes round-trip through one codec; invalid wire documents and missing packaged schema fail explicitly.
 
 **Verification entrypoints:** `WorkItemJsonCodecTest`.
 
