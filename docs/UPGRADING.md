@@ -7,6 +7,37 @@ and commands live in `docs/ai/SCENARIO_CONFIG_MIGRATION_GUIDE.md`.
 PocketHive does not implicitly accept legacy contract shapes. Complete the
 documented migration before deploying a release that removes an old shape.
 
+## 0.15.39 (from 0.15.38)
+
+Scenario Protocol remains version 2. Existing `scenario.yaml` configuration and
+interpolation syntax remain supported; no `configBindings` migration is required.
+No new deployment inputs are introduced.
+
+### Reserved template variable context
+
+`vars` is reserved for the variable context in Pebble templates. Rename any local
+variable, loop binding, macro name or parameter, import alias or block named
+`vars`, for example to `data`. Such declarations now fail compilation during
+validation and execution. Reads such as `{{ vars.customerId }}` and
+`{{ vars['customerId'] }}` remain supported; missing and optional variables retain
+their existing semantics. See [templating basics](guides/templating-basics.md).
+
+### Strict JSON boundaries
+
+JSON request-template files must contain exactly one JSON document. Remove any extra
+JSON value or trailing non-whitespace text. Portable calls with numeric `callId`
+now receive the same validation as calls with string IDs; correct any newly
+reported portable-template findings before running the scenario.
+
+WorkItem producers must send one JSON envelope with unique property names at
+all nesting levels. Remove duplicate properties and trailing JSON documents or
+text. Trailing whitespace is allowed, and strings containing payload data remain
+opaque. This does not impose JSON parsing on string payloads.
+
+After these corrections, validate affected bundles through the official Scenario
+Manager ingress before launching them. Use matching service and worker images
+from the selected build.
+
 ## 0.15.38 (from 0.15.37)
 
 ### Deployment and sign-in
