@@ -1,13 +1,15 @@
 package io.pockethive.httpsequence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 class HttpSequenceWorkerConfigTest {
 
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
@@ -33,9 +35,20 @@ class HttpSequenceWorkerConfigTest {
     });
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"baseUrl", "templateRoot", "serviceId"})
+  void rejectsMissingRequiredTextFieldsDuringConfigBinding(String field) {
+    ObjectNode document = mapper.valueToTree(config(step(null, null)));
+    document.remove(field);
+
+    assertThatThrownBy(() -> mapper.treeToValue(document, HttpSequenceWorkerConfig.class))
+        .hasRootCauseInstanceOf(IllegalArgumentException.class)
+        .hasRootCauseMessage(field + " is required");
+  }
+
   @Test
   void retainsExistingSevenArgumentStepConstructor() {
-    HttpSequenceWorkerConfig.Step step = new HttpSequenceWorkerConfig.Step(
+    HttpSequenceStep step = new HttpSequenceStep(
         "one", "call", null, false, null, List.of(), List.of());
 
     assertThat(step.sutEndpointId()).isNull();
@@ -44,7 +57,7 @@ class HttpSequenceWorkerConfigTest {
 
   @Test
   void rejectsBothStepOverridesWithIndexedFieldPath() {
-    HttpSequenceWorkerConfig.Step step = step("accounts", "http://literal:8080");
+    HttpSequenceStep step = step("accounts", "http://literal:8080");
 
     assertThatThrownBy(() -> config(step))
         .isInstanceOf(IllegalArgumentException.class)
@@ -88,11 +101,11 @@ class HttpSequenceWorkerConfigTest {
     assertThat(debugCapture(1.1).samplePct()).isEqualTo(1.0);
   }
 
-  private HttpSequenceWorkerConfig config(HttpSequenceWorkerConfig.Step step) {
+  private HttpSequenceWorkerConfig config(HttpSequenceStep step) {
     return config(1, step);
   }
 
-  private HttpSequenceWorkerConfig config(int threadCount, HttpSequenceWorkerConfig.Step step) {
+  private HttpSequenceWorkerConfig config(int threadCount, HttpSequenceStep step) {
     return new HttpSequenceWorkerConfig(
         "http://worker:8080", "/templates", "customers", threadCount, List.of(step),
         HttpSequenceWorkerConfig.DebugCapture.defaults(), Map.of());
@@ -110,8 +123,8 @@ class HttpSequenceWorkerConfigTest {
         1);
   }
 
-  private static HttpSequenceWorkerConfig.Step step(String sutEndpointId, String baseUrl) {
-    return new HttpSequenceWorkerConfig.Step(
+  private static HttpSequenceStep step(String sutEndpointId, String baseUrl) {
+    return new HttpSequenceStep(
         "one", "call", null, false, null, List.of(), List.of(), sutEndpointId, baseUrl);
   }
 }

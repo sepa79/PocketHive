@@ -1,6 +1,8 @@
 package io.pockethive.clearingexport;
 
 import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.templating.sources.ClearingStructuredTemplateSources;
+import io.pockethive.templating.sources.ClearingTemplateSources;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -10,7 +12,6 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
 @Component
 /**
  * Responsibility: assemble clearing file content/name through templates and XML formatting.
@@ -54,15 +55,18 @@ class ClearingExportFileAssembler {
   }
 
   String renderTemplateHeader(ClearingExportWorkerConfig config, Instant now, int recordCount) {
-    return templateRenderer.render(config.headerTemplate(), templateBaseContext(now, recordCount));
+    return templateRenderer.render(new ClearingTemplateSources(
+        config.fileNameTemplate(), config.headerTemplate(), config.recordTemplate(), config.footerTemplate()).headerTemplate(), templateBaseContext(now, recordCount));
   }
 
   String renderTemplateFooter(ClearingExportWorkerConfig config, Instant now, int recordCount) {
-    return templateRenderer.render(config.footerTemplate(), templateBaseContext(now, recordCount));
+    return templateRenderer.render(new ClearingTemplateSources(
+        config.fileNameTemplate(), config.headerTemplate(), config.recordTemplate(), config.footerTemplate()).footerTemplate(), templateBaseContext(now, recordCount));
   }
 
   String renderTemplateFileName(ClearingExportWorkerConfig config, Instant now, int recordCount) {
-    return templateRenderer.render(config.fileNameTemplate(), templateBaseContext(now, recordCount));
+    return templateRenderer.render(new ClearingTemplateSources(
+        config.fileNameTemplate(), config.headerTemplate(), config.recordTemplate(), config.footerTemplate()).fileNameTemplate(), templateBaseContext(now, recordCount));
   }
 
   ClearingRenderedFile assembleStructured(
@@ -80,9 +84,11 @@ class ClearingExportFileAssembler {
       baseContext.put("recordCount", recordCount);
       baseContext.put("totals", totals);
 
-      Map<String, String> header = renderMapping(schema.headerMapping(), baseContext);
-      Map<String, String> footer = renderMapping(schema.footerMapping(), baseContext);
-      String fileName = templateRenderer.render(schema.fileNameTemplate(), baseContext);
+      var sources = new ClearingStructuredTemplateSources(
+          schema.fileNameTemplate(), schema.headerMapping(), schema.footerMapping(), Map.of());
+      Map<String, String> header = renderMapping(sources.headerMapping(), baseContext);
+      Map<String, String> footer = renderMapping(sources.footerMapping(), baseContext);
+      String fileName = templateRenderer.render(sources.fileNameTemplate(), baseContext);
       String payload = xmlOutputFormatter.format(schema, header, records, footer);
       return new ClearingRenderedFile(fileName, payload, recordCount, now);
     } catch (RuntimeException ex) {

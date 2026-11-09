@@ -1,11 +1,11 @@
 package io.pockethive.clearingexport;
 
 import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.templating.sources.ClearingStructuredTemplateSources;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
-
 @Component
 /**
  * Responsibility: map and validate configured fields for one structured clearing record.
@@ -30,10 +30,14 @@ class StructuredRecordProjector {
     Map<String, String> values = new LinkedHashMap<>();
     Map<String, Double> numericValues = new LinkedHashMap<>();
 
+    Map<String, String> expressions = new LinkedHashMap<>();
+    schema.recordMapping().forEach((key, rule) -> expressions.put(key, rule.expression()));
+    var sources = new ClearingStructuredTemplateSources(
+        schema.fileNameTemplate(), schema.headerMapping(), schema.footerMapping(), expressions);
     for (Map.Entry<String, ClearingStructuredSchema.StructuredFieldRule> entry : schema.recordMapping().entrySet()) {
       String fieldName = entry.getKey();
       ClearingStructuredSchema.StructuredFieldRule rule = entry.getValue();
-      String rendered = templateRenderer.render(rule.expression(), context);
+      String rendered = templateRenderer.render(sources.recordExpressions().get(fieldName), context);
       String normalized = normalize(rendered);
 
       if (normalized == null) {

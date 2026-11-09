@@ -73,6 +73,7 @@ class ClearingExportAcceptanceIT {
         String sut = run.scenarios.readSutRaw(run.target.fixture().templateId(), sutId);
         run.scenarios.writeSutRaw(scenario.id(), sutId, sut);
         assertEquals(sut, run.scenarios.readSutRaw(scenario.id(), sutId));
+        if (structured) run.scenarios.reload();
         try {
           swarm.create(SwarmCreateRequest.of(scenario.id(), UUID.randomUUID().toString(), false,
               sutId, null, NetworkMode.DIRECT, null));

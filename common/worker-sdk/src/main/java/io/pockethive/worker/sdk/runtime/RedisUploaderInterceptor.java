@@ -1,13 +1,14 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.work.api.WorkItem;
 import io.pockethive.redis.config.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisOutputTemplateSources;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.templating.sources.InvocationTemplateSources;
+import io.pockethive.work.api.WorkItem;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 /**
  * {@link WorkerInvocationInterceptor} that appends payloads to Redis lists. Configuration lives
  * under {@code interceptors.redisUploader} and the interceptor stays dormant unless
@@ -22,13 +23,11 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
 
     private static final RedisConfigurationParser CONFIGURATION = new RedisConfigurationParser();
     private static final Logger log = LoggerFactory.getLogger(RedisUploaderInterceptor.class);
-    private static final String FIELD_ENABLED = "enabled";
     private static final String FIELD_PHASE = "phase";
     private static final String FIELD_SOURCE_STEP = "sourceStep";
     private static final String FIELD_PUSH_DIRECTION = "pushDirection";
     private static final String FIELD_ROUTES = "routes";
     private static final String FIELD_DEFAULT_LIST = "defaultList";
-    private static final String FIELD_TARGET_LIST_TEMPLATE = "targetListTemplate";
     private static final String FIELD_MAX_LEN = "maxLen";
 
     private final RedisPushSupport pushSupport;
@@ -77,19 +76,10 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
     }
 
     private ResolvedConfig resolveConfig(Map<String, Object> rawConfig) {
-        if (rawConfig == null || rawConfig.isEmpty()) {
-            return null;
-        }
-        Object interceptorsObj = rawConfig.get("interceptors");
-        if (!(interceptorsObj instanceof Map<?, ?> interceptors)) {
-            return null;
-        }
-        Object uploaderObj = interceptors.get("redisUploader");
-        if (!(uploaderObj instanceof Map<?, ?> uploaderMap)) {
-            return null;
-        }
+        Map<?, ?> uploaderMap = InvocationTemplateSources.redisUploader(rawConfig);
+        if (uploaderMap.isEmpty()) return null;
 
-        boolean enabled = resolveEnabled(uploaderMap);
+        boolean enabled = InvocationTemplateSources.uploaderEnabled(uploaderMap);
         if (!enabled) {
             return null;
         }
@@ -99,7 +89,7 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
         var settings = CONFIGURATION.parseRedisWriteSettings(uploaderMap.get(FIELD_SOURCE_STEP),
             uploaderMap.get(FIELD_PUSH_DIRECTION), uploaderMap.get(FIELD_MAX_LEN), "interceptors.redisUploader");
         var targets = CONFIGURATION.parseRedisOutputTargets(uploaderMap.get(FIELD_ROUTES),
-            uploaderMap.get(FIELD_DEFAULT_LIST), uploaderMap.get(FIELD_TARGET_LIST_TEMPLATE), "interceptors.redisUploader");
+            uploaderMap.get(FIELD_DEFAULT_LIST), RedisOutputTemplateSources.value(uploaderMap), "interceptors.redisUploader");
 
         io.pockethive.worker.sdk.runtime.RedisPushRequest request = new io.pockethive.worker.sdk.runtime.RedisPushRequest(
             connection,
@@ -119,29 +109,6 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
             throw invalidField(field, "must not be blank");
         }
         return value;
-    }
-
-    private static boolean requireBoolean(Map<?, ?> map, String field) {
-        Object raw = requirePresent(map, field);
-        if (raw instanceof Boolean value) {
-            return value;
-        }
-        if (raw instanceof String text) {
-            if ("true".equalsIgnoreCase(text.trim())) {
-                return true;
-            }
-            if ("false".equalsIgnoreCase(text.trim())) {
-                return false;
-            }
-        }
-        throw invalidField(field, "must be true or false");
-    }
-
-    private static boolean resolveEnabled(Map<?, ?> map) {
-        if (!map.containsKey(FIELD_ENABLED)) {
-            return false;
-        }
-        return requireBoolean(map, FIELD_ENABLED);
     }
 
     private static <E extends Enum<E>> E requireEnum(Map<?, ?> map, String field, Class<E> enumType) {

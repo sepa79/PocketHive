@@ -1,12 +1,5 @@
 package io.pockethive.scenarios.validation;
 
-
-
-import io.pockethive.work.config.WorkConfigurationParser;
-import io.pockethive.work.config.WorkConfigurationFields;
-import io.pockethive.templating.api.DisabledSequenceAccess;
-import io.pockethive.templating.api.TemplateSyntaxValidator;
-
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,6 +8,9 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityConfigType;
 import io.pockethive.capabilities.CapabilityManifest;
+import io.pockethive.requesttemplates.PortableHttpCall;
+import io.pockethive.requesttemplates.RequestTemplateDocumentReader;
+import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.scenarios.Scenario;
 import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.scenarios.ScenarioVariableDefinition;
@@ -26,36 +22,33 @@ import io.pockethive.scenarios.VariablesDocument;
 import io.pockethive.scenarios.VariablesValidationResult;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BeeRoles;
-import io.pockethive.swarm.model.OutcomeHeaders;
 import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Topology;
 import io.pockethive.swarm.model.TopologyEdge;
 import io.pockethive.swarm.model.TopologyEndpoint;
+import io.pockethive.work.config.WorkConfigurationFields;
+import io.pockethive.work.config.WorkConfigurationParser;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
-import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.api.TemplateRenderingException;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,7 +59,7 @@ import org.springframework.stereotype.Component;
  * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
  * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
  * Work diagnostics delegate to the injected neutral parser and its selected providers.
- * Auth profile storage diagnostics delegate to AuthProfileStorageFindings and shared auth contracts.
+ * Auth profile diagnostics delegate to ScenarioAuthProfileFindings and shared auth contracts.
  * Uses RESP-SCENARIO-BUNDLE-LAYOUT — docs/architecture/runtime-responsibilities.md#resp-scenario-bundle-layout for paths.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
  * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
@@ -77,13 +70,10 @@ public final class ScenarioBundleValidator {
     private enum StructuredFormat { JSON, YAML }
 
     private static final Logger logger = LoggerFactory.getLogger(ScenarioBundleValidator.class);
-    private static final Pattern VAR_REFERENCE_PATTERN =
-        Pattern.compile("\\bvars\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
     private static final String TEMPLATE_ROOT_CONFIG_KEY = "templateRoot";
     private static final String SERVICE_ID_CONFIG_KEY = "serviceId";
     private static final String WORKER_CONFIG_KEY = "worker";
     private static final String LEGACY_POCKETHIVE_CONFIG_KEY = "pockethive";
-    private static final String CALL_ID_CONFIG_KEY = "callId";
     private static final String INPUT_IO_SCOPE = "INPUT";
     private static final String OUTPUT_IO_SCOPE = "OUTPUT";
     private static final String INPUT_CONFIG_ROOT = "inputs";
@@ -94,8 +84,11 @@ public final class ScenarioBundleValidator {
     private static final String TEMPLATE_EXPRESSION_OPEN = "{{";
     private static final String TEMPLATE_EXPRESSION_CLOSE = "}}";
     private final WorkConfigurationFindings workConfigurationFindings;
+    private final RequestTemplateDocumentReader templateDocuments =
+        new RequestTemplateDocumentReader();
     private final RequestTemplateFindings requestTemplateFindings = new RequestTemplateFindings();
-    private final AuthProfileStorageFindings authProfileStorageFindings = new AuthProfileStorageFindings();
+    private final ScenarioRequestReferences requestReferences = new ScenarioRequestReferences(requestTemplateFindings);
+    private final ScenarioAuthProfileFindings authProfiles = new ScenarioAuthProfileFindings(requestTemplateFindings);
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -106,7 +99,8 @@ public final class ScenarioBundleValidator {
     private final CapabilityCatalogueService capabilities;
     private final String defaultImageTag;
     private final String scenarioManagerVersion;
-    private final TemplateSyntaxValidator templateSyntaxValidator = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
+    private final ScenarioAdditionalTemplateSources additionalTemplateSources = new ScenarioAdditionalTemplateSources();
+    private final ScenarioConfigurationTemplateSources configurationTemplateSources = new ScenarioConfigurationTemplateSources();
 
     public ScenarioBundleValidator(
         CapabilityCatalogueService capabilities,
@@ -160,8 +154,8 @@ public final class ScenarioBundleValidator {
             descriptorPrerequisiteFailure(resolved).ifPresent(reason -> findings.add(defunctFinding(reason)));
         }
         expectedScenarioIdFinding(scenarioId, input.expectedScenarioId()).ifPresent(findings::add);
-        findings.addAll(validateScenarioTemplateSyntax(resolved));
-        findings.addAll(validateScenarioConfigShape(resolved));
+        ScenarioTemplateAnalysis analysis = new ScenarioTemplateAnalysis();
+        findings.addAll(validateScenarioConfigShape(resolved, analysis));
 
         if (bundleRoot != null && Files.isDirectory(bundleRoot) && scenarioId != null && !scenarioId.isBlank()) {
             try {
@@ -169,10 +163,28 @@ public final class ScenarioBundleValidator {
             } catch (IllegalArgumentException e) {
                 findings.add(findingForException(e));
             }
-            TemplateValidationResult templates = validateTemplates(resolved, bundleRoot);
+            // Encoding admission is independent of executable-template discovery.
+            for (String relativePath : bundleValidationTextFiles(bundleRoot)) {
+                try { readBundleText(bundleRoot, bundleRoot.resolve(relativePath)); }
+                catch (BundleValidationFailure failure) { findings.add(findingForException(failure)); }
+            }
+            List<String> requestRoots = templateConsumers(resolved).stream()
+                .map(consumer -> bundleRelativeTemplateRoot(consumer, new ArrayList<>()))
+                .flatMap(Optional::stream).toList();
+            List<TemplateSource> templateSources = readBundleTemplateSources(bundleRoot, requestRoots, findings, analysis);
+            TemplateValidationResult templates = validateTemplates(resolved, bundleRoot, templateSources);
             findings.addAll(templates.findings());
-            findings.addAll(validateVariableReferences(bundleRoot));
-            findings.addAll(validateAuthContracts(bundleRoot));
+            Map<String, Map<?, ?>> documents = new LinkedHashMap<>();
+            templateSources.forEach(source -> documents.put(source.relativePath(), source.document()));
+            additionalTemplateSources.collect(resolved, bundleRoot, new LinkedHashMap<>(documents), this::workerRole, file -> {
+                try { return readStructuredMap(file); }
+                catch (IOException failure) { throw new java.io.UncheckedIOException(failure); }
+            }, analysis, findings);
+            findings.addAll(authProfiles.validate(bundleRoot, requestRoots, documents, file -> {
+                try { return readStructuredMap(file); }
+                catch (IOException failure) { throw new java.io.UncheckedIOException(failure); }
+            }, analysis));
+            findings.addAll(validateVariableReferences(bundleRoot, analysis.inspect(findings)));
         }
 
         BundleValidationResult result = resultOf(
@@ -182,71 +194,6 @@ public final class ScenarioBundleValidator {
             scenarioId, scenarioName, resolved != null ? resolved.getProtocolVersion() : null, bundleRoot,
             List.copyOf(findings));
         return new ValidationRun(result, descriptorScenario, bundleRoot);
-    }
-
-    private List<ValidationFinding> validateScenarioTemplateSyntax(Scenario scenario) {
-        if (scenario == null || scenario.getTemplate() == null || scenario.getTemplate().bees() == null) {
-            return List.of();
-        }
-        List<ValidationFinding> findings = new ArrayList<>();
-        for (int index = 0; index < scenario.getTemplate().bees().size(); index++) {
-            Bee bee = scenario.getTemplate().bees().get(index);
-            if (bee != null) {
-                Map<String, Object> config = bee.config() == null ? Map.of() : bee.config();
-                Object syntaxScope = config;
-                String imageName = imageName(bee.image());
-                if (BeeRoles.TRIGGER.equals(imageName) && config.containsKey("body")) {
-                    Map<String, Object> withoutExternalBody = new LinkedHashMap<>(config);
-                    withoutExternalBody.remove("body");
-                    syntaxScope = withoutExternalBody;
-                }
-                validateTemplateSyntaxNode(
-                    syntaxScope,
-                    ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees[" + index + "].config",
-                    findings);
-            }
-        }
-        return List.copyOf(findings);
-    }
-
-    private String imageName(String image) {
-        if (image == null || image.isBlank()) return "";
-        String last = image.substring(image.lastIndexOf('/') + 1);
-        int tag = last.indexOf(':');
-        return tag >= 0 ? last.substring(0, tag) : last;
-    }
-
-    private void validateTemplateSyntaxNode(Object node, String path, List<ValidationFinding> findings) {
-        if (node instanceof Map<?, ?> map) {
-            map.forEach((key, value) -> validateTemplateSyntaxNode(value, path + "." + key, findings));
-            return;
-        }
-        if (node instanceof List<?> list) {
-            for (int index = 0; index < list.size(); index++) {
-                validateTemplateSyntaxNode(list.get(index), path + "[" + index + "]", findings);
-            }
-            return;
-        }
-        if (!(node instanceof String source) || (!source.contains("{{") && !source.contains("{%"))) {
-            return;
-        }
-        try {
-            templateSyntaxValidator.validateSyntax(source);
-        } catch (TemplateRenderingException ex) {
-            findings.add(ValidationIssue.TEMPLATE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                path,
-                "Inline template syntax is invalid: " + cleanError(rootCauseMessage(ex)),
-                "Repair the Pebble quoting, delimiters, or expression syntax."));
-        }
-    }
-
-    private String rootCauseMessage(Throwable error) {
-        Throwable current = error;
-        while (current.getCause() != null) {
-            current = current.getCause();
-        }
-        return current.getMessage();
     }
 
     public BundleValidationResult resultOf(BundleValidationSource source, String bundleKey, String bundlePath,
@@ -758,7 +705,7 @@ public final class ScenarioBundleValidator {
         return env;
     }
 
-    private TemplateValidationResult validateTemplates(Scenario scenario, Path bundleRoot) throws IOException {
+    private TemplateValidationResult validateTemplates(Scenario scenario, Path bundleRoot, List<TemplateSource> templateSources) throws IOException {
         List<ValidationFinding> findings = new ArrayList<>();
         if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
             findings.add(ValidationIssue.BUNDLE_DIRECTORY_MISSING.finding(
@@ -769,26 +716,23 @@ public final class ScenarioBundleValidator {
             return new TemplateValidationResult(false, scenario != null ? scenario.getId() : null, List.copyOf(findings), List.of(), List.of());
         }
 
-        List<TemplateSource> templateSources = readBundleTemplateSources(bundleRoot, findings);
         List<TemplateConsumer> consumers = templateConsumers(scenario);
         Set<String> referenced = new LinkedHashSet<>();
         Set<String> defined = new LinkedHashSet<>();
         Set<String> duplicateReports = new LinkedHashSet<>();
-        Set<String> shapeReports = new LinkedHashSet<>();
 
         for (TemplateConsumer consumer : consumers) {
             Optional<String> relativeRoot = bundleRelativeTemplateRoot(consumer, findings);
             if (relativeRoot.isEmpty()) {
                 continue;
             }
-            Set<TemplateReference> consumerReferences = referencedTemplatesForConsumer(scenario, consumer);
+            Set<ScenarioTemplateReference> consumerReferences = requestReferences.collect(scenario, consumer.bee(), consumer.effectiveConfig(), consumer.defaultServiceId(), this::workerRole, findings);
             Map<String, List<TemplateSource>> visibleTemplates = visibleRequestTemplates(
                 templateSources,
                 relativeRoot.get(),
                 consumer,
                 consumerReferences,
-                findings,
-                shapeReports);
+                findings);
             visibleTemplates.keySet().forEach(defined::add);
 
             for (Map.Entry<String, List<TemplateSource>> entry : visibleTemplates.entrySet()) {
@@ -812,7 +756,7 @@ public final class ScenarioBundleValidator {
                         .formatted(entry.getKey(), relativeRoot.get())));
             }
 
-            for (TemplateReference reference : consumerReferences) {
+            for (ScenarioTemplateReference reference : consumerReferences) {
                 referenced.add(reference.key());
                 if (!visibleTemplates.containsKey(reference.key())) {
                     String visibleRoot = relativeRoot.get().isBlank() ? "." : relativeRoot.get();
@@ -840,21 +784,24 @@ public final class ScenarioBundleValidator {
             List.copyOf(defined));
     }
 
-    private List<TemplateSource> readBundleTemplateSources(Path bundleRoot, List<ValidationFinding> findings) throws IOException {
+    private List<TemplateSource> readBundleTemplateSources(Path bundleRoot, List<String> requestRoots,
+                                                          List<ValidationFinding> findings, ScenarioTemplateAnalysis analysis) throws IOException {
         List<TemplateSource> sources = new ArrayList<>();
-        for (String relativePath : listRelativeFiles(bundleRoot, ScenarioBundleLayout.TEMPLATES_ROOT)) {
-            if (!isStructuredBundleFile(relativePath) || isAuthProfilesFile(relativePath)) {
-                continue;
-            }
+        Set<String> requestFiles = new java.util.TreeSet<>();
+        for (String root : requestRoots) requestFiles.addAll(listRelativeFiles(bundleRoot, root));
+        for (String relativePath : requestFiles) {
+            if (!isStructuredBundleFile(relativePath) || isAuthProfilesFile(relativePath)) continue;
             try {
-                sources.add(new TemplateSource(relativePath, readStructuredMap(bundleRoot.resolve(relativePath).normalize())));
-                if (!sources.get(sources.size() - 1).document().containsKey("profile")) {
-                    validateTemplateSyntaxNode(sources.get(sources.size() - 1).document(), relativePath, findings);
+                Map<?, ?> document = readStructuredMap(bundleRoot.resolve(relativePath).normalize());
+                var definition = requestTemplateFindings.parse(document, relativePath, findings);
+                sources.add(new TemplateSource(relativePath, document, definition));
+                if (definition != null && !(definition instanceof PortableHttpCall)) {
+                    requestTemplateFindings.sources(definition).forEach((field, source) ->
+                        analysis.add(relativePath + ":" + field, source));
                 }
             } catch (Exception e) {
                 findings.add(ValidationIssue.TEMPLATE_PARSE_ERROR.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath,
+                    ValidationSeverity.ERROR, relativePath,
                     "Template could not be parsed: " + cleanError(e.getMessage()),
                     ValidationIssue.TEMPLATE_PARSE_ERROR.fix()));
             }
@@ -862,7 +809,7 @@ public final class ScenarioBundleValidator {
         return List.copyOf(sources);
     }
 
-    private List<ValidationFinding> validateScenarioConfigShape(Scenario scenario) {
+    private List<ValidationFinding> validateScenarioConfigShape(Scenario scenario, ScenarioTemplateAnalysis analysis) {
         if (scenario == null || scenario.getTemplate() == null || scenario.getTemplate().bees() == null) {
             return List.of();
         }
@@ -895,7 +842,8 @@ public final class ScenarioBundleValidator {
             validateCapabilityConfigTypes(bee, config, configPath, findings);
             validateCapabilityConfigOptions(bee, config, configPath, findings);
             validateCapabilityConfigNumericRanges(bee, config, configPath, findings);
-            workConfigurationFindings.validate(config, configPath, findings);
+            workConfigurationFindings.validate(config, configPath, findings, analysis::add);
+            configurationTemplateSources.collect(workerRole(bee.image()), config, configPath, analysis, findings);
             ScenarioEnvironmentFindings.validate(bee.env(), ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
                 + ":template.bees[" + index + "].env", findings);
             index++;
@@ -1413,22 +1361,20 @@ public final class ScenarioBundleValidator {
         List<TemplateSource> templateSources,
         String relativeRoot,
         TemplateConsumer consumer,
-        Set<TemplateReference> references,
-        List<ValidationFinding> findings,
-        Set<String> shapeReports
+        Set<ScenarioTemplateReference> references,
+        List<ValidationFinding> findings
     ) {
         Map<String, List<TemplateSource>> visible = new LinkedHashMap<>();
         for (TemplateSource source : templateSources) {
-            if (!isUnderRelativeRoot(source.relativePath(), relativeRoot)) {
+            if (!ScenarioBundleResourcePaths.isUnderRelativeRoot(source.relativePath(), relativeRoot)) {
                 continue;
             }
-            var definition = requestTemplateFindings.parse(source.document(), source.relativePath(),
-                shapeReports.add(source.relativePath()) ? findings : new ArrayList<>());
+            var definition = source.definition();
             if (definition == null) {
                 continue;
             }
-            if (definition instanceof io.pockethive.requesttemplates.PortableHttpCall portable) {
-                if (BeeRoles.HTTP_SEQUENCE.equals(imageRepositoryName(consumer.bee().image()))) {
+            if (definition instanceof PortableHttpCall portable) {
+                if (BeeRoles.HTTP_SEQUENCE.equals(workerRole(consumer.bee().image()))) {
                     requestTemplateFindings.validatePortableSteps(portable, consumer.effectiveConfig(),
                         ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role() + ".config",
                         findings);
@@ -1449,17 +1395,8 @@ public final class ScenarioBundleValidator {
         return visible;
     }
 
-    private List<ValidationFinding> validateVariableReferences(Path bundleRoot) throws IOException {
-        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
-            return List.of();
-        }
-
-        Map<String, Set<String>> referencesByPath;
-        try {
-            referencesByPath = collectVariableReferences(bundleRoot);
-        } catch (BundleValidationFailure e) {
-            return List.of(findingForException(e));
-        }
+    private List<ValidationFinding> validateVariableReferences(Path bundleRoot,
+                                                               Map<String, Set<String>> referencesByPath) throws IOException {
         if (referencesByPath.isEmpty()) {
             return List.of();
         }
@@ -1517,80 +1454,6 @@ public final class ScenarioBundleValidator {
             throw validationFailure(ValidationIssue.BUNDLE_INVALID,
                 "Bundle file '%s' is not valid UTF-8.".formatted(relativePath), e);
         }
-    }
-
-    private Map<String, Set<String>> collectVariableReferences(Path bundleRoot) throws IOException {
-        Map<String, Set<String>> referencesByPath = new LinkedHashMap<>();
-        for (String relativePath : bundleValidationTextFiles(bundleRoot)) {
-            Path file = bundleRoot.resolve(relativePath).normalize();
-            String text = readBundleText(bundleRoot, file);
-            Matcher matcher = VAR_REFERENCE_PATTERN.matcher(text);
-            while (matcher.find()) {
-                referencesByPath
-                    .computeIfAbsent(relativePath, ignored -> new LinkedHashSet<>())
-                    .add(matcher.group(1));
-            }
-        }
-        return referencesByPath;
-    }
-
-    private List<ValidationFinding> validateAuthContracts(Path bundleRoot) throws IOException {
-        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
-            return List.of();
-        }
-
-        List<AuthRefUsage> refs = new ArrayList<>();
-        List<ValidationFinding> findings = new ArrayList<>();
-        for (String relativePath : listRelativeFiles(bundleRoot, ScenarioBundleLayout.TEMPLATES_ROOT)) {
-            if (!isStructuredBundleFile(relativePath)) {
-                continue;
-            }
-            Path file = bundleRoot.resolve(relativePath).normalize();
-            Map<?, ?> doc;
-            try {
-                doc = readStructuredMap(file);
-            } catch (Exception e) {
-                continue;
-            }
-            var authRef = requestTemplateFindings.authReference(doc, relativePath, findings);
-            if (authRef != null) {
-                refs.add(new AuthRefUsage(relativePath, authRef.profileId()));
-            }
-        }
-
-        refs.removeIf(Objects::isNull);
-        Path authProfiles = resolveAuthProfilesFile(bundleRoot);
-        if (!refs.isEmpty() && authProfiles == null) {
-            findings.add(ValidationIssue.AUTH_PROFILES_MISSING.finding(
-                ValidationSeverity.ERROR,
-                ScenarioBundleLayout.AUTH_PROFILES_FILE,
-                "Templates declare authRef but %s is missing.".formatted(ScenarioBundleLayout.AUTH_PROFILES_FILE),
-                ValidationIssue.AUTH_PROFILES_MISSING.fix()));
-            return List.copyOf(findings);
-        }
-        if (authProfiles == null) {
-            return List.copyOf(findings);
-        }
-
-        AuthProfilesInfo profiles = readAuthProfiles(authProfiles, bundleRoot, findings);
-        if (profiles == null) {
-            return List.copyOf(findings);
-        }
-
-        for (AuthRefUsage ref : refs) {
-            if (ref.profileId() == null || ref.profileId().isBlank() || !profiles.profileIds().contains(ref.profileId())) {
-                findings.add(ValidationIssue.AUTH_REF_PROFILE_MISSING.finding(
-                    ValidationSeverity.ERROR,
-                    ref.path() + ":authRef.profileId",
-                    "authRef.profileId '%s' is not declared in %s.".formatted(
-                        nullToBlank(ref.profileId()),
-                        ScenarioBundleLayout.AUTH_PROFILES_FILE),
-                    "Add profile '%s' to %s or correct authRef.profileId.".formatted(
-                        nullToBlank(ref.profileId()),
-                        ScenarioBundleLayout.AUTH_PROFILES_FILE)));
-            }
-        }
-        return List.copyOf(findings);
     }
 
     private void validateBundleExtras(String scenarioId, Path bundleRoot) throws IOException {
@@ -1697,49 +1560,6 @@ public final class ScenarioBundleValidator {
         return false;
     }
 
-    private AuthProfilesInfo readAuthProfiles(Path authProfiles, Path bundleRoot, List<ValidationFinding> findings) {
-        String relativePath = bundleRoot.relativize(authProfiles).toString().replace('\\', '/');
-        Map<?, ?> doc;
-        try {
-            doc = readStructuredMap(authProfiles);
-        } catch (Exception e) {
-            findings.add(ValidationIssue.AUTH_PROFILES_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath,
-                "%s could not be parsed: %s".formatted(
-                    ScenarioBundleLayout.AUTH_PROFILES_FILE,
-                    cleanError(e.getMessage())),
-                "Fix %s YAML syntax and duplicate keys.".formatted(ScenarioBundleLayout.AUTH_PROFILES_FILE)));
-            return null;
-        }
-
-        Object profilesValue = doc.get("profiles");
-        if (!(profilesValue instanceof Map<?, ?> profiles) || profiles.isEmpty()) {
-            findings.add(ValidationIssue.AUTH_PROFILES_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles",
-                "%s must declare a non-empty profiles map.".formatted(ScenarioBundleLayout.AUTH_PROFILES_FILE),
-                "Add profiles.<profileId> entries."));
-            return new AuthProfilesInfo(Set.of());
-        }
-
-        Set<String> profileIds = new LinkedHashSet<>();
-        for (Map.Entry<?, ?> entry : profiles.entrySet()) {
-            String profileId = String.valueOf(entry.getKey());
-            profileIds.add(profileId);
-            if (!(entry.getValue() instanceof Map<?, ?> profile)) {
-                findings.add(ValidationIssue.AUTH_PROFILES_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId,
-                    "Auth profile '%s' must be an object.".formatted(profileId),
-                    "Declare type and storage for profile '%s'.".formatted(profileId)));
-                continue;
-            }
-            authProfileStorageFindings.validate(relativePath, profileId, profile, findings);
-        }
-        return new AuthProfilesInfo(Set.copyOf(profileIds));
-    }
-
     private void checkImageReference(String scenarioId,
                                      String component,
                                      String imageReference,
@@ -1839,17 +1659,10 @@ public final class ScenarioBundleValidator {
     }
 
     private Map<?, ?> readStructuredMap(Path file) throws IOException {
-        ObjectMapper mapper = detectStructuredFormat(file) == StructuredFormat.JSON ? strictJsonMapper : strictYamlMapper;
-        Object value = mapper.readValue(file.toFile(), Map.class);
+        byte[] source = Files.readAllBytes(file);
+        Object value = detectStructuredFormat(file) == StructuredFormat.JSON
+            ? templateDocuments.readJson(source) : templateDocuments.readYaml(source);
         return value instanceof Map<?, ?> map ? map : Map.of();
-    }
-
-    private Path resolveAuthProfilesFile(Path bundleRoot) {
-        Path candidate = ScenarioBundleLayout.authProfilesFile(bundleRoot);
-        if (candidate.startsWith(bundleRoot) && Files.isRegularFile(candidate)) {
-            return candidate;
-        }
-        return null;
     }
 
     private List<String> bundleValidationTextFiles(Path bundleRoot) throws IOException {
@@ -1891,216 +1704,23 @@ public final class ScenarioBundleValidator {
     }
 
     private boolean usesRequestTemplateContract(Bee bee) {
-        String image = imageRepositoryName(bee.image());
-        return BeeRoles.REQUEST_BUILDER.equals(image)
-            || BeeRoles.HTTP_SEQUENCE.equals(image);
+        String role = workerRole(bee.image());
+        return BeeRoles.REQUEST_BUILDER.equals(role)
+            || BeeRoles.HTTP_SEQUENCE.equals(role);
     }
 
-    private String imageRepositoryName(String imageReference) {
-        if (imageReference == null || imageReference.isBlank()) {
-            return "";
-        }
-        String normalized = imageReference.trim();
-        int digest = normalized.indexOf('@');
-        if (digest >= 0) {
-            normalized = normalized.substring(0, digest);
-        }
-        int slash = normalized.lastIndexOf('/');
-        if (slash >= 0) {
-            normalized = normalized.substring(slash + 1);
-        }
-        int tag = normalized.lastIndexOf(':');
-        if (tag > 0) {
-            normalized = normalized.substring(0, tag);
-        }
-        return normalized;
+    private String workerRole(String imageReference) {
+        // Missing manifests already produce a prerequisite error; no worker source owner is selected.
+        return capabilities.resolveByImageReference(imageReference)
+            .map(CapabilityCatalogueService.CapabilityResolution::manifest)
+            .map(CapabilityManifest::role)
+            .orElse(null);
     }
 
-    private Optional<String> bundleRelativeTemplateRoot(
-        TemplateConsumer consumer,
-        List<ValidationFinding> findings
-    ) {
-        String root = normalizeContainerPath(consumer.templateRoot());
-        if (root == null || root.isBlank()) {
-            return Optional.empty();
-        }
-        if (ScenarioBundleLayout.CONTAINER_ROOT.equals(root)) {
-            return Optional.of("");
-        }
-        String prefix = ScenarioBundleLayout.CONTAINER_ROOT + "/";
-        if (!root.startsWith(prefix)) {
-            return Optional.empty();
-        }
-        String relative = root.substring(prefix.length());
-        Path normalizedPath = Path.of(relative).normalize();
-        String normalized = normalizedPath.toString().replace('\\', '/');
-        if (".".equals(normalized)) {
-            normalized = "";
-        }
-        if (normalizedPath.isAbsolute() || normalized.startsWith("..")) {
-            findings.add(ValidationIssue.TEMPLATE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role(),
-                "Worker '%s' templateRoot '%s' escapes %s."
-                    .formatted(consumer.role(), consumer.templateRoot(), ScenarioBundleLayout.CONTAINER_ROOT),
-                "Set templateRoot to %s/<bundle-relative-template-directory>."
-                    .formatted(ScenarioBundleLayout.CONTAINER_ROOT)));
-            return Optional.empty();
-        }
-        return Optional.of(normalized);
-    }
-
-    private String normalizeContainerPath(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim().replace('\\', '/');
-        while (normalized.contains("//")) {
-            normalized = normalized.replace("//", "/");
-        }
-        while (normalized.length() > 1 && normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
-    }
-
-    private Set<TemplateReference> referencedTemplatesForConsumer(Scenario scenario, TemplateConsumer consumer) {
-        Set<TemplateReference> references = new LinkedHashSet<>();
-        String consumerPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role() + ".config";
-        collectWorkerCallIdReferences(
-            consumer.effectiveConfig(),
-            consumer.defaultServiceId(),
-            consumerPath,
-            references);
-
-        if (scenario == null || scenario.getTemplate() == null || scenario.getTemplate().bees() == null) {
-            return references;
-        }
-        Set<String> inputQueues = defaultInputQueues(consumer.bee());
-        if (inputQueues.isEmpty()) {
-            return references;
-        }
-        for (Bee producer : scenario.getTemplate().bees()) {
-            if (producer == null || producer == consumer.bee() || !publishesToAny(producer, inputQueues)) {
-                continue;
-            }
-            String producerPath = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + producer.role() + ".config";
-            collectHeaderTemplateReferences(
-                producer.config() == null ? Map.of() : producer.config(),
-                consumer.defaultServiceId(),
-                producerPath,
-                references);
-        }
-        return references;
-    }
-
-    private void collectWorkerCallIdReferences(
-        Object value,
-        String defaultServiceId,
-        String sourcePath,
-        Set<TemplateReference> references
-    ) {
-        if (value instanceof Map<?, ?> map) {
-            Object callIdValue = map.get(CALL_ID_CONFIG_KEY);
-            if (callIdValue != null) {
-                addTemplateReferences(
-                    references,
-                    extractCallIds(callIdValue),
-                    serviceIdCandidates(map.get(SERVICE_ID_CONFIG_KEY), defaultServiceId),
-                    sourcePath);
-            }
-            for (Object child : map.values()) {
-                collectWorkerCallIdReferences(child, defaultServiceId, sourcePath, references);
-            }
-            return;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            for (Object item : iterable) {
-                collectWorkerCallIdReferences(item, defaultServiceId, sourcePath, references);
-            }
-        }
-    }
-
-    private void collectHeaderTemplateReferences(
-        Object value,
-        String defaultServiceId,
-        String sourcePath,
-        Set<TemplateReference> references
-    ) {
-        if (value instanceof Map<?, ?> map) {
-            Object callIdValue = map.get(OutcomeHeaders.CALL_ID);
-            if (callIdValue != null) {
-                addTemplateReferences(
-                    references,
-                    extractCallIds(callIdValue),
-                    serviceIdCandidates(map.get(OutcomeHeaders.SERVICE_ID), defaultServiceId),
-                    sourcePath);
-            }
-            for (Object child : map.values()) {
-                collectHeaderTemplateReferences(child, defaultServiceId, sourcePath, references);
-            }
-            return;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            for (Object item : iterable) {
-                collectHeaderTemplateReferences(item, defaultServiceId, sourcePath, references);
-            }
-        }
-    }
-
-    private void addTemplateReferences(
-        Set<TemplateReference> references,
-        Set<String> callIds,
-        Set<String> serviceIds,
-        String sourcePath
-    ) {
-        if (callIds.isEmpty() || serviceIds.isEmpty()) {
-            return;
-        }
-        for (String serviceId : serviceIds) {
-            for (String callId : callIds) {
-                references.add(new TemplateReference(serviceId, callId, sourcePath));
-            }
-        }
-    }
-
-    private Set<String> serviceIdCandidates(Object value, String defaultServiceId) {
-        if (value == null || value instanceof String text && text.isBlank()) {
-            return extractCallIds(defaultServiceId);
-        }
-        return extractCallIds(value);
-    }
-
-    private Set<String> defaultInputQueues(Bee bee) {
-        if (bee == null || bee.work() == null || bee.work().in() == null || bee.work().in().isEmpty()) {
-            return Set.of();
-        }
-        Set<String> queues = new LinkedHashSet<>();
-        bee.work().in().values().forEach(queue -> {
-            if (queue != null && !queue.isBlank()) {
-                queues.add(queue.trim());
-            }
-        });
-        return Set.copyOf(queues);
-    }
-
-    private boolean publishesToAny(Bee bee, Set<String> targetQueues) {
-        if (bee == null || bee.work() == null || bee.work().out() == null || bee.work().out().isEmpty()) {
-            return false;
-        }
-        for (String output : bee.work().out().values()) {
-            if (output != null && targetQueues.contains(output.trim())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean isUnderRelativeRoot(String relativePath, String relativeRoot) {
-        if (relativeRoot == null || relativeRoot.isBlank()) {
-            return true;
-        }
-        return relativePath.equals(relativeRoot) || relativePath.startsWith(relativeRoot + "/");
+    private Optional<String> bundleRelativeTemplateRoot(TemplateConsumer consumer, List<ValidationFinding> findings) {
+        return ScenarioBundleResourcePaths.relativeRoot(consumer.templateRoot(),
+            ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role()
+                + ".config." + TEMPLATE_ROOT_CONFIG_KEY, findings);
     }
 
     private boolean isAuthProfilesFile(String relativePath) {
@@ -2118,36 +1738,6 @@ public final class ScenarioBundleValidator {
         return io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, callId);
     }
 
-    private Set<String> extractCallIds(Object value) {
-        if (!(value instanceof String text)) {
-            return Set.of();
-        }
-        String trimmed = text.trim();
-        if (trimmed.isEmpty()) {
-            return Set.of();
-        }
-        Set<String> ids = new LinkedHashSet<>();
-        int from = 0;
-        while (from < trimmed.length()) {
-            int open = trimmed.indexOf('\'', from);
-            if (open < 0) {
-                break;
-            }
-            int close = trimmed.indexOf('\'', open + 1);
-            if (close < 0) {
-                break;
-            }
-            String token = trimmed.substring(open + 1, close).trim();
-            if (!token.isEmpty()) {
-                ids.add(token);
-            }
-            from = close + 1;
-        }
-        if (ids.isEmpty() && !trimmed.contains("{{")) {
-            ids.add(trimmed);
-        }
-        return ids;
-    }
 
     private List<String> listRelativeFiles(Path bundleRoot, String relativeDir) throws IOException {
         if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
@@ -2241,11 +1831,8 @@ public final class ScenarioBundleValidator {
         return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
-    private record AuthRefUsage(String path, String profileId) { }
-
-    private record AuthProfilesInfo(Set<String> profileIds) { }
-
-    private record TemplateSource(String relativePath, Map<?, ?> document) { }
+    private record TemplateSource(String relativePath, Map<?, ?> document,
+                                  TemplateDefinition definition) { }
 
     private record TemplateConsumer(
         String role,
@@ -2255,13 +1842,7 @@ public final class ScenarioBundleValidator {
         Map<String, Object> effectiveConfig
     ) { }
 
-    private record TemplateReference(String serviceId, String callId, String sourcePath) {
-        private String key() {
-            String normalizedServiceId = serviceId == null ? "" : serviceId.trim();
-            String normalizedCallId = callId == null ? "" : callId.trim();
-            return normalizedServiceId + "::" + normalizedCallId;
-        }
-    }
+
 
 
     private record CapabilityConfigEntryRef(CapabilityManifest.ConfigEntry entry, String owner) { }

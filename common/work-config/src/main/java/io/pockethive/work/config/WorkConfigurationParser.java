@@ -25,6 +25,12 @@ public final class WorkConfigurationParser {
     }
 
     public WorkConfigurationValidation validate(Map<String, Object> configuration, WorkConfigurationMode mode) {
+        return validate(configuration, mode, source -> {});
+    }
+
+    public WorkConfigurationValidation validate(Map<String, Object> configuration, WorkConfigurationMode mode,
+                                                java.util.function.Consumer<WorkConfigurationTemplate> sources) {
+        Objects.requireNonNull(sources, "sources");
         Objects.requireNonNull(configuration, "configuration");
         Objects.requireNonNull(mode, "mode");
 
@@ -36,7 +42,7 @@ public final class WorkConfigurationParser {
         InputResult input = validateInput(configuration.get(WorkConfigurationFields.INPUTS), mode,
             inputParsers, problems, deferredPaths);
         OutputResult output = validateOutput(configuration.get(WorkConfigurationFields.OUTPUTS), mode,
-            outputParsers, problems, deferredPaths);
+            outputParsers, problems, deferredPaths, sources);
 
         CompleteWorkConfiguration complete = null;
         if (problems.isEmpty() && deferredPaths.isEmpty()) {
@@ -87,7 +93,8 @@ public final class WorkConfigurationParser {
     private static OutputResult validateOutput(Object value, WorkConfigurationMode mode,
                                                List<WorkOutputSettingsParser> parsers,
                                                List<WorkConfigurationProblem> problems,
-                                               List<String> deferredPaths) {
+                                               List<String> deferredPaths,
+                                               java.util.function.Consumer<WorkConfigurationTemplate> sources) {
         Map<?, ?> fields = requireObject(value, WorkConfigurationFields.OUTPUTS, problems);
         if (fields == null) {
             return null;
@@ -121,6 +128,8 @@ public final class WorkConfigurationParser {
             WorkConfigurationFields.OUTPUTS, settingsKey), problems)) {
             return null;
         }
+        String settingsPath = WorkConfigurationFields.path(WorkConfigurationFields.OUTPUTS, settingsKey);
+        matches.getFirst().templateSources(settings, settingsPath).forEach(sources);
         WorkOutputSettingsParseResult result = Objects.requireNonNull(
             matches.getFirst().validate(settings, WorkConfigurationFields.path(
                 WorkConfigurationFields.OUTPUTS, settingsKey), mode),

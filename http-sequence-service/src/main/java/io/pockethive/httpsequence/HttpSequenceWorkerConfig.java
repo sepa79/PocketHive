@@ -1,17 +1,23 @@
 package io.pockethive.httpsequence;
 
 import io.pockethive.swarm.model.BeeConfigKeys;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Responsibility: validate HTTP Sequence worker settings and configured step targets.
+ * Must not: execute calls or duplicate the shared step binding and portable policy.
+ * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
+ */
 public record HttpSequenceWorkerConfig(
     String baseUrl,
     String templateRoot,
     String serviceId,
     Integer threadCount,
-    List<Step> steps,
+    List<HttpSequenceStep> steps,
     DebugCapture debugCapture,
     Map<String, Object> vars,
     Map<String, Object> privateConfig
@@ -21,7 +27,7 @@ public record HttpSequenceWorkerConfig(
                                   String templateRoot,
                                   String serviceId,
                                   Integer threadCount,
-                                  List<Step> steps,
+                                  List<HttpSequenceStep> steps,
                                   DebugCapture debugCapture,
                                   Map<String, Object> vars) {
     this(baseUrl, templateRoot, serviceId, threadCount, steps, debugCapture, vars, Map.of());
@@ -57,88 +63,6 @@ public record HttpSequenceWorkerConfig(
   @Override
   public int maxInFlight() {
     return threadCount;
-  }
-
-  public record Step(
-      String id,
-      String callId,
-      String serviceId,
-      boolean continueOnNon2xx,
-      Retry retry,
-      List<Extract> extracts,
-      List<SetValue> set,
-      String sutEndpointId,
-      String baseUrl
-  ) {
-
-    public Step(String id,
-                String callId,
-                String serviceId,
-                boolean continueOnNon2xx,
-                Retry retry,
-                List<Extract> extracts,
-                List<SetValue> set) {
-      this(id, callId, serviceId, continueOnNon2xx, retry, extracts, set, null, null);
-    }
-
-    public Step {
-      id = normalise(id);
-      callId = normalise(callId);
-      serviceId = normalise(serviceId);
-      retry = retry == null ? Retry.defaults() : retry;
-      extracts = extracts == null ? List.of() : List.copyOf(extracts);
-      set = set == null ? List.of() : List.copyOf(set);
-      sutEndpointId = trim(sutEndpointId);
-      baseUrl = trim(baseUrl);
-    }
-  }
-
-  public record Retry(
-      int maxAttempts,
-      long initialBackoffMs,
-      double backoffMultiplier,
-      long maxBackoffMs,
-      List<String> on
-  ) {
-
-    public Retry {
-      maxAttempts = maxAttempts <= 0 ? 1 : maxAttempts;
-      initialBackoffMs = Math.max(0L, initialBackoffMs);
-      backoffMultiplier = backoffMultiplier <= 0.0 ? 1.0 : backoffMultiplier;
-      maxBackoffMs = maxBackoffMs <= 0L ? initialBackoffMs : maxBackoffMs;
-      on = on == null ? List.of() : List.copyOf(on);
-    }
-
-    static Retry defaults() {
-      return new Retry(1, 0L, 1.0, 0L, List.of());
-    }
-  }
-
-  public record Extract(
-      String fromJsonPointer,
-      String fromHeader,
-      boolean fromStatus,
-      String to,
-      boolean required
-  ) {
-
-    public Extract {
-      fromJsonPointer = normalise(fromJsonPointer);
-      fromHeader = normalise(fromHeader);
-      to = normalise(to);
-    }
-  }
-
-  public record SetValue(
-      String to,
-      String template,
-      boolean parseJson
-  ) {
-
-    public SetValue {
-      to = normalise(to);
-      template = template == null ? "" : template;
-    }
   }
 
   public enum DebugCaptureMode {
@@ -188,11 +112,7 @@ public record HttpSequenceWorkerConfig(
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private static String trim(String value) {
-    return value == null ? null : value.trim();
-  }
-
-  private static void validateStepTarget(Step step, int index) {
+  private static void validateStepTarget(HttpSequenceStep step, int index) {
     if (step == null) {
       throw new IllegalArgumentException("steps[" + index + "] is required");
     }

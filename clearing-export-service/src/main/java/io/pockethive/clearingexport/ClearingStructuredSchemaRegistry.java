@@ -1,26 +1,23 @@
 package io.pockethive.clearingexport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.pockethive.templating.sources.ClearingSchemaDocuments;
+import io.pockethive.templating.sources.ClearingSchemaLocation;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: load and cache the canonically selected structured clearing schema.
+ * Must not: render records, format XML or choose a different file after a decoding failure.
+ * Contract: RESP-CLEARING-EXPORT — docs/architecture/runtime-responsibilities.md#resp-clearing-export.
+ */
 @Component
 class ClearingStructuredSchemaRegistry {
 
-  private final ObjectMapper jsonMapper;
-  private final ObjectMapper yamlMapper;
   private final Map<String, ClearingStructuredSchema> cache = new ConcurrentHashMap<>();
-
-  ClearingStructuredSchemaRegistry() {
-    this.jsonMapper = new ObjectMapper().findAndRegisterModules();
-    this.yamlMapper = new ObjectMapper(new YAMLFactory()).findAndRegisterModules();
-  }
 
   ClearingStructuredSchema resolve(ClearingExportWorkerConfig config) {
     Objects.requireNonNull(config, "config");
@@ -36,27 +33,11 @@ class ClearingStructuredSchemaRegistry {
       String schemaVersion
   ) {
     Path root = Path.of(requireText(config.schemaRegistryRoot(), "schemaRegistryRoot"));
-    Path base = root.resolve(schemaId).resolve(schemaVersion);
-    Path jsonPath = base.resolve("schema.json");
-    Path yamlPath = base.resolve("schema.yaml");
-    Path ymlPath = base.resolve("schema.yml");
-    Path selectedPath = null;
-
+    Path selectedPath = ClearingSchemaLocation.select(root, schemaId, schemaVersion);
     try {
-      if (Files.exists(jsonPath)) {
-        selectedPath = jsonPath;
-        return jsonMapper.readValue(jsonPath.toFile(), ClearingStructuredSchema.class);
-      }
-      if (Files.exists(yamlPath)) {
-        selectedPath = yamlPath;
-        return yamlMapper.readValue(yamlPath.toFile(), ClearingStructuredSchema.class);
-      }
-      if (Files.exists(ymlPath)) {
-        selectedPath = ymlPath;
-        return yamlMapper.readValue(ymlPath.toFile(), ClearingStructuredSchema.class);
-      }
+      return ClearingSchemaDocuments.read(selectedPath, ClearingStructuredSchema.class);
     } catch (IOException | RuntimeException ex) {
-      String location = selectedPath == null ? base.toString() : selectedPath.toString();
+      String location = selectedPath.toString();
       throw new IllegalStateException(
           "Failed to load clearing schema "
               + schemaId
@@ -69,16 +50,6 @@ class ClearingStructuredSchemaRegistry {
               + ")",
           ex);
     }
-    throw new IllegalStateException(
-        "Schema not found for "
-            + schemaId
-            + ":"
-            + schemaVersion
-            + " under "
-            + base
-            + " (registryRoot="
-            + root
-            + ", expected schema.json/schema.yaml/schema.yml)");
   }
 
   private static String requireText(String value, String name) {

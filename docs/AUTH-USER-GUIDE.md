@@ -45,13 +45,27 @@ profiles:
     storage:
       mode: REDIS
       tokenKey: tenant-a-api
-    tokenUrl: "{{ sut.auth.tokenUrl }}"
+    tokenUrl: "{{ sut.endpoints['default'].baseUrl }}/oauth/token"
     clientId: "{{ vars.clientId }}"
     clientSecret:
       env: TENANT_A_CLIENT_SECRET
 ```
 
 Profile values may render `{{ vars.* }}`, `{{ sut.* }}`, `{{ swarm.id }}`, `{{ worker.id }}`, and `{{ worker.role }}` before use.
+
+When using `sut` in a profile, select `sutId` when creating the swarm.
+The SUT-based OAuth examples here assume that the selected SUT declares an
+endpoint named `default`, with the token provider's origin as its `baseUrl`
+(for example, `https://identity.example.com`). Replace the endpoint ID and
+`/oauth/token` path with those defined for your provider. See
+[Auth profiles and SUT context](scenarios/SCENARIO_CONTRACT.md#auth-profiles-and-sut-context)
+for the canonical context and SUT binding rules.
+
+To configure a complete token URL independently of SUT selection, use
+`tokenUrl: "{{ vars.authTokenUrl }}"` and define `authTokenUrl` as a global string
+variable in the selected `variables.yaml` profile. See
+[Scenario variables](scenarios/SCENARIO_VARIABLES.md) for variable definitions and
+profile values.
 
 ## Secret References
 
@@ -146,7 +160,7 @@ profiles:
     refresh:
       refreshAheadSeconds: 60
       leaseSeconds: 15
-    tokenUrl: "{{ sut.auth.tokenUrl }}"
+    tokenUrl: "{{ sut.endpoints['default'].baseUrl }}/oauth/token"
     clientId: "{{ vars.clientId }}"
     clientSecret:
       env: API_CLIENT_SECRET

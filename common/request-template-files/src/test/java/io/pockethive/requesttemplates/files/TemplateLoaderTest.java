@@ -348,4 +348,16 @@ class TemplateLoaderTest {
     });
   }
 
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"UTF-8", "UTF-16"})
+  void preservesJacksonByteDecodingIncludingBom(String encoding) throws Exception {
+    Path root = Files.createTempDirectory("template-bom");
+    String source = """
+        {"protocol":"HTTP","serviceId":"svc","callId":"call","method":"GET","pathTemplate":"/"}
+        """;
+    if (encoding.equals("UTF-8")) source = "\uFEFF" + source;
+    Files.write(root.resolve("call.json"), source.getBytes(java.nio.charset.Charset.forName(encoding)));
+    assertThat(new TemplateLoader().load(root.toString())).containsKey("svc::call");
+  }
+
 }

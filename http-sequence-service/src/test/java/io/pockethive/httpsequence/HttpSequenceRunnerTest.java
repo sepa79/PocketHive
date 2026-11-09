@@ -1,19 +1,21 @@
 package io.pockethive.httpsequence;
 
-import io.pockethive.templating.api.DisabledSequenceAccess;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
+import io.pockethive.requesttemplates.HttpSequenceExtract;
+import io.pockethive.requesttemplates.HttpSequenceRetry;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.templating.api.DisabledSequenceAccess;
+import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
-import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,10 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 class HttpSequenceRunnerTest {
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpSequenceRunnerTest.class);
@@ -55,8 +55,8 @@ class HttpSequenceRunnerTest {
         "default",
         1,
         List.of(
-            new HttpSequenceWorkerConfig.Step("s1", "A", null, true, null, List.of(), List.of()),
-            new HttpSequenceWorkerConfig.Step("s2", "B", null, false, null, List.of(), List.of())
+            new HttpSequenceStep("s1", "A", null, true, null, List.of(), List.of()),
+            new HttpSequenceStep("s2", "B", null, false, null, List.of(), List.of())
         ),
         new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
         Map.of()
@@ -85,20 +85,20 @@ class HttpSequenceRunnerTest {
     WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
     WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
 
-    HttpSequenceWorkerConfig.Retry retry = new HttpSequenceWorkerConfig.Retry(
+    HttpSequenceRetry retry = new HttpSequenceRetry(
         3,
         0,
         1.0,
         0,
         List.of("5xx")
     );
-    HttpSequenceWorkerConfig.Step step = new HttpSequenceWorkerConfig.Step(
+    HttpSequenceStep step = new HttpSequenceStep(
         "s1",
         "A",
         null,
         false,
         retry,
-        List.of(new HttpSequenceWorkerConfig.Extract(null, "Location", false, "result.location", true)),
+        List.of(new HttpSequenceExtract(null, "Location", false, "result.location", true)),
         List.of()
     );
 
@@ -131,9 +131,9 @@ class HttpSequenceRunnerTest {
     HttpSequenceRunner runner = newRunner(executor);
     WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
     WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
-    HttpSequenceWorkerConfig.Retry retry = new HttpSequenceWorkerConfig.Retry(
+    HttpSequenceRetry retry = new HttpSequenceRetry(
         2, 0, 1.0, 0, List.of("5xx"));
-    HttpSequenceWorkerConfig.Step step = new HttpSequenceWorkerConfig.Step(
+    HttpSequenceStep step = new HttpSequenceStep(
         "sut", "A", null, false, retry, List.of(), List.of(), "accounts", null);
     HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
         "http://worker:8080",
@@ -174,7 +174,7 @@ class HttpSequenceRunnerTest {
         tempDir.toString(),
         "default",
         1,
-        List.of(new HttpSequenceWorkerConfig.Step("s1", "MISSING", null, false, null, List.of(), List.of())),
+        List.of(new HttpSequenceStep("s1", "MISSING", null, false, null, List.of(), List.of())),
         new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
         Map.of()
     );
@@ -218,7 +218,7 @@ class HttpSequenceRunnerTest {
         templates.toString(),
         "default",
         1,
-        List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
+        List.of(new HttpSequenceStep("s1", "A", null, false, null, List.of(), List.of())),
         new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
         Map.of()
     );
@@ -270,7 +270,7 @@ class HttpSequenceRunnerTest {
         templates.toString(),
         "default",
         1,
-        List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
+        List.of(new HttpSequenceStep("s1", "A", null, false, null, List.of(), List.of())),
         new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
         Map.of(),
         Map.of("authProfile", Map.of("sut", Map.of(
@@ -301,10 +301,10 @@ class HttpSequenceRunnerTest {
         "default",
         1,
         List.of(
-            new HttpSequenceWorkerConfig.Step("worker", "A", null, false, null, List.of(), List.of()),
-            new HttpSequenceWorkerConfig.Step(
+            new HttpSequenceStep("worker", "A", null, false, null, List.of(), List.of()),
+            new HttpSequenceStep(
                 "sut", "B", null, false, null, List.of(), List.of(), "accounts", null),
-            new HttpSequenceWorkerConfig.Step(
+            new HttpSequenceStep(
                 "literal", "C", null, false, null, List.of(), List.of(), null, "http://audit:9080/audit")
         ),
         new HttpSequenceWorkerConfig.DebugCapture(
@@ -341,8 +341,8 @@ class HttpSequenceRunnerTest {
         "default",
         1,
         List.of(
-            new HttpSequenceWorkerConfig.Step("worker", "A", null, false, null, List.of(), List.of()),
-            new HttpSequenceWorkerConfig.Step(
+            new HttpSequenceStep("worker", "A", null, false, null, List.of(), List.of()),
+            new HttpSequenceStep(
                 "missing", "B", null, false, null, List.of(), List.of(), "missing", null)
         ),
         new HttpSequenceWorkerConfig.DebugCapture(
@@ -368,7 +368,7 @@ class HttpSequenceRunnerTest {
     WorkerContext context = new TestWorkerContext(info);
     HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
         "http://sut", tempDir.toString(), "default", 1,
-        List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
+        List.of(new HttpSequenceStep("s1", "A", null, false, null, List.of(), List.of())),
         new HttpSequenceWorkerConfig.DebugCapture(
             HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
         Map.of());

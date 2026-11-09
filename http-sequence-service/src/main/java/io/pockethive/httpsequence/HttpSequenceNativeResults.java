@@ -1,19 +1,21 @@
 package io.pockethive.httpsequence;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.pockethive.requesttemplates.HttpSequenceExtract;
+import io.pockethive.requesttemplates.HttpSequenceSetValue;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.templatedata.JsonDocumentReader;
 import io.pockethive.templatedata.JsonPointerSelector;
 import io.pockethive.templatedata.JsonViews;
 import io.pockethive.templatedata.TemplateDataException;
 import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.work.api.WorkItem;
-import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-
 /**
  * Responsibility: project native step response extracts and render native setter values.
  * Must not: mutate journey state, decode JSON independently, execute HTTP or decide retries.
@@ -27,11 +29,11 @@ final class HttpSequenceNativeResults {
         this.renderer = Objects.requireNonNull(renderer, "renderer");
     }
 
-    List<HttpSequencePayloadUpdate> extract(HttpSequenceWorkerConfig.Step step, HttpCallResult result) {
+    List<HttpSequencePayloadUpdate> extract(HttpSequenceStep step, HttpCallResult result) {
         List<HttpSequencePayloadUpdate> updates = new ArrayList<>();
         JsonNode document = null;
         boolean documentRead = false;
-        for (HttpSequenceWorkerConfig.Extract extract : step.extracts()) {
+        for (HttpSequenceExtract extract : step.extracts()) {
             Object value = null;
             if (extract.fromStatus()) {
                 value = result.statusCode();
@@ -68,7 +70,7 @@ final class HttpSequenceNativeResults {
         return updates;
     }
 
-    Object renderSetter(HttpSequenceWorkerConfig.SetValue setter, Map<String, Object> payload, WorkItem item) {
+    Object renderSetter(HttpSequenceSetValue setter, Map<String, Object> payload, WorkItem item) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("payload", payload);
         variables.put("payloadAsJson", payload);

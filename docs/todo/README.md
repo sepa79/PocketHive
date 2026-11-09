@@ -14,6 +14,7 @@ transport, plugin, and CP repair plans are indexed in Git history.
 - `network-proxy-followups.md`
 - `scenario-plan-followups.md`
 - `sut-environments-followups.md`
+- [SUT configuration bindings and validator simplification](sut-variable-binding-plan.md)
 - `swarm-lifecycle-health-model-plan.md`
 
 ## UI and operator experience

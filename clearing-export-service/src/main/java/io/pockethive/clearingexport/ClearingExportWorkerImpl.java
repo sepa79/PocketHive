@@ -2,25 +2,26 @@ package io.pockethive.clearingexport;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.JournalEvent;
+import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.templating.sources.ClearingTemplateSources;
+import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.work.api.PocketHiveWorkerFunction;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkStep;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
-import io.pockethive.work.api.PocketHiveWorker;
-import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import jakarta.annotation.PostConstruct;
-import io.pockethive.templating.api.TemplateRenderer;
-import java.util.ArrayList;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.List;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,7 +33,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
 @Component("clearingExportWorker")
 @PocketHiveWorker(
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
@@ -146,7 +146,8 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         StructuredProjectedRecord projected = structuredRecordProjector.project(schema, renderContext);
         batchWriter.appendStructured(projected, config, schema);
       } else {
-        String renderedLine = templateRenderer.render(config.recordTemplate(), renderContext);
+        String renderedLine = templateRenderer.render(new ClearingTemplateSources(
+        config.fileNameTemplate(), config.headerTemplate(), config.recordTemplate(), config.footerTemplate()).recordTemplate(), renderContext);
         batchWriter.append(renderedLine, config);
       }
     } catch (Exception ex) {

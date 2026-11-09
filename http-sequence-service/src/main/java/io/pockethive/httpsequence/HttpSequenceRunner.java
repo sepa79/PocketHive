@@ -1,12 +1,17 @@
 package io.pockethive.httpsequence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.redis.api.RedisDebugCaptureStore;
+import io.pockethive.requesttemplates.HttpSequenceRetry;
+import io.pockethive.requesttemplates.HttpSequenceSetValue;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.PortableHttpCall;
 import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.templatedata.JsonDocumentReader;
 import io.pockethive.templating.PortableHttpRequest;
+import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
@@ -15,20 +20,17 @@ import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.redis.api.RedisDebugCaptureStore;
-import io.pockethive.templating.api.TemplateRenderer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.LongAdder;
-
 /**
  * Responsibility: execute configured HTTP steps with delegated request rendering and scoped auth resources.
  * Must not: own another service's lifecycle, parse documents or implement request/response semantics.
@@ -107,7 +109,7 @@ final class HttpSequenceRunner implements AutoCloseable {
       try (AuthRuntime authRuntime = AuthRuntime.forTemplates(
           config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
         for (int i = 0; i < config.steps().size(); i++) {
-          HttpSequenceWorkerConfig.Step step = config.steps().get(i);
+          HttpSequenceStep step = config.steps().get(i);
           String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
           TemplateDefinition definition = admitted.get(i);
           RenderedCall rendered;
@@ -159,7 +161,7 @@ final class HttpSequenceRunner implements AutoCloseable {
           } else {
             nativeResults.extract(step, result).forEach(update -> putPath(payload, update.path(), update.value()));
           }
-          for (HttpSequenceWorkerConfig.SetValue setter : step.set()) {
+          for (HttpSequenceSetValue setter : step.set()) {
             if (setter.to() != null && setter.template() != null) {
               putPath(payload, setter.to(), nativeResults.renderSetter(setter, payload, current));
             }
@@ -207,7 +209,7 @@ final class HttpSequenceRunner implements AutoCloseable {
     List<TemplateDefinition> admitted = new ArrayList<>();
     Map<String, TemplateDefinition> available = templates;
     for (int index = 0; index < config.steps().size(); index++) {
-      HttpSequenceWorkerConfig.Step step = config.steps().get(index);
+      HttpSequenceStep step = config.steps().get(index);
       if (step.callId() == null) {
         throw new IllegalArgumentException("Missing callId for sequence step index " + index);
       }
@@ -247,11 +249,11 @@ final class HttpSequenceRunner implements AutoCloseable {
         .toList();
   }
 
-  private HttpCallAttempt executeWithRetry(HttpSequenceWorkerConfig.Step step,
+  private HttpCallAttempt executeWithRetry(HttpSequenceStep step,
                                            HttpSequenceTargetResolver.ResolvedTarget target,
                                            RenderedCall rendered,
                                            boolean portable) {
-    HttpSequenceWorkerConfig.Retry retry = step.retry();
+    HttpSequenceRetry retry = step.retry();
     int maxAttempts = retry == null ? 1 : retry.maxAttempts();
     if (maxAttempts <= 0) {
       maxAttempts = 1;
@@ -287,7 +289,7 @@ final class HttpSequenceRunner implements AutoCloseable {
     return new HttpCallAttempt(maxAttempts, totalMs, last);
   }
 
-  private boolean shouldRetry(HttpSequenceWorkerConfig.Retry retry, HttpCallResult result) {
+  private boolean shouldRetry(HttpSequenceRetry retry, HttpCallResult result) {
     if (retry == null || retry.on().isEmpty() || result == null) {
       return false;
     }
@@ -324,7 +326,7 @@ final class HttpSequenceRunner implements AutoCloseable {
     return false;
   }
 
-  private static long computeBackoffMs(HttpSequenceWorkerConfig.Retry retry, int attempt) {
+  private static long computeBackoffMs(HttpSequenceRetry retry, int attempt) {
     if (retry == null) {
       return 0L;
     }
@@ -379,7 +381,7 @@ final class HttpSequenceRunner implements AutoCloseable {
   private WorkItem appendResultStep(WorkItem current,
                                    WorkerContext context,
                                    int stepIndex,
-                                   HttpSequenceWorkerConfig.Step step,
+                                   HttpSequenceStep step,
                                    Map<String, Object> payload,
                                    String serviceId,
                                    String callId,

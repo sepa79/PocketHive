@@ -30,34 +30,14 @@ final class AuthProfilePreparation {
     @SuppressWarnings("unchecked")
     static AuthProfile resolveProfile(AuthProfile profile, Map<String, Object> vars, Map<String, Object> sut, WorkerContext context, TemplateRenderer renderer) {
         Map<String, Object> raw = JSON.convertValue(profile, new TypeReference<>() {});
-        Map<String, Object> resolved = (Map<String, Object>) resolveValue(raw, vars, sut, context, renderer, profile.getType());
-        return JSON.convertValue(resolved, AuthProfile.class);
-    }
-
-    private static Object resolveValue(Object value, Map<String, Object> vars, Map<String, Object> sut, WorkerContext context, TemplateRenderer renderer, AuthType authType) {
-        if (value instanceof String text) {
-            return renderer.render(text, Map.of(
+        Map<String, Object> resolved = (Map<String, Object>) AuthProfileTemplateValues.map(raw,
+            text -> renderer.render(text, Map.of(
                 "vars", vars == null ? Map.of() : vars,
                 "sut", sut == null ? Map.of() : sut,
                 "swarm", Map.of("id", context.info().swarmId()),
                 "worker", Map.of("id", context.info().instanceId(), "role", context.info().role())
-            ));
-        }
-        if (value instanceof Map<?, ?> map) {
-            if (map.size() == 1 && map.containsKey("env")) {
-                return readEnvSecret(String.valueOf(map.get("env")));
-            }
-            if (map.size() == 1 && map.containsKey("file")) {
-                return readFileSecret(String.valueOf(map.get("file")), authType);
-            }
-            Map<String, Object> resolved = new LinkedHashMap<>();
-            map.forEach((k, v) -> resolved.put(String.valueOf(k), resolveValue(v, vars, sut, context, renderer, authType)));
-            return resolved;
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().map(v -> resolveValue(v, vars, sut, context, renderer, authType)).toList();
-        }
-        return value;
+            )), AuthProfilePreparation::readEnvSecret, path -> readFileSecret(path, profile.getType()));
+        return JSON.convertValue(resolved, AuthProfile.class);
     }
 
     static boolean referencesSut(AuthProfile profile) {

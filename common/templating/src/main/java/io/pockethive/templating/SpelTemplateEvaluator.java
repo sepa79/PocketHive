@@ -6,13 +6,24 @@ import java.lang.reflect.Method;
 
 import java.time.Instant;
 import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.TypeLocator;
+import org.springframework.expression.spel.SpelNode;
+import org.springframework.expression.spel.ast.CompoundExpression;
+import org.springframework.expression.spel.ast.Indexer;
+import org.springframework.expression.spel.ast.PropertyOrFieldReference;
+import org.springframework.expression.spel.ast.Projection;
+import org.springframework.expression.spel.ast.Selection;
+import org.springframework.expression.spel.ast.StringLiteral;
+import org.springframework.expression.spel.ast.VariableReference;
+import org.springframework.expression.spel.standard.SpelExpression;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.util.ReflectionUtils;
@@ -44,7 +55,7 @@ import org.springframework.util.ReflectionUtils;
  *   <li>{@code #sequence(key, mode, format)} – generates unique sequences from Redis (mode: alpha/numeric/alphanum/binary/hex)</li>
  * </ul>
  * <p>
- * Responsibility: evaluate constrained template expressions against explicit functions.
+ * Responsibility: evaluate and inspect constrained template expressions against explicit functions.
  * Must not: look up clients or configuration from global state.
  * Contract: RESP-TEMPLATE-RENDER — docs/architecture/runtime-responsibilities.md#resp-template-render.
  */
@@ -163,6 +174,44 @@ final class SpelTemplateEvaluator {
     context.registerFunction("datetime_offset", DATETIME_OFFSET_METHOD);
 
     return PARSER.parseExpression(expression).getValue(context);
+  }
+
+  static Set<String> variableNames(String expression) {
+    if (expression == null || expression.isBlank()) {
+      return Set.of();
+    }
+    var parsed = (SpelExpression) PARSER.parseExpression(expression);
+    Set<String> names = new LinkedHashSet<>();
+    collectVariableNames(parsed.getAST(), names, true);
+    return names;
+  }
+
+  private static void collectVariableNames(SpelNode node, Set<String> names, boolean rootContext) {
+    if (node instanceof CompoundExpression) {
+      int varsIndex = rootContext ? 0 : -1;
+      if (node.getChild(0) instanceof VariableReference reference
+          && ("#root".equals(reference.toStringAST())
+              || rootContext && "#this".equals(reference.toStringAST()))) {
+        varsIndex = 1;
+      }
+      if (varsIndex >= 0 && node.getChildCount() > varsIndex + 1
+          && node.getChild(varsIndex) instanceof PropertyOrFieldReference root
+          && "vars".equals(root.getName())) {
+        var next = node.getChild(varsIndex + 1);
+        if (next instanceof PropertyOrFieldReference name) {
+          names.add(name.getName());
+        } else if (next instanceof Indexer && next.getChildCount() == 1
+            && next.getChild(0) instanceof StringLiteral literal) {
+          names.add((String) literal.getLiteralValue().getValue());
+        }
+      }
+    }
+    // Selection/projection children read the current element; index expressions always use the root.
+    boolean childRootContext = node instanceof Indexer
+        || rootContext && !(node instanceof Selection || node instanceof Projection);
+    for (int index = 0; index < node.getChildCount(); index++) {
+      collectVariableNames(node.getChild(index), names, childRootContext);
+    }
   }
 
   void validate(String expression) {

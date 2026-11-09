@@ -30,6 +30,9 @@ public final class ScenarioApi {
   public ApiResponse delete(String id) throws IOException, InterruptedException {
     return http.request("DELETE", path(id), null, token);
   }
+  public void reload() throws IOException, InterruptedException {
+    http.request("POST", ApiSurface.SCENARIO_MANAGER.publicPath("/scenarios/reload"), null, token).expect(204);
+  }
   public JsonNode readSchema(String id, String schemaPath) throws IOException, InterruptedException {
     return http.tree(http.request("GET", path(id) + "/schema?path=" + ApiSurface.pathSegment(schemaPath),
         null, token).expect(200));

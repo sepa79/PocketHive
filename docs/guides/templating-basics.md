@@ -45,6 +45,12 @@ templates can reference:
 - Pebble: `{{ vars.customerId }}`, `{{ vars.loopCount }}`
 - SpEL through Pebble `eval(...)`: `{{ eval("vars.loopCount + 1") }}`
 
+The name `vars` is reserved for this context. Do not use it as a local
+variable, loop binding, macro name/parameter, import alias or block name. Such
+declarations fail compilation in validation and during execution. Use a name
+such as `data` for your own local values. Reading `vars.customerId` or
+`vars['customerId']` remains supported.
+
 ### Example bundle
 
 See `scenarios/e2e/variables-demo/`:

@@ -64,11 +64,11 @@ Worker functions and transport codecs use the same item model; payload JSON conv
 
 WorkItemJsonCodec owns the Work envelope encode/decode boundary; its package-private WorkItemSchemaValidator performs schema validation.
 
-RabbitWorkItemConverter calls the codec; packaged docs/spec/workitem-envelope.schema.json remains the wire authority. Redis payload capture is not a consumer of this envelope codec.
+RabbitWorkItemConverter and ArtemisWorkInputChannel call the codec; packaged docs/spec/workitem-envelope.schema.json remains the wire authority. Redis payload capture is not a consumer of this envelope codec.
 
 **Forbidden:** load a runtime schema from a configurable filesystem path or create another envelope codec.
 
-**Required effect:** Valid envelopes round-trip through one codec; invalid wire documents and missing packaged schema fail explicitly.
+**Required effect:** Accept exactly one JSON envelope, allowing trailing whitespace but rejecting trailing documents/text and duplicate properties at every envelope nesting level before schema validation. Step payload strings remain opaque, including JSON/XML-looking contents. Valid envelopes round-trip through one codec; invalid wire documents and missing packaged schema fail explicitly.
 
 **Verification entrypoints:** `WorkItemJsonCodecTest`.
 
@@ -317,6 +317,24 @@ Identity composition consumes the generated value; it is not a Work queue/exchan
 **Migration status:** Current utility extraction; callers still own identity composition.
 
 ## RESP-TEMPLATE-RENDER
+
+`vars` is reserved for the Scenario Variables context. The canonical Pebble
+compiler rejects named declarations using it (set, loop bindings, macro names
+and parameters, import aliases and named blocks), including nested declarations.
+ReservedTemplateBindings decorates the existing tag parsers; they retain all
+grammar and token advancement. ReservedBindingParser/ReservedBindingTokenStream
+only forward parser operations and observe canonical declaration names. The same
+policy is installed for rendering, syntax validation and source inspection,
+including supplied engines; templates cached before installation are invalidated.
+Ordinary context reads, comments, text and map keys remain data; explicit context
+maps are not named declarations or a promise that context values are immutable.
+
+Pebble nodes without public child accessors (including optional include with-maps)
+are explicitly marked as deferred variable analysis. Public block/include-name
+expressions are traversed. No reflection, raw-source scan or hand-maintained language
+registry fills those gaps; canonical syntax validation and reserved-name checks still run.
+
+TemplateSourceInspector observes canonical Pebble syntax validation through TemplateVariableVisitor and the existing SpEL parser. Registry and argument checks still use PebbleTemplateRenderer.validateSyntax with its existing syntax guards/disabled sequences; the AST is a read-only projection, not a second validator. Literal and static variable facts are projected; dynamic Pebble variable methods/indexes are explicitly deferred. Dynamic SpEL indexing is not statically resolved and currently has no deferred-warning projection; this remains a diagnostic limitation.
 
 **Current module(s):** `common/templating-api`, `common/templating`.
 
@@ -847,6 +865,8 @@ startup and authoring tests during consumer activation.
 
 ## RESP-WORK-REDIS-TARGETS
 
+RedisOutputTemplateSources supplies read-only source text to selected Work parsing and invocation projection. Its shared field accessor is used by runtime settings parsing; route/default destinations remain data and are never interpreted as templates.
+
 RedisConfigurationParser owns decoded Redis output destination settings: validated routes,
 optional textual defaultList and targetListTemplate, with at least one configured target.
 It delegates route semantics to RESP-WORK-REDIS-ROUTES. RedisOutputTargetsValidation
@@ -1309,6 +1329,14 @@ or select clients/configuration.
 TemplatingInterceptorTest and RedisPushSupportTest use actual authored templates.
 
 ## RESP-WORK-MESSAGE-TEMPLATE
+
+**Shared modules:** `common/templating`, `common/templating-api`; message invocation remains in `common/worker-sdk`.
+
+Generator and clearing template-mode consumers use explicit read-only shared templating source
+projections (`GeneratorTemplateSources`, `ClearingTemplateSources`). Invocation
+interceptor block selection is owned by `InvocationTemplateSources`; runtime and
+authoring use it directly. These projections supply source text only. Existing typed
+worker configuration remains the owner of defaults, normalization and acceptance.
 
 WorkerTemplateContext supplies named SDK projections (RESP-WORK-TEMPLATE-CONTEXT).
 RenderedMessage and TemplateConfigResolver are separate types. The renderer and
@@ -1810,7 +1838,7 @@ or tool/auth schema change.
 **Current module(s):** `common/worker-sdk`.
 
 AuthRuntime composes a prepared activation set with AuthRuntimeResources and observes
-credential-application success/failure. AuthProfileLoader owns document discovery,
+credential-application success/failure. TemplateAuthProfileLocation owns template-root profile-file selection; AuthProfileLoader owns
 YAML reading and activation-set preparation/collision checks. AuthProfilePreparation
 owns resolved values, validation and fingerprints. AuthCredentialApplication owns
 non-refresh credential construction and HTTP/TCP/ISO/mTLS application.
@@ -1835,6 +1863,13 @@ expiry, contention, failure and Redis process tests. Resource failure wrapping,
 redaction and interruption remain part of the contract.
 
 ## RESP-WORK-AUTH-PROFILE-PREPARATION
+
+**Shared module:** `common/auth-contracts` (AuthProfileTemplateValues); runtime profile preparation remains in `common/worker-sdk`.
+
+The pure `AuthProfileTemplateValues` traversal owns which profile values are text
+sources and which are opaque `env`/`file` references. Runtime supplies rendering
+and secret-reading callbacks; authoring collects sources through that same traversal
+without reading secrets. Credential validation and profile activation remain unchanged.
 
 **Current module(s):** `common/worker-sdk`.
 
@@ -2111,7 +2146,11 @@ The portable adapter rejects transport failures before document extraction,
 retaining the transport diagnostic rather than reporting a JSON/XML parse error.
 It does not retry or interpret a failed transport's body as a response document.
 
-**Current module(s):** `http-sequence-service`.
+**Current modules:** `http-sequence-service`, `common/request-templates`.
+
+HttpSequenceStep and its retry/extract/set records define the shared sequence
+configuration projection. Their existing normalization and Jackson scalar binding
+are consumed by runtime and authoring. They own no HTTP effects or portable policy.
 
 For SCHEDULER input, HttpSequenceSchedulingConfiguration supplies the named seed
 customizer: one initial JSON-object step (`{}`, application/json), preserving
@@ -2141,6 +2180,8 @@ retains orchestration and journey/history writes; broader IO/core separation is
 outside this portable slice, not claimed complete by it.
 
 ## RESP-DB-QUERY-WORK
+
+**Shared module:** `common/templating` owns DbParameterSource path splitting and read-only dependency projection; `db-query-service` retains value resolution, SQL parsing and execution.
 
 **Current module(s):** `db-query-service`.
 
@@ -2185,6 +2226,8 @@ persistence stay with the clearing runtime. No document parser or second writer.
 **Verification:** ClearingStepProjectionTest and ClearingTemplateConsumerTest.
 
 ## RESP-CLEARING-EXPORT
+
+**Shared module:** `common/templating` owns the named read-only template projections and the transferred ClearingSchemaLocation/ClearingSchemaDocuments operations. Runtime schema cache/validation, record assembly and batch/output persistence remain in `clearing-export-service`. The shared schema helpers perform the existing file-existence selection and file reads; their file preference and decoder policy are unchanged.
 
 Template history projection delegates to RESP-CLEARING-TEMPLATE-DATA.
 
@@ -2533,7 +2576,51 @@ filesystem decisions, global changes to decoder unknown-field policy.
 
 **Verification entrypoints:** ScenarioManagerClientTest, ScenarioManagerClientAuthRetryTest.
 
+## RESP-SCENARIO-CONFIGURATION-PREPARATION
+
+**Current module:** `common/swarm-model`.
+
+ScenarioConfigurationPreparation owns the existing selected-profile variable
+substitution and top-level SUT baseUrl interpolation. SwarmController calls these
+operations in the existing order around auth-private-context injection. Exact
+variable placeholders preserve their value/type; embedded placeholders stringify.
+Nested paths, config.vars overwrite, the empty variable-map gate and SUT suffix
+handling remain unchanged. Variable values are inserted once, without recursively
+expanding them. Static bootstrap dependencies use the same matcher as substitution.
+
+**Forbidden:** profile selection, message rendering, worker binding or IO.
+
+**Verification entrypoint:** `ScenarioConfigurationPreparationTest`.
+
 ## RESP-SCENARIO-VALIDATE
+
+Worker-specific source and request-contract selection uses the role of the manifest
+resolved by CapabilityCatalogueService, including custom image names. An unresolved
+image retains the existing missing-capability error and selects no worker source owner.
+Image basenames and scenario topology role labels do not determine the worker contract.
+
+ScenarioTemplateAnalysis composes owner-declared syntax/dependency projections. ScenarioConfigurationTemplateSources, ScenarioAdditionalTemplateSources and ScenarioRequestReferences keep source discovery and static target projection separate. Only files under declared request roots become request/auth-reference documents; explicit authProfiles contracts are validated separately. Bootstrap dependencies retain the exact existing configuration-preparation matcher. Supported deferred source selections and variable lookups produce the existing deferred warning, not invented target/variable names; expression-analysis limits are recorded under RESP-TEMPLATE-RENDER.
+
+The pure projections live in the existing `templating` module. MessageBodyType is
+provided by `templating-api` with its original fully qualified Java name and values.
+Scenario Manager does not depend on the worker SDK starter; its application
+composition and transport-free authoring startup remain unchanged. Structured
+clearing file selection and decoding are shared with runtime, retaining their
+existing schema decoder policy independently of request-template JSON admission.
+ScenarioConfigurationTemplateSources reports one deferred finding at config.mode when
+the clearing mode is symbolic. Conditional configuration templates and structured schema
+sources remain unselected until that mode is concrete; unrelated sources still undergo
+their existing checks. ScenarioAdditionalTemplateSources reads the structured schema
+only for a concrete structured mode and does not emit a second mode warning.
+ScenarioBundleResourcePaths owns authoring projection of declared container resource
+roots into bundle-relative paths and membership checks for those relative roots. It detects unresolved bootstrap references through
+ScenarioConfigurationPreparation before mapping concrete paths and emits the existing
+deferred finding at the declaring field. Request, DB and structured-clearing readers
+consume this projection without reading conditional documents or resolving profiles.
+Concrete external roots retain their existing out-of-bundle policy. Containment
+checks use normalized path components: a leading parent segment leaves the bundle,
+while a contained directory such as `..clearing-schemas` is an ordinary name.
+Schema id/version deferral remains with the selected structured-source owner.
 
 **Current module(s):** `scenario-manager-service`, `tools/scenario-templating-check`.
 
@@ -2542,13 +2629,24 @@ ScenarioBundleValidator owns bundle acceptance checks; ScenarioTemplateValidator
 Both use the canonical template API with DisabledSequenceAccess; diagnostic rendering must not decide persisted scenario validity.
 
 Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
+ScenarioAuthProfileFindings owns auth-reference association with the profile document
+selected for each configured, concrete in-bundle request root. It consumes already
+decoded request documents and TemplateAuthProfileLocation's shared selection policy.
+Its file probe checks bundle containment before touching the filesystem; external and
+unresolved roots do not cause profile discovery. Each selected document is decoded and
+projected once by path, without merging profile IDs across documents or retrying an
+ancestor after a selected-file failure. Standalone bundle-root auth contract checks
+remain active even without references. Only selected nested auth files contribute
+template sources, through AuthProfileTemplateValues; env/file references remain opaque.
 AuthProfileStorageFindings projects authored auth type/storage checks using the
 shared auth-contracts policy; see RESP-SCENARIO-AUTH-STORAGE-FINDINGS.
 RequestTemplateFindings projects its problems into bundle findings and invokes
 PortableHttpRenderer for portable syntax/capability admission. Native templates
 retain the native syntax validator; portable documents are never compiled through
 that engine. Selected HTTP Sequence steps also delegate adapter admission to
-HttpSequencePortablePolicy. Bundle admission also rejects portable calls referenced by
+HttpSequencePortablePolicy. HttpSequenceStep and its retry/extract/set models live in
+request-templates and supply the same Jackson binding to authoring and execution;
+numeric call IDs therefore do not bypass selected portable-step admission. Bundle admission also rejects portable calls referenced by
 Request Builder, whose native protocol renderer does not implement that profile;
 unreferenced portable files may share its template root.
 Profile existence and bundle visibility stay here. The offline diagnostic delegates file loading to
@@ -2649,7 +2747,11 @@ interfaces; neither the loader nor this dispatch duplicates portable grammar or
 data decoding. PortableHttpCallParser uses RequestTemplateParser for its inner
 native HTTP definition.
 
-TemplateLoader enumerates and decodes files once, delegates parsing and rejects missing
+RequestTemplateDocumentReader owns JSON/YAML decoding for runtime files and authoring.
+JSON rejects trailing tokens and duplicate keys; YAML retains the first-document policy
+and duplicate-key rejection. It performs no IO.
+
+TemplateLoader enumerates files and delegates decoding and parsing and rejects missing
 roots and duplicate keys explicitly. Runtime workers and offline diagnostics use that
 adapter. Scenario Manager delegates template semantics to the parser and retains bundle
 file visibility, duplicate/reference findings and auth-profile existence checks.
@@ -4242,12 +4344,21 @@ or additional interface is introduced.
 
 ## RESP-WORK-AUTH-PROFILE-LOADING
 
-AuthProfileLoader owns existing profile-file discovery, strict YAML decoding and
-selection/preparation of referenced profiles through AuthProfilePreparation. It
-rejects unknown profile IDs, absent required SUT context and conflicting effective
-fingerprints for one token key. PreparedAuthProfiles is its immutable-map result.
-No Redis/HTTP resources are opened here. Existing documented discovery locations
-are retained in this extraction; the loader is their only implementation.
+TemplateAuthProfileLocation in auth-contracts owns the existing template-root
+profile-file selection policy. This pure function receives an explicit default file
+from ScenarioBundleLayout and an existence predicate. For a nonblank template root,
+it searches its absolute normalized path and ancestors, then the default file;
+null/blank roots test only that default. The first match is authoritative. It derives
+the filename from the supplied default and performs no filesystem access itself.
+Runtime supplies Files.isRegularFile; authoring supplies a bundle-contained probe.
+
+AuthProfileLoader delegates template selection to that policy and owns strict YAML
+decoding and selection/preparation of referenced profiles through AuthProfilePreparation.
+Application-stage scenario-root overrides retain their existing owner and behavior.
+The loader rejects unknown profile IDs, absent required SUT context and conflicting
+effective fingerprints for one token key. PreparedAuthProfiles is its immutable-map
+result. No Redis/HTTP resources are opened here. Selected-file failures never select
+another document; no compatibility path or profile-ID union is introduced.
 
 
 ## RESP-WORK-AUTH-APPLICATION
@@ -4351,8 +4462,11 @@ template and schema directory names, descriptor paths and the default worker mou
 /app/scenario. Scenario Manager editing/validation, Orchestrator mount composition
 and AuthProfileLoader consume this contract. RuntimeFilesystemContract.CONTAINER_ROOT
 remains the distinct shared runtime-storage root /app/scenarios-runtime.
-Path methods do not read files or enforce caller policy. Existing containment checks,
-auth profile search order and scenario-root overrides remain with their consumers.
+ScenarioBundleLayout path methods do not read files or enforce caller policy.
+Authoring root projection and deferred-root diagnostics belong to Scenario Manager's
+ScenarioBundleResourcePaths under RESP-SCENARIO-VALIDATE. Existing containment checks,
+auth profile search order belongs to TemplateAuthProfileLocation, while scenario-root
+overrides remain with AuthProfileLoader.
 This transfer preserves names and normalization; no new resolver service or fallback.
 
 ## RESP-SCENARIO-AUTHORING-PROJECTION

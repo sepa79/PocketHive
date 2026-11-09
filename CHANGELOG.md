@@ -4,12 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.39] - 2026-11-09
+
 ### Fixed
 
+- Validate parsed scenario sections and actual template sources through the same
+  configuration, request-template and auth-profile owners used at runtime. Preserve
+  Scenario Protocol 2, existing YAML interpolation and optional-variable behavior;
+  ignore comments and ordinary data when discovering template dependencies. (#533)
+- Reject trailing JSON tokens in request templates and validate numeric portable
+  `callId` values consistently with string values. (#533)
+- Reject duplicate properties at every WorkItem envelope nesting level and
+  trailing JSON documents or text. Keep payload strings opaque and accept trailing
+  whitespace. (#529)
+- Correct auth URL examples to use the selected SUT endpoint context and explain
+  explicit SUT selection and the global-variable alternative. (#493)
+- Restore complete HTTP Sequence mutation coverage after extracting shared step
+  models: remove an unused helper and cover missing required configuration fields,
+  retaining the existing mutation thresholds.
 - Restore the Auth mutation gate's full coverage with regressions for exact
   first-party browser redirects and public-client revocation versus refresh.
   Exercise canonical Pocket browser/device registrations without lowering the
   mutation or coverage thresholds or changing runtime authorization behavior.
+
+### Changed
+
+- Reserve `vars` for the template variable context. Local declarations with that
+  name now fail compilation; rename them before upgrading. Existing `vars.name`
+  and `vars['name']` reads remain supported. See [upgrade guidance](docs/UPGRADING.md#01539-from-01538).
 
 ## [0.15.38] - 2026-10-21
 

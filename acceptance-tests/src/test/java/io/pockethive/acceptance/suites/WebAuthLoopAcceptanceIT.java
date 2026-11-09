@@ -46,6 +46,7 @@ class WebAuthLoopAcceptanceIT {
         String sut = run.scenarios.readSutRaw(run.target.fixture().templateId(), run.target.fixture().sutId());
         run.scenarios.writeSutRaw(scenario.id(), run.target.fixture().sutId(), sut);
         assertEquals(sut, run.scenarios.readSutRaw(scenario.id(), run.target.fixture().sutId()));
+        run.scenarios.reload();
         lists.get(5).reserveForProducer();
         lists.get(6).reserveForProducer();
         var mock = run.tcpMock();
