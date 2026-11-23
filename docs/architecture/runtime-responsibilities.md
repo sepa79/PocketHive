@@ -403,11 +403,12 @@ unsupported capabilities fail preflight, without executing requests.
 
 **Module/owner:** `common/templating`, CryptoSpelFunctions.
 
-Owns the three string-based SpEL boundaries, argument validation, hex decoding
+Owns the string-based crypto SpEL boundaries, argument validation, hex decoding
 and uppercase encoding under the [crypto function contract](../contracts/template-capabilities.md#composable-emv-and-mac-functions).
-SpelTemplateEvaluator registers these functions. Each delegates to its byte operation.
+SpelTemplateEvaluator registers these functions. Each delegates to its crypto operation,
+including the explicitly named PPS no-PIN Track2 CVC3 profile.
 
-**Forbidden:** implement derivation/MAC algorithms, interpret transaction fields,
+**Forbidden:** implement derivation/MAC algorithms, assemble transaction fields,
 select profiles, log arguments or read keys from infrastructure.
 
 **Required effect:** invalid input fails explicitly; valid input delegates once and
@@ -453,6 +454,20 @@ using Bouncy Castle. Consumers: CryptoSpelFunctions.
 **Forbidden:** derive keys, decode hex, impose EMV data layout or retain MAC state between calls.
 **Required effect/verification:** eight-byte output matches Iso9797Algorithm3MacTest,
 including empty data and full-block padding.
+
+## RESP-PPS-TRACK2-CVC3
+
+**Module/owner:** `common/templating`, PpsTrack2Cvc3.
+
+Owns the explicit PPS Track2 no-PIN CVC3 calculation on validated inputs. Composes
+EmvIccMasterKeyDerivation (fixed `00` diversification suffix),
+Iso9797Algorithm3Mac (method-2 static Track2 MAC) and Bouncy Castle TDES for the
+dynamic block. Consumers: CryptoSpelFunctions.
+**Forbidden:** select another profile/PIN variant, unwrap keys, read configuration,
+generate randomness, allocate counters, assemble outgoing Track2/ICC or send requests.
+**Required effect/verification:** deterministic three-digit CVC3 matching synthetic
+SDK reference vectors and renderer tests. Private offline comparison may verify
+prepared NFT cases without publishing keys; it does not prove issuer approval.
 
 ## RESP-TEMPLATE-SEQUENCE
 

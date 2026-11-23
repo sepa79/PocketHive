@@ -4,7 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add native `#pps_cvc3_track2_no_pin(...)` template support for the explicit
+  PPS Track2 no-PIN profile, using an approved clear CVK and caller-supplied
+  card/ATC/decimal-UN inputs. Reuses existing EMV/MAC primitives and Bouncy Castle;
+  no runtime Thales SDK or key-file access. Includes synthetic SDK reference,
+  renderer, validation and value-free diagnostic tests. Existing ARQC functions
+  are unchanged; bundle migration and deployment are separate steps.
+  See the [change scope and dated live verification](docs/ci/evidence/2026-11-20-native-track2-cvc3.md)
+  for the implementation inventory, tests, native issuer approval and proof limits.
+
 ### Fixed
+
+- Run disposable RabbitMQ fixture diagnostics as the broker user so an early
+  health check cannot create a root-owned Erlang cookie during startup.
 
 - Restore the Auth mutation gate's full coverage with regressions for exact
   first-party browser redirects and public-client revocation versus refresh.

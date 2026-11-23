@@ -30,6 +30,7 @@ supported behavior and [the delivery index](inProgress/README.md) for remaining 
 - [Workers Advanced](guides/workers-advanced.md)
 - [Templating Basics](guides/templating-basics.md)
 - [Templating Advanced](guides/templating-advanced.md)
+- [Native Track2 CVC3: change scope and live verification](ci/evidence/2026-11-20-native-track2-cvc3.md)
 
 ## Services
 - [Orchestrator](../orchestrator-service/README.md)

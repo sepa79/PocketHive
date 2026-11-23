@@ -118,6 +118,9 @@ The following SpEL functions are available (via `#name(...)`):
 - `#emv_common_sk(iccMkHex, diversificationHex)` - common session key.
 - `#iso9797_alg3_mac_m2(keyHex, dataHex)` - eight-byte MAC with method-2 padding.
   See the [contracts and generic composition examples](../contracts/template-capabilities.md#composable-emv-and-mac-functions).
+- `#pps_cvc3_track2_no_pin(...)` - explicit PPS no-PIN Track2 CVC3 from a clear
+  CVK and card/transaction inputs. See the [profile contract and example](../contracts/template-capabilities.md#pps-track2-cvc3-without-pin)
+  for decimal-UN encoding and supported inputs.
 - `#regex_match(input, pattern)` - boolean.
 - `#regex_extract(input, pattern, group)` - string (empty if no match).
 - `#json_path(payload, path)` - JSONPath extractor; returns a string.

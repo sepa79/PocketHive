@@ -1,0 +1,109 @@
+{
+  "documentationDate": "2026-11-23",
+  "repository": "sepa79/PocketHive",
+  "branch": "feature/rakbank-icc-generation",
+  "evidenceType": "historical-surefire-summary",
+  "freshTestExecutionDuringDocumentation": false,
+  "eventualPrCommitCiResult": false,
+  "source": "common/templating/target/surefire-reports/TEST-*.xml",
+  "totalTests": 96,
+  "failures": 0,
+  "errors": 0,
+  "reports": [
+    {
+      "report": "TEST-io.pockethive.templating.CryptoSpelFunctionsTest.xml",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:34:43.2433756Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.EmvCommonSessionKeyDerivationTest.xml",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:34:45.9091361Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.EmvCryptoCompositionTest.xml",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:34:46.1932148Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.EmvCryptoRenderingTest.xml",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:35:36.1843236Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.EmvIccMasterKeyDerivationTest.xml",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:35:36.5128006Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.Iso9797Algorithm3MacTest.xml",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:35:37.2497749Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.PebbleTemplateRendererTest.xml",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:35:38.2515859Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.PortableHttpRendererTest.xml",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:35:54.983118Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.PpsTrack2Cvc3Test.xml",
+      "tests": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:35:55.2988566Z"
+    },
+    {
+      "report": "TEST-io.pockethive.templating.SequencePortRenderingTest.xml",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "reportLastWrittenUtc": "2026-11-19T17:35:56.0790926Z"
+    }
+  ],
+  "liveRun": {
+    "dateUtc": "2026-11-20",
+    "runId": "d1502bc6-832e-4766-b28a-2cadce490f2b",
+    "requestMti": "0200",
+    "responseMti": "0210",
+    "responseCode": "00",
+    "stan": "000001",
+    "rrn": "000000000001",
+    "atcHex": "0003",
+    "authorizationId": "561663",
+    "reportedProcessorDurationMs": 971,
+    "continuousReuseVerified": false,
+    "correctedRoutingLiveVerified": false,
+    "grafanaDeliveryVerified": false
+  }
+}
