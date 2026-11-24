@@ -1,9 +1,5 @@
 package io.pockethive.httpsequence;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
@@ -11,6 +7,7 @@ import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
@@ -33,10 +30,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 /** Real template/runner/Redis capture behavior against a disposable, explicitly configured Redis fixture. */
 @Timeout(30)
 class HttpSequenceDebugCaptureTest {
@@ -230,7 +229,7 @@ class HttpSequenceDebugCaptureTest {
 
   private HttpSequenceWorkerConfig configuration(String baseUrl, HttpSequenceWorkerConfig.DebugCapture capture) {
     return new HttpSequenceWorkerConfig(baseUrl, temporary.toString(), "default", 1,
-        List.of(new HttpSequenceWorkerConfig.Step("capture", "A", null, false, null, List.of(), List.of())), capture, Map.of());
+        List.of(new HttpSequenceStep("capture", "A", null, false, null, List.of(), List.of())), capture, Map.of());
   }
 
   private void writeTemplate(String[] header) throws Exception {

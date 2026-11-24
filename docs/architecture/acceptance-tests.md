@@ -2,8 +2,8 @@
 
 User-approved direction: a new `acceptance-tests` Maven module, Java 21 and JUnit 5.
 It is the sole acceptance framework after user-approved legacy removal on 2026-09-26.
-These are the current implementation responsibility records. Dated execution evidence
-and environment limitations remain in docs/ci/acceptance-coverage.md and its linked reports.
+These are the current implementation responsibility records. The
+[coverage checklist](../ci/acceptance-coverage.md) maps the observable requirements.
 
 ## Boundaries and composition
 

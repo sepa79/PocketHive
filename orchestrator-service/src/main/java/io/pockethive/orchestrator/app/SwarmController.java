@@ -3,74 +3,73 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
-import io.pockethive.control.ConfirmationScope;
-import io.pockethive.controlplane.messaging.ControlPlanePublisher;
-import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.ControlPlaneOperations;
 import io.pockethive.controlplane.ControlPlaneRoles;
+import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactStore;
 import io.pockethive.controlplane.messaging.Alerts;
+import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.auth.contract.AuthenticatedUserDto;
-import io.pockethive.orchestrator.domain.ScenarioPlan;
-import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
-import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactStore;
-import io.pockethive.orchestrator.domain.OperationConflictException;
-import io.pockethive.orchestrator.domain.SwarmStateStore;
-import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
-import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
+import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
+import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.orchestrator.domain.OperationConflictException;
+import io.pockethive.orchestrator.domain.ScenarioPlan;
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
+import io.pockethive.orchestrator.domain.SwarmStateStore;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.swarm.model.BeeConfigKeys;
 import io.pockethive.swarm.model.BeeRoles;
-import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.NetworkBinding;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.NetworkProfile;
 import io.pockethive.swarm.model.ResolvedSutEnvironment;
+import io.pockethive.swarm.model.ScenarioConfigurationPreparation;
+import io.pockethive.swarm.model.SutEndpoint;
+import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.SwarmStartupArtifactReference;
 import io.pockethive.swarm.model.SwarmTemplate;
-import io.pockethive.swarm.model.SutEndpoint;
-import io.pockethive.swarm.model.SutEnvironment;
-import io.pockethive.swarm.model.lifecycle.ControlResponse;
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
+import io.pockethive.swarm.model.lifecycle.OperationState;
+import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequestJsonCodec;
 import io.pockethive.swarm.model.lifecycle.SwarmLifecycleContractException;
-import io.pockethive.swarm.model.lifecycle.OperationState;
-import io.pockethive.scenarios.ScenarioBundleLayout;
-import io.pockethive.swarm.model.lifecycle.OperationType;
-import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.SwarmOperation;
+import io.pockethive.swarm.model.lifecycle.SwarmStateView;
+import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
-import io.pockethive.swarm.model.lifecycle.Target;
-import io.pockethive.swarm.model.lifecycle.SwarmStateView;
 import io.pockethive.swarm.model.lifecycle.WorkerSummary;
 import io.pockethive.util.BeeNameGenerator;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -84,7 +83,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
 /**
  * Responsibility: expose the existing swarm lifecycle HTTP workflows.
  * Must not: resolve authorization scope or duplicate per-swarm grant policy.
@@ -122,10 +120,7 @@ public class SwarmController {
     private String scenariosRuntimeRootSource;
     private static final Set<String> AUTH_SUT_CONTEXT_IMAGE_NAMES =
         Set.of(BeeRoles.REQUEST_BUILDER, BeeRoles.HTTP_SEQUENCE, BeeRoles.PROCESSOR);
-    private static final Pattern BASE_URL_TEMPLATE =
-        Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
-    private static final Pattern VARS_TEMPLATE =
-        Pattern.compile("\\{\\{\\s*vars\\.([A-Za-z0-9_.-]+)\\s*}}");
+
 
     public SwarmController(ControlPlanePublisher controlPublisher,
                            ContainerLifecycleManager lifecycle,
@@ -328,14 +323,13 @@ public class SwarmController {
                                 config = addScenarioVolume(config, scenarioVolume);
                             }
                             if (resolvedVars != null && !resolvedVars.isEmpty()) {
-                                config = addScenarioVars(config, resolvedVars);
-                                config = applyScenarioVarTemplates(config, resolvedVars);
+                                config = ScenarioConfigurationPreparation.applyVariables(config, resolvedVars);
                             }
                             if (finalSutEnvironment != null && isAuthSutContextImage(resolvedImage)) {
                                 config = addAuthProfilePrivateContext(config, finalSutEnvironment);
                             }
                             if (finalSutEnvironment != null && config != null && !config.isEmpty()) {
-                                config = applySutConfigTemplates(config, finalSutEnvironment);
+                                config = ScenarioConfigurationPreparation.applySut(config, finalSutEnvironment);
                             }
                             return new io.pockethive.swarm.model.Bee(
                                 bee.role(),
@@ -785,91 +779,6 @@ public class SwarmController {
         return Map.copyOf(result);
     }
 
-    private static Map<String, Object> addScenarioVars(Map<String, Object> config, Map<String, Object> vars) {
-        if (vars == null || vars.isEmpty()) {
-            return config;
-        }
-        Map<String, Object> result = (config == null || config.isEmpty())
-            ? new LinkedHashMap<>()
-            : new LinkedHashMap<>(config);
-        // Reserved key for scenario variables: config.vars (map).
-        // Workers are expected to propagate this into the WorkItem headers so Pebble/SpEL templates can reference it as `vars.*`.
-        result.put("vars", vars);
-        return Map.copyOf(result);
-    }
-
-    private static Map<String, Object> applyScenarioVarTemplates(Map<String, Object> config, Map<String, Object> vars) {
-        if (config == null || config.isEmpty() || vars == null || vars.isEmpty()) {
-            return config;
-        }
-        Map<String, Object> result = new LinkedHashMap<>();
-        config.forEach((key, value) -> {
-            if ("vars".equals(key)) {
-                result.put(key, value);
-            } else {
-                result.put(key, renderScenarioVarValue(value, vars));
-            }
-        });
-        return Map.copyOf(result);
-    }
-
-    private static Object renderScenarioVarValue(Object value, Map<String, Object> vars) {
-        if (value instanceof String text) {
-            return renderScenarioVarString(text, vars);
-        }
-        if (value instanceof Map<?, ?> rawMap) {
-            Map<String, Object> rendered = new LinkedHashMap<>();
-            rawMap.forEach((key, nestedValue) -> {
-                if (key != null) {
-                    rendered.put(key.toString(), renderScenarioVarValue(nestedValue, vars));
-                }
-            });
-            return Map.copyOf(rendered);
-        }
-        if (value instanceof List<?> rawList) {
-            return rawList.stream()
-                .map(item -> renderScenarioVarValue(item, vars))
-                .toList();
-        }
-        return value;
-    }
-
-    private static Object renderScenarioVarString(String text, Map<String, Object> vars) {
-        Matcher exact = VARS_TEMPLATE.matcher(text.trim());
-        if (exact.matches()) {
-            return resolveScenarioVar(vars, exact.group(1));
-        }
-
-        Matcher matcher = VARS_TEMPLATE.matcher(text);
-        StringBuffer rendered = new StringBuffer();
-        boolean changed = false;
-        while (matcher.find()) {
-            Object value = resolveScenarioVar(vars, matcher.group(1));
-            matcher.appendReplacement(rendered, Matcher.quoteReplacement(Objects.toString(value, "")));
-            changed = true;
-        }
-        if (!changed) {
-            return text;
-        }
-        matcher.appendTail(rendered);
-        return rendered.toString();
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Object resolveScenarioVar(Map<String, Object> vars, String path) {
-        Object current = vars;
-        for (String part : path.split("\\.")) {
-            if (!(current instanceof Map<?, ?> rawMap) || !rawMap.containsKey(part)) {
-                throw new IllegalStateException("Unknown scenario variable '%s'".formatted(path));
-            }
-            current = ((Map<String, Object>) rawMap).get(part);
-        }
-        if (current == null) {
-            throw new IllegalStateException("Scenario variable '%s' is null".formatted(path));
-        }
-        return current;
-    }
-
     private static Map<String, Object> addAuthProfilePrivateContext(Map<String, Object> config, SutEnvironment sutEnvironment) {
         Map<String, Object> result = (config == null || config.isEmpty())
             ? new LinkedHashMap<>()
@@ -1237,33 +1146,5 @@ public class SwarmController {
      *       be resolved, we fail fast with an {@link IllegalStateException}.</li>
      * </ul>
      */
-    private static Map<String, Object> applySutConfigTemplates(Map<String, Object> config, SutEnvironment sutEnvironment) {
-        Object baseUrlObj = config.get("baseUrl");
-        if (!(baseUrlObj instanceof String template)) {
-            return config;
-        }
-        Matcher matcher = BASE_URL_TEMPLATE.matcher(template.trim());
-        if (!matcher.matches()) {
-            return config;
-        }
-        if (sutEnvironment == null) {
-            throw new IllegalStateException("SUT-aware baseUrl template used but no sutId was provided");
-        }
-        String endpointId = matcher.group(1);
-        String suffix = matcher.group(2);
-        SutEndpoint endpoint = sutEnvironment.endpoints().get(endpointId);
-        if (endpoint == null) {
-            throw new IllegalStateException("Unknown SUT endpoint '%s' for environment '%s'"
-                .formatted(endpointId, sutEnvironment.id()));
-        }
-        String base = endpoint.baseUrl();
-        if (base == null || base.isBlank()) {
-            throw new IllegalStateException("SUT endpoint '%s' for environment '%s' has no baseUrl"
-                .formatted(endpointId, sutEnvironment.id()));
-        }
-        String resolved = base.trim() + suffix;
-        Map<String, Object> updated = new java.util.LinkedHashMap<>(config);
-        updated.put("baseUrl", resolved);
-        return Map.copyOf(updated);
-    }
+
 }

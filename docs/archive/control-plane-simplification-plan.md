@@ -102,28 +102,6 @@ Progress on Orchestrator `SwarmSignalListener`:
 - [x] Reduce `SwarmSignalListener` to the AMQP adapter: parse routing, decode once, dispatch by envelope kind, and
   journal invalid ingress. Move result and timeout characterization to focused component tests.
 
-Current verification evidence:
-
-- Focused Orchestrator component tests pass: listener transport dispatch, status publication, CREATE/config
-  observation, generic terminal handling, and REMOVE convergence are covered by their owning implementation units.
-- `./mvnw -pl :orchestrator-service -am test` passed the complete 17-module dependency reactor; the Orchestrator
-  module passed 182 tests.
-- `./build-hive.sh --quick` rebuilt and redeployed the local stack; all required services reported healthy.
-- The first complete official-ingress `./start-e2e-tests.sh --target local-swarm` run passed 38 of 39 scenarios. The
-  final scenario received a controller-produced `swarm-stop` `FAILED` result after the controller did not observe
-  fresh disabled snapshots from three workers within its 30-second convergence window. All four worker
-  config-update acknowledgements arrived immediately.
-- The exact final scenario then passed in an isolated diagnostic replay. A clean full A/B check rebuilt the stack
-  from the unchanged base commit `18d8cfbc` and passed 39 of 39 scenarios and 463 of 463 steps. The stack was then
-  rebuilt from this refactor without changing the working tree, and the same full gate also passed 39 of 39
-  scenarios and 463 of 463 steps; the formerly failing final STOP converged in about two seconds.
-- After the refactor rerun, the official API reported no active swarms, both remaining Orchestrator queues had zero
-  ready and unacknowledged messages, and the stack was healthy. The observed matrix is therefore baseline full:
-  pass; refactor full: one fail followed by one pass; refactor isolated: pass. Treat the original failure as an open,
-  non-reproduced convergence incident rather than proof of either a regression or an unrelated transient. Review
-  the extraction for ordering, scheduling, and concurrency changes before declaring this sink complete or starting
-  the next sink.
-
 Next sink: Swarm Controller `SwarmSignalListener` (1,600 lines before extraction). Confirmed responsibilities are
 AMQP ingress, signal dispatch, filesystem-backed REMOVE execution, START/STOP convergence, config application,
 worker status and alert ingestion, controller status projection/publication, and health journaling. Extract in this
@@ -171,9 +149,6 @@ Progress on Swarm Controller `SwarmSignalListener`:
 - [x] Extract health-transition state and journal construction to `SwarmHealthJournal`. Preserve the initial
   observation baseline, workload-enable suppression window, degraded/recovered edge semantics, severity, scope, and
   metric evidence in focused component tests; remove the mutable health-journal state from the listener.
-- [x] Pass `./mvnw -pl :swarm-controller-service -am test` after the health-journal extraction: all 12 reactor modules
-  passed; the Swarm Controller module reported 124 tests with 0 failures/errors and 2 environment-skipped integration
-  tests. Repository search finds one health-transition journal owner and `git diff --check` passes.
 - [x] Extract full/delta controller status construction, worker/diagnostic projection, health derivation, and
   control-route publication to `SwarmControllerStatusPublisher`. Keep mutable network configuration and publication
   trigger state outside the publisher so it remains a projection/publication owner.
@@ -185,10 +160,6 @@ Progress on Swarm Controller `SwarmSignalListener`:
   traffic policy, network context, queue-refresh failure, and the exact canonical controller-route list. Add focused
   tests for network-context validation, guard projection, startup-ready emission, freshness waiting, timeout, and
   pending-trigger replacement.
-- [x] Pass `./mvnw -pl :swarm-controller-service -am test` after status extraction: all 12 reactor modules passed; the
-  Swarm Controller module reported 128 tests with 0 failures/errors and 2 environment-skipped integration tests.
-  Repository search finds one controller status-envelope builder, one network-context owner, one delayed full-status
-  coordinator, and one guard-to-policy mapper; `git diff --check` passes.
 - [x] Extract START/STOP execution and pending convergence to `SwarmLifecycleCommandHandler`. The handler preserves
   the 30-second bound, fresh matching worker requirement, exact non-converged target evidence, already-achieved
   behavior, config-error failure path, and post-lifecycle full-status trigger while `SwarmLifecycle` remains the
@@ -198,50 +169,23 @@ Progress on Swarm Controller `SwarmSignalListener`:
   state from the listener. The listener now only dispatches START/STOP and triggers convergence reevaluation from
   accepted status events and its scheduled transport hook; accepted config-error alerts are delegated to the same
   pending-command owner.
-- [x] Add 11 focused tests for command admission, START/STOP execution, fresh convergence, exact timeout evidence,
-  already-achieved behavior, alert failure, and canonical result/failure construction. A clean
-  `./mvnw -pl :swarm-controller-service -am clean test` passed all 12 reactor modules; the Swarm Controller module
-  reported 139 tests with 0 failures/errors and 2 environment-skipped integration tests. Repository search finds one
-  pending lifecycle-command owner and one Swarm Controller result-construction owner; `git diff --check` passes.
 - [x] Extract config command admission and application to `SwarmConfigUpdateHandler`; remove enabled-state, scenario,
   network-context, buffer-guard, rejection, and result workflow code from the listener. Delete the previously
   accumulated config `details`, which had no consumer and did not affect the result contract.
 - [x] Extract partial buffer-guard normalization to `BufferGuardConfigOverrideMapper`. Focused tests preserve explicit
   disable, every supported nested override, retention of omitted effective settings, and rejection of runtime guard
   queue-identity changes.
-- [x] Add seven focused config-handler tests and three focused override-mapper tests. A clean
-  `./mvnw -pl :swarm-controller-service -am clean test` passed all 12 reactor modules; the Swarm Controller module
-  reported 149 tests with 0 failures/errors and 2 environment-skipped integration tests. Repository search finds one
-  accepted config-application owner and one buffer-guard override normalizer; `git diff --check` passes.
-- [x] Extract verified filesystem startup-artifact loading and lifecycle application to
-  `SwarmControllerStartupInitializer`; remove startup mutation and initialization state from the listener. A focused
-  component test preserves swarm-plan/scenario-plan application, artifact digest exposure, and readiness only after
-  successful application. The complete dependency reactor passes; the Swarm Controller module reports 150 tests
-  with 0 failures/errors and 2 environment-skipped integration tests.
+- [x] Apply the verified filesystem startup artifact through `SwarmControllerStartupInitializer`.
 - [x] Move control-plane collaborator construction to `SwarmControllerControlPlaneConfiguration` and runtime metadata
   resolution to `SwarmControllerRuntimeMetadata`. Preserve the journaled publisher, one-minute/256-entry duplicate
   cache, controller identity, topology settings, startup timestamp, and initial status behavior. The listener now
   receives every workflow owner ready to dispatch and no longer constructs publishers, emitters, projections,
   readiness queries, or command handlers.
-- [x] Add focused immutable runtime-metadata coverage and make listener characterization use the canonical
-  composition methods. A clean `./mvnw -pl :swarm-controller-service -am clean test` passed all 12 reactor modules;
-  the Swarm Controller module reported 152 tests with 0 failures/errors and 2 environment-skipped integration tests.
-  Repository search finds one active composition site for each extracted listener collaborator; the listener is 435
-  lines and `git diff --check` passes.
 - [x] Run `./build-hive.sh --quick`; the canonical rebuild/redeploy completed and every required base service reached
   healthy state. The first official-ingress run then exposed a deterministic dynamic-controller startup failure:
   Spring could not choose between the production and test-clock constructors of `SwarmHealthJournal`.
-- [x] Mark the production `SwarmHealthJournal` constructor explicitly for injection and add a Spring context test
-  that proves the runtime constructor is selected. A final clean Swarm Controller dependency reactor passed all 12
-  modules; the Swarm Controller module reported 153 tests with 0 failures, errors, or skips. A second canonical
-  `./build-hive.sh --quick` completed with every required base service healthy.
-- [x] Pass the unchanged official-ingress `./start-e2e-tests.sh --target local-swarm` gate after the wiring fix:
-  39 of 39 scenarios and 463 of 463 steps passed. The official debug client then reported no active swarms.
-- [x] Resolve the follow-up review findings: move initial and five-second periodic publication/convergence triggers
-  from the AMQP listener to `SwarmControllerControlPlaneScheduler`, replace the 874-line listener/workflow fixture
-  with a transport-boundary test, and add a broker-independent Spring composition test that starts the production
-  control-plane graph together with the shared auto-configuration. The targeted listener, scheduler, and composition
-  tests pass (16 tests, 0 failures/errors); the listener has no scheduling annotation or constructor side effect.
+- [x] Move initial status publication and periodic convergence triggers to
+  `SwarmControllerControlPlaneScheduler`.
 - [x] Resolve the convergence regression exposed by the first post-review E2E run. Controller logs showed accepted
   post-START worker snapshots whose wall-clock timestamps moved backwards by about 0.53 seconds, so timestamp-based
   freshness incorrectly classified current observations as older than the command. `SwarmReadinessTracker` now owns
@@ -249,13 +193,6 @@ Progress on Swarm Controller `SwarmSignalListener`:
   atomically with the validated `enabled` value, so a delta or rejected payload cannot masquerade as fresh full-status
   evidence. Wall time remains limited to heartbeat age and metrics; command and coordinator deadlines use monotonic
   `System.nanoTime`.
-- [x] Add focused revision-ordering and monotonic-deadline coverage. The targeted component set and a clean
-  `./mvnw -pl :swarm-controller-service -am clean test` pass; after the atomic observation follow-up, the Swarm
-  Controller module reports 140 tests with 0 failures/errors/skips. `./build-hive.sh --quick` completes with every
-  required service healthy.
-- [x] Pass the complete unchanged official-ingress gate after the scheduler, test-boundary, and convergence repairs:
-  `./start-e2e-tests.sh --target local-swarm` reports 39 of 39 scenarios, 463 of 463 steps, and 48 Maven tests passed.
-  The previously failing TCP-timeout START scenario passes without retry, timeout extension, or an extra status request.
 - [x] Resolve the final-review lifecycle admission finding. `SwarmLifecycleCommandHandler` now serializes command
   admission, mutation, convergence, and alert failure through one owner; a pending command rejects another START or
   STOP before lifecycle mutation or an already-achieved shortcut. Two focused overlap regressions pass, and a clean
@@ -296,51 +233,18 @@ Progress on `SwarmRuntimeCore`:
   ClickHouse, filesystem-mount, adapter-environment, volume, or SUT-mapping details; it registers and provisions the
   resolved plans. `SwarmLifecycleManager` now passes its existing canonical `WorkerSettings` instead of the core
   deriving the same settings again.
-- [x] Replace reflection tests of private core helpers with focused factory coverage for control-plane/work IO,
-  adapter config, SUT enrichment, ClickHouse settings, filesystem mount, user-env precedence, and volume ordering.
-  Targeted factory/core/manager tests pass 33 of 33. The complete 12-module dependency reactor passes; the Swarm
-  Controller module reports 150 tests with 0 failures/errors and 2 environment-skipped integration tests.
-  `SwarmRuntimeCore` is reduced from 1,179 to 818 lines.
 - [x] Extract plan-derived queue suffix and runnable-worker selection to `SwarmRuntimePlanAnalyzer`. Review showed
   that the previous dependency-order calculation had no production consumer: removal reversed the list and then
   ignored it, while compute adapters already remove workers in reverse provisioning order. Delete that algorithm,
   its context/state fields, and its tests rather than establishing a new owner for dead behavior. Focused coverage
   preserves queue collection, blank filtering, and workers without a runtime image.
-- [x] Extract local runtime/scenario journal projection to `SwarmRuntimeJournal`. It is the single
-  `TimelineScenarioObserver` and owns controller scope, MDC attribution, event shapes, severity, and safe error
-  messages; the core only reports the three provisioning/template outcomes at their lifecycle boundaries. Focused
-  journal tests preserve operation context and timeline-event isolation from unrelated MDC state. The focused
-  plan/journal/scenario/manager set passes 35 of 35 tests. The complete 12-module dependency reactor passes; the
-  Swarm Controller module reports 156 tests with 0 failures/errors and 2 environment-skipped integration tests.
-  `SwarmRuntimeCore` is reduced from 818 to 507 lines.
-- [x] Resolve the two follow-up review findings. START/STOP now captures its worker-observation baseline after the
-  lifecycle mutation, so a status accepted during that mutation cannot satisfy convergence; focused regression
-  coverage requires a later matching full status. Delete the unused dependency-order graph, its runtime context/state
-  fields, cycle warning, and characterization test instead of preserving dead behavior. The four focused test classes
-  pass 40 of 40 tests. The complete 12-module dependency reactor passes; the Swarm Controller module reports 155
-  tests with 0 failures/errors and 2 environment-skipped integration tests. `SwarmRuntimeCore` is 503 lines.
-- [x] Extract infrastructure provisioning/removal to `SwarmRuntimeInfrastructure` and queue-stat observation to
-  `SwarmQueueStatsCollector` without creating another lifecycle state owner. The core still selects lifecycle inputs
-  and owns transitions; the extracted components own only explicit adapter effects and immutable queue-stat
-  snapshots. `SwarmLifecycleManager` supplies the same `QueueStatsPort` instance to the collector and buffer guard.
-  Focused infrastructure/collector/core/manager coverage passes 32 of 32 tests. The complete 12-module dependency
-  reactor passes; the Swarm Controller module reports 159 tests with 0 failures/errors and 2 environment-skipped
-  integration tests. The canonical quick rebuild/redeploy leaves every required service healthy, the unchanged
-  official-ingress gate passes 39 of 39 scenarios, 463 of 463 steps, and 48 of 48 Maven tests, and its cleanup leaves
-  no registered swarms. `SwarmRuntimeCore` is reduced from 503 to 454 lines; repository search finds one caller of
-  the compute/topology effects and one queue-stat collector.
+- [x] Keep runtime journal projection in `SwarmRuntimeJournal` and infrastructure effects
+  in `SwarmRuntimeInfrastructure`. `SwarmQueueStatsCollector` supplies immutable snapshots.
 - [x] Extract worker status-request publication to `SwarmWorkerStatusRequestPublisher` behind the existing callback
   boundary. The lifecycle state machine no longer constructs routing, scopes, envelopes, diagnostic identifiers, or
   publishes control-plane messages; repository search finds one production owner of status-request publication.
-- [x] Extract scenario construction and execution to `SwarmScenarioCoordinator`. The coordinator reads current
-  workload and metrics through read-only suppliers and delegates lifecycle commands through `ScenarioLifecyclePort`;
-  controller enablement and workload lifecycle state remain owned by the core. Focused coverage for both final
-  extractions and their integration passes 35 of 35 tests. The complete 12-module dependency reactor passes; the
-  Swarm Controller module reports 161 tests with 0 failures/errors/skips. The canonical quick rebuild/redeploy leaves
-  every required service healthy, the unchanged official-ingress gate passes 39 of 39 scenarios, 463 of 463 steps,
-  and 48 of 48 Maven tests, and its cleanup leaves no registered swarms. `SwarmRuntimeCore` is reduced from 1,299 to
-  376 lines. Repository search finds one production owner of scenario-engine construction and one owner of
-  status-request publication.
+Scenario construction and execution belong to `SwarmScenarioCoordinator`. It delegates
+commands through `ScenarioLifecyclePort`.
 
 The production `SwarmRuntimeCore` kitchen-sink refactor is complete. The remaining class is the lifecycle coordinator:
 it owns lifecycle state and tick permission and delegates infrastructure effects, projections, journaling, readiness,
@@ -361,17 +265,8 @@ configuration types. Preserve the filesystem and REST contracts while extracting
 5. Retain one filesystem-backed scenario catalogue/repository owner for discovery, duplicate/quarantine state,
    availability, access projection, and descriptor lifecycle.
 
-Completed: public contract/configuration types are standalone, and focused owners now handle bundle-internal
-workspace operations, top-level folder/bundle organization, variables workflows, bundle-local SUT CRUD, raw
-scenario/template/schema authoring, ZIP publication/validation, and runtime materialisation. `ScenarioService` is the
-sole catalogue owner and is limited to discovery, duplicate/quarantine state, availability/access projections, and
-descriptor lifecycle. The production Scenario Manager sink is complete.
-The canonical `ScenarioBundleValidator` is a directly injected bean; the catalogue and extracted services share it
-without using `ScenarioService` as a service locator. Focused component tests now cover content authoring, workspace
-mutation, bundle organization, publication, bundle-local SUTs, variables, and runtime materialisation. The catalogue
-test no longer constructs those owners. The complete Scenario Manager dependency reactor passes with 175 tests in
-the module and 0 failures/errors/skips. Official-ingress E2E remains the environment gate before accepting the
-production-sink refactor.
+`ScenarioService` owns the catalogue. Workspace, authoring, bundle publication and
+runtime materialisation have separate owners and share `ScenarioBundleValidator`.
 
 The remaining oversized HTTP organization belongs to the post-simplification repair queue. The unchanged
 official-ingress E2E suite is the final production-sink gate. The E2E `SwarmLifecycleSteps` fixture was not modified
@@ -393,14 +288,6 @@ verification, canonical rebuild/deploy, unchanged official-ingress E2E, and revi
 The fresh findings and their repair order live in
 Git history. They replace the abandoned numbered findings queue;
 they do not reopen completed behavior-preserving sink extractions.
-
-Final gate evidence:
-
-- `./build-hive.sh` completed the canonical full rebuild/redeploy; all required local services became healthy.
-- Two consecutive `./start-e2e-tests.sh --target local-swarm` runs, without a rebuild between them, each passed
-  39 of 39 scenarios, 463 of 463 steps, and 48 of 48 Maven tests (completed at 18:01 and 18:12 BST on 2026-09-04).
-- An earlier attempted pair exposed CP-N09, now recorded in the post-simplification review. The qualifying pair was
-  run after the timed-out test resource was removed through the supported Orchestrator API.
 
 ## Completion criteria
 

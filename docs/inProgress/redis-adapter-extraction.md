@@ -59,13 +59,6 @@ Writer shutdown verifies that every cached writer closes even if one close fails
 Full reactor test compilation verifies all source consumers of the changed APIs.
 
 Results (2026-09-22):
-- Focused Redis/sequence/OAuth/runtime/architecture reactor: **424 tests, zero
-  failures/errors/skips** (`/tmp/redis-tests.log`).
-- Final formatter and Processor tests after file separation: **26 tests, zero
-  failures/errors/skips** (`/tmp/redis-final-tests.log`); formatter cases overlap
-  the focused run and must not be counted as additional unique coverage.
-- Full reactor `test-compile -DskipTests`: **BUILD SUCCESS**
-  (`/tmp/redis-reactor-compile.log`).
 - Repository-wide production client search: no Lettuce/Redis client construction
   outside redis-adapter. Removed API names have no production callers.
 - `git diff --check`: clean.
@@ -91,55 +84,3 @@ before releasing clients, and reject subsequent operations without creating clie
 This does not drain the worker executor or change stop/ACK/redelivery semantics.
 An accepted WorkItem reaching Redis only after this owner has closed receives the
 existing caller's operation-error handling. Cleanup still attempts all cached resources.
-
-Review fix verification (2026-09-22): 54 focused tests passed, zero failures/errors/skips
-(`/tmp/redis-close-tests.log`). Includes concurrent push and next/reset while close
-waits, rejection after close, terminal cleanup failure and all-cached-resource cleanup,
-plus output/uploader, SDK composition, worker update and import-boundary regressions.
-No deployed E2E was run for this shutdown fix.
-
-## Local deployment verification — 2026-09-23
-
-`build-hive.sh --quick` built and deployed the F01 working tree later committed
-as `9a12dd50` on local ingress
-http://localhost:8088, with Artemis WORK. Five acceptance cases passed without skips:
-Redis fixture ownership/cleanup (1), Redis dataset pipeline (1), five-customer
-WebAuth Redis routing loop (1), and templating profiles (2). Evidence lives under
-`acceptance-tests/runs`, grouped by run name/UUID.
-
-An additional ingress probe used the existing framework clients/resource owners
-with a private generator-only scenario. Redis-backed sequence rendering produced
-exactly `00`, `01`, `02`; RedisUploader persisted those three JSON results to its
-private list. The template reset its sequence on the third value. CREATE/START/STOP/
-REMOVE and list/scenario cleanup succeeded. Reproduction source and output are in
-`runs/redis-sequence-uploader-803de55c-1c48-4b12-aa37-b9d185ee9e0b` under acceptance-tests.
-This is a deployed smoke probe, not a new permanent acceptance-suite case.
-
-E2E exposed one extraction regression: RedisDataSetWorkInputFactory still passed
-null where the extracted constructor requires an explicit reader factory. It now
-passes RedisListClients::reader. A production-factory regression failed with the
-observed clientFactory NPE before the fix; all 13 RedisDataSetWorkInputTest cases pass
-after it. The final deployed dataset and WebAuth runs use the rebuilt generator.
-
-Environment/tooling issues, separate from Redis extraction:
-- Initial Artemis instance auto-tuning generated page-sync-timeout=-4692000 and the
-  broker exited. The generated local broker.xml was corrected to 24000 and the broker
-  started through build-hive.sh. No source manifest or broker behavior change is claimed.
-- Partial build-hive.sh --quick --module generator-service successfully rebuilt the
-  image, then failed trying to start nonexistent Compose service `generator`. New swarm
-  workers created by Orchestrator consumed the rebuilt image successfully. This script
-  issue remains separate; the partial command itself is not reported as successful.
-
-OAuth/token storage and HTTP Sequence diagnostic capture retain the earlier real-Redis
-integration evidence; this run does not claim deployed E2E coverage of those paths.
-The existing new acceptance suite has no matching OAuth/capture case.
-
-Cleanup: all successful runs removed their owned resources. The three failed-start
-swarms were subsequently removed through the public lifecycle API; the two controllers
-that had exited during the broker failure were restarted only to permit normal REMOVE.
-An initial REMOVE sent during controller startup timed out; a later explicit REMOVE
-with the controller ready succeeded. After verifying swarm absence, the retained private
-scenarios/lists were deleted through ingress. Final public swarm list is empty. The local
-PH stack was left running for inspection at the end of this verification. This is
-a dated observation, not a claim about its current availability. Failed-run evidence
-was retained.

@@ -1,13 +1,8 @@
 package io.pockethive.requesttemplates.files;
 
-import com.fasterxml.jackson.core.StreamReadFeature;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.requesttemplates.RequestTemplateException;
 import io.pockethive.requesttemplates.RequestTemplateParser;
+import io.pockethive.requesttemplates.RequestTemplateDocumentReader;
 import io.pockethive.requesttemplates.RequestTemplateProblemKind;
 import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
@@ -28,11 +23,7 @@ public final class TemplateLoader {
     private static final String INLINE_AUTH_FAILURE_REASON = "legacy-inline-auth";
 
     private final RequestTemplateParser parser;
-    private final ObjectMapper jsonMapper = JsonMapper.builder()
-        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-        .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
-    private final ObjectMapper yamlMapper = new ObjectMapper(YAMLFactory.builder()
-        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build());
+    private final RequestTemplateDocumentReader documents = new RequestTemplateDocumentReader();
 
     public TemplateLoader() {
         this(new RequestTemplateParser());
@@ -73,9 +64,10 @@ public final class TemplateLoader {
 
     private TemplateDefinition parseFile(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        ObjectMapper decoder = name.endsWith(".json") ? jsonMapper : yamlMapper;
         try {
-            Map<String, Object> document = decoder.readValue(path.toFile(), new TypeReference<>() { });
+            byte[] source = Files.readAllBytes(path);
+            Map<String, Object> document = name.endsWith(".json")
+                ? documents.readJson(source) : documents.readYaml(source);
             return parser.parse(document);
         } catch (IOException | IllegalArgumentException e) {
             Throwable cause = e;

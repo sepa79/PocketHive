@@ -2699,6 +2699,8 @@ class ScenarioControllerTest {
                         outputs:
                           type: RABBITMQ
                         message:
+                          bodyType: SIMPLE
+                          body: '{}'
                           headers:
                             x-ph-service-id: auth
                             x-ph-call-id: login
@@ -2753,6 +2755,8 @@ class ScenarioControllerTest {
                         outputs:
                           type: RABBITMQ
                         message:
+                          bodyType: SIMPLE
+                          body: '{}'
                           headers:
                             x-ph-service-id: auth
                             x-ph-call-id: login
@@ -2807,6 +2811,8 @@ class ScenarioControllerTest {
                         outputs:
                           type: RABBITMQ
                         message:
+                          bodyType: SIMPLE
+                          body: '{}'
                           headers:
                             x-ph-service-id: auth
                             x-ph-call-id: login
@@ -3037,7 +3043,15 @@ class ScenarioControllerTest {
                     name: Vars ref demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3066,7 +3080,15 @@ class ScenarioControllerTest {
                     name: Auth type demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3105,7 +3127,15 @@ class ScenarioControllerTest {
                     name: Auth YML demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3170,7 +3200,15 @@ class ScenarioControllerTest {
                     name: Signed OAuth demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3213,7 +3251,15 @@ class ScenarioControllerTest {
                     name: Auth token key demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3253,7 +3299,15 @@ class ScenarioControllerTest {
                     name: Invalid auth token key demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3294,7 +3348,15 @@ class ScenarioControllerTest {
                     name: Duplicate template key demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3324,7 +3386,15 @@ class ScenarioControllerTest {
                     name: Duplicate template JSON key demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.json", """
                     {
@@ -3356,7 +3426,15 @@ class ScenarioControllerTest {
                     name: Duplicate auth profile demo
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP
@@ -3502,7 +3580,15 @@ class ScenarioControllerTest {
                     name: Invalid upload
                     template:
                       image: ctrl-image:latest
-                      bees: []
+                      bees:
+                        - role: request-builder
+                          image: request-builder:latest
+                          work: {in: {in: build}}
+                          config:
+                            inputs: {type: RABBITMQ}
+                            outputs: {type: NONE}
+                            templateRoot: /app/scenario/templates
+                            serviceId: default
                     """,
                 "templates/http/default/account.yaml", """
                     protocol: HTTP

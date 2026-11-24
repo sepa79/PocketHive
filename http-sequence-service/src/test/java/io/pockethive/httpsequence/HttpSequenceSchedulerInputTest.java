@@ -1,16 +1,10 @@
 package io.pockethive.httpsequence;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.spring.ControlPlaneRabbitBindings;
+import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.work.api.StatusPublisher;
@@ -42,7 +36,12 @@ import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 class HttpSequenceSchedulerInputTest {
 
   @TempDir
@@ -61,7 +60,7 @@ class HttpSequenceSchedulerInputTest {
         """);
     var config = new HttpSequenceWorkerConfig(
         "http://sut", templates.toString(), "default", 1,
-        List.of(new HttpSequenceWorkerConfig.Step(
+        List.of(new HttpSequenceStep(
             "status", "status", null, false, null, List.of(), List.of())),
         HttpSequenceWorkerConfig.DebugCapture.defaults(), Map.of());
     var identity = new ControlPlaneIdentity("swarm-1", "http-sequence", "instance-1");

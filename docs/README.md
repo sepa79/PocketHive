@@ -16,7 +16,6 @@ supported behavior and [the delivery index](inProgress/README.md) for remaining 
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)
-- [Lifecycle Control-Plane Release Verification Matrix](RELEASE_VERIFICATION_MATRIX.md)
 - [Upgrading PocketHive](UPGRADING.md)
 
 ## Usage

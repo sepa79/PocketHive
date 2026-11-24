@@ -67,6 +67,7 @@ class RedisDatasetAcceptanceIT {
         String sut = run.scenarios.readSutRaw(target.lifecycle().fixture().templateId(), sutId);
         run.scenarios.writeSutRaw(scenarioId, sutId, sut);
         assertEquals(sut, run.scenarios.readSutRaw(scenarioId, sutId));
+        run.scenarios.reload();
         try {
           swarm.create(SwarmCreateRequest.of(scenarioId, UUID.randomUUID().toString(), false,
               sutId, null, NetworkMode.DIRECT, null));

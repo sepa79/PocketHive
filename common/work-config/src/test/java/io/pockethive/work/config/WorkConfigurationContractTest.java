@@ -319,6 +319,11 @@ class WorkConfigurationContractTest {
                                                          String expectedPath) {
         return new WorkOutputSettingsParser() {
             @Override
+            public List<WorkConfigurationTemplate> templateSources(Map<?, ?> settings, String path) {
+                return List.of();
+            }
+
+            @Override
             public WorkerOutputType type() {
                 return type;
             }

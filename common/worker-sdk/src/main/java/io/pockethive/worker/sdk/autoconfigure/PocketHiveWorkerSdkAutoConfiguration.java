@@ -1,13 +1,5 @@
 package io.pockethive.worker.sdk.autoconfigure;
 
-import io.pockethive.worker.sdk.config.ConfiguredSequenceAccess;
-import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
-import io.pockethive.controlplane.spring.WorkerControlTopology;
-
-import io.pockethive.templating.api.SequenceAccess;
-import io.pockethive.work.api.ScheduledInvocationPolicy;
-import io.pockethive.work.api.WorkItem;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -18,52 +10,59 @@ import io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration;
 import io.pockethive.controlplane.spring.ManagerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
+import io.pockethive.controlplane.spring.WorkerControlTopology;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
-import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
-import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
-import io.pockethive.worker.sdk.input.WorkInputLifecycle;
-import io.pockethive.worker.sdk.input.WorkInputRegistry;
-import io.pockethive.worker.sdk.input.WorkInputRegistryInitializer;
-import io.pockethive.worker.sdk.input.message.MessageWorkInputFactory;
+import io.pockethive.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.api.SequenceAccess;
+import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.templating.sources.InvocationTemplateSources;
+import io.pockethive.work.api.ScheduledInvocationPolicy;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.transport.WorkInputTransportFactory;
 import io.pockethive.work.api.transport.WorkOutputTransportFactory;
-import io.pockethive.worker.sdk.input.SchedulerWorkInputFactory;
-import io.pockethive.worker.sdk.input.redis.RedisDataSetWorkInputFactory;
-import io.pockethive.worker.sdk.input.csv.CsvDataSetWorkInputFactory;
+import io.pockethive.worker.sdk.config.ConfiguredSequenceAccess;
+import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
+import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
+import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
 import io.pockethive.worker.sdk.config.WorkerInputTypeProperties;
 import io.pockethive.worker.sdk.config.WorkerOutputTypeProperties;
+import io.pockethive.worker.sdk.input.SchedulerWorkInputFactory;
+import io.pockethive.worker.sdk.input.WorkInputLifecycle;
+import io.pockethive.worker.sdk.input.WorkInputRegistry;
+import io.pockethive.worker.sdk.input.WorkInputRegistryInitializer;
+import io.pockethive.worker.sdk.input.csv.CsvDataSetWorkInputFactory;
+import io.pockethive.worker.sdk.input.message.MessageWorkInputFactory;
+import io.pockethive.worker.sdk.input.redis.RedisDataSetWorkInputFactory;
+import io.pockethive.worker.sdk.output.NoopWorkOutputFactory;
+import io.pockethive.worker.sdk.output.RedisWorkOutputFactory;
+import io.pockethive.worker.sdk.output.TransportWorkOutputFactory;
+import io.pockethive.worker.sdk.output.WorkOutputFactory;
+import io.pockethive.worker.sdk.output.WorkOutputLifecycle;
+import io.pockethive.worker.sdk.output.WorkOutputRegistry;
+import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerContextFactory;
 import io.pockethive.worker.sdk.runtime.DefaultWorkerRuntime;
-import io.pockethive.worker.sdk.runtime.WorkerContextFactory;
-import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
-import io.pockethive.worker.sdk.runtime.WorkerMetricsInterceptor;
-import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.RedisUploaderInterceptor;
 import io.pockethive.worker.sdk.runtime.TemplatingInterceptor;
+import io.pockethive.worker.sdk.runtime.WorkerContextFactory;
+import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
+import io.pockethive.worker.sdk.runtime.WorkerInvocationInterceptor;
+import io.pockethive.worker.sdk.runtime.WorkerMetricsInterceptor;
+import io.pockethive.worker.sdk.runtime.WorkerObservabilityInterceptor;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerStateStore;
 import io.pockethive.worker.sdk.runtime.WorkerStatusScheduler;
 import io.pockethive.worker.sdk.runtime.WorkerStatusSchedulerProperties;
-import io.pockethive.worker.sdk.runtime.WorkerInvocationInterceptor;
-import io.pockethive.worker.sdk.output.NoopWorkOutputFactory;
-import io.pockethive.worker.sdk.output.WorkOutputFactory;
-import io.pockethive.worker.sdk.output.WorkOutputLifecycle;
-import io.pockethive.worker.sdk.output.WorkOutputRegistry;
-import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
-import io.pockethive.worker.sdk.output.TransportWorkOutputFactory;
-import io.pockethive.worker.sdk.output.RedisWorkOutputFactory;
-import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.api.TemplateRenderer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.ListableBeanFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -76,7 +75,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.ConfigurableEnvironment;
-
 /**
  * Responsibility: compose worker discovery, runtime, policies and the selected I/O capabilities.
  * Must not: implement worker behavior, adapter settings or broker operations.
@@ -391,26 +389,8 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(TemplatingInterceptor.class)
     WorkerInvocationInterceptor templatingInterceptor(TemplateRenderer renderer) {
-        return new TemplatingInterceptor(renderer, context -> {
-            Map<String, Object> rawConfig = context.state().rawConfig();
-            if (rawConfig.isEmpty()) {
-                return null;
-            }
-            Object interceptorsObj = rawConfig.get("interceptors");
-            if (!(interceptorsObj instanceof Map<?, ?> interceptors)) {
-                return null;
-            }
-            Object templatingObj = interceptors.get("templating");
-            if (!(templatingObj instanceof Map<?, ?> templatingMap)) {
-                return null;
-            }
-            Object templateValue = templatingMap.get("template");
-            if (templateValue == null) {
-                return null;
-            }
-            String template = templateValue.toString();
-            return (template == null || template.isBlank()) ? null : template;
-        });
+        return new TemplatingInterceptor(renderer, context ->
+            InvocationTemplateSources.template(context.state().rawConfig()));
     }
 
 }

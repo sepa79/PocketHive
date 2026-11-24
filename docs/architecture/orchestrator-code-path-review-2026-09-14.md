@@ -14,8 +14,6 @@ Dalsze działania: O1/O2 zostały następnie poprawione i przeszły 74 testy; oc
 Plan poprawności Orchestratora (plik w repozytorium: `docs/inProgress/orchestrator-correctness.md`) oddziela te poprawki oraz
 projekt resetu od ekstrakcji SSOT. Poniższe ustalenia zachowują stan z momentu przeglądu.
 
-## Ustalenia
-
 ### O1 — P1: status nie jest sprawdzany względem aktualnego kontrolera i runId
 
 `OrchestratorControlQueueConfiguration.controllerStatusRabbitBinding` →
@@ -149,12 +147,9 @@ nie został potraktowany jako dowód pełnej izolacji. Nie tworzono skanera arch
 
 ## Weryfikacja i ograniczenia
 
-- 37 istniejących testów przeszło, w tym jedyny zatwierdzony RepositoryImportBoundaryTest.
 - 4 dodatkowe tymczasowe próby potwierdziły obecność O1/O2/O3, asercjami na rzeczywiście
   zaobserwowane błędne zachowanie. Ich zielony wynik nie oznacza naprawy.
 - Próby używają kanonicznego codec i wejść listenerów; bez bezpośrednich portów usług/brokera.
-- Źródło prób: `/tmp/OrchestratorPathReviewProbeTest.java`; log: `/tmp/orchestrator-path-review-tests.log`.
-  Tymczasowy plik usunięto z drzewa testów po wykonaniu. Kod produkcyjny nie został zmieniony.
 - Uruchomienie: `./mvnw -pl orchestrator-service -am test` z wyborem klas opisanych w logu;
   m.in. ControllerStatusListener, observation/terminal handlers, sync, removal verifier,
   reconciliation, debug taps i schema bundle/controller. `git diff --check` czysty.

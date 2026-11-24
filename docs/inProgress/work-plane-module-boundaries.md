@@ -43,8 +43,6 @@ Aktualne nagłówki kodu odwołują się do [runtime responsibilities](../archit
 Podczas przenoszenia implementacji aktualizować odpowiadające im rekordy i nagłówki; ten plan
 nie ogłasza przyszłych właścicieli jako już zaimplementowanych.
 
-## Kolejność wykonania
-
 ### R1 — domknąć kontrakty i kierunek zależności
 
 - Spisać minimalne kontrakty wybranego WorkPlane: konfiguracja, wynik rozwiązania topologii,
@@ -227,22 +225,6 @@ WORK nie jest wymagany. Diagnostyka nieobsługiwana przez wybrany adapter zwraca
 **Jawna luka R4, odłożona decyzją użytkownika:** natywny manifest i osierocony cleanup.
 Manifest Orchestratora zachowuje obecny format Rabbit i odrzuca natywne zasoby przed skutkami.
 Nie ogłaszać pełnego uruchomienia Orchestratora na fake'u ani tej części planu jako odebranej.
-
-Weryfikacja — wcześniejsze przebiegi i końcowy pakiet do commita:
-
-| Próba | Wynik / dowód lokalny |
-| --- | --- |
-| Czysta regresja SDK, Controller, Orchestrator i zależności, bez ScenarioControllerTest | 1263 testy, 0 błędów, 1 pominięty; `/tmp/workplane-r6-clean-tests.log` |
-| Poprawiony import w TriggerSchedulerIntegrationTest | 1 test przeszedł; `/tmp/workplane-r6-trigger-test.log` |
-| Generator kontraktu + UI schema tests | Kontrakt aktualny; 3 testy UI przeszły; `/tmp/workplane-r6-ui-schema-tests.log` |
-| Kanoniczny rebuild/redeploy | `build-hive.sh --quick` ukończony; `/tmp/workplane-r6-build-hive.log` |
-| UI/schema/CONTROL STOMP przez ingress | Połączenie `/ws`, subskrypcja zgodna z info Orchestratora, schema 200/ETag/304, WORK_RESOURCE obecny, Buzz valid, brak błędów konsoli; `/tmp/workplane-r6-browser-smoke.json` |
-| Normalny start-e2e-tests.sh, bez filtrowania scenariuszy | 39/39 scenariuszy, 463/463 kroki, kod wyjścia 0; `/tmp/workplane-r6-e2e.log` |
-| Pełny root reactor po naprawie ScenarioControllerTest, standardowy profil bez nowych wykluczeń | `./mvnw -fae clean test`: 45 modułów SUCCESS, 1858 testów przeszło, 1 warunkowo pominięty, 0 błędów; `/tmp/scenario-controller-fix-full-reactor-complete.log` |
-| Pełny root reactor po usunięciu placeholdera Redis, podczas zbiorczego review | 45 modułów SUCCESS, 1858/1858 testów, 0 błędów i pominięć; `/tmp/rabbit-r6-aggregate-review-tests.log` |
-| Pełny root reactor po poprawce R6-REV-1 | `./mvnw -fae clean test`: 45 modułów SUCCESS, 1876/1876 testów, 0 błędów i pominięć; `/tmp/rabbit-r6-selector-full-reactor.log`. Regresje selektora: 24/24; przed poprawką 5 przypadków wykazywało błąd |
-| Budowa wydzielonego pakietu Rabbit bez O1/O2 | Maven: 44 moduły SUCCESS; 1839 testów przeszło podczas budowy, dwa wymagające brokera przeszły 2/2 po starcie stacka. Łącznie pozytywny wynik wszystkich 1841 przypadków budowy. Pełny rebuild/redeploy ukończony; logi `/tmp/rabbit-r6-isolated-build.log`, `/tmp/rabbit-r6-isolated-broker-tests.log`, `/tmp/rabbit-r6-isolated-redeploy.log` |
-| Końcowe normalne E2E wydzielonego pakietu | `start-e2e-tests.sh`: 39/39 scenariuszy, 463/463 kroki, BUILD SUCCESS; `/tmp/rabbit-r6-isolated-e2e.log`. Kod zgodny z przygotowanym indeksem Git; później dopisano tylko wyniki do dokumentacji |
 
 HTTP w E2E kierowano przez oficjalny ingress, w tym jawne `AUTH_SERVICE_BASE_URL=http://localhost:8088/auth-service`,
 `RABBITMQ_MANAGEMENT_BASE_URL=http://localhost:8088/rabbitmq/api` i

@@ -1,28 +1,19 @@
 # Artemis WorkPlane i opóźnione dostarczenie dla 3DS
 
 Status na 2026-09-22: A1–A5 wykonane. Osobne review A4 i A5 zakończone bez findings; A5 zapisane w `6e3b0aa4`. PR #517 zmergowany w `713e7559`. A6 (pełny 3DS i obciążenie) pozostaje osobnym etapem. Datowane wpisy poniżej zachowują historię; dawne „oczekuje review” nie opisują bieżącego statusu.
-Odbiór dużego Swarma i N3 zamknięty: 57/57 aktualnych wyników PASS
-(pełny przebieg plus dwa poprawione reruny); [raport](artemis-swarm-full-acceptance.md).
 A6 pozostaje odłożone. N4 zatwierdzone i wykonane 2026-09-26; patrz aktualny plan E2E.
 
 Branch: `codex/artemis-work-plane`, punkt wyjścia: `863694be`.
 
 ## Domknięcie A4/A5 i merge OAuth — 2026-09-21
 
-- A4: osobny review na `713e7559` bez findings. Prześledzono projekcję startową,
-  Controller → WorkPlaneResources → native remove oraz niezależną weryfikację
-  nieobecności w Orchestratorze. **59 testów**, zero błędów i pominięć.
-  Manifest diagnostyczny nie jest źródłem zwykłego remove; jego zakres pozostaje Rabbit-only.
 - A5: osobny review bez findings, **16 testów** powtórzonych; implementacja i dowody
   zapisane w `6e3b0aa4`. Kontrakt §12 pozostaje właścicielem zachowania.
-- PR #517 zmergowany w `713e7559`: **2523 testy Javy, 187 testów VS Code**, zero
-  błędów i pominięć; build dokumentacji i kontrola zawartości VSIX przeszły.
-  Dodano poradnik OAuth i jego stronę testów do publikowanych dokumentów.
 - Stack z `713e7559` przebudowany przez `build-hive.sh --quick`. Smoke, trzy
   przypadki lifecycle i delayed delivery przeszły przez publiczny ingress; końcowa
   lista swarmów pusta. Pierwsze wspólne wywołanie smoke/lifecycle miało błędny target
   dla smoke; poprawne osobne powtórzenie przeszło. Pełne dowody i ograniczenia:
-  [weryfikacja po merge](../ci/acceptance-coverage.md#post-merge-local-verification--2026-09-21).
+  [weryfikacja po merge](../ci/acceptance-coverage.md).
   Lokalny odbiór A1–A5 jest domknięty; pozostaje przygotowanie PR/domknięcie brancha.
 - Osobny zakres nadal otwarty: A6, selector/splitter, mock APATA/App i CloseLook;
   NW-4 na Swarm/NFS, końcowy N3 i zatwierdzone przez użytkownika odłożenie N4;
@@ -113,7 +104,7 @@ przed implementacją, bez rozszerzania teraz refaktoru lifecycle.
 2. **A5.2 — wykonane i odebrane lokalnie 2026-09-21.** Neutralna polityka,
    eksport startupu i pojedyncza ścieżka publikacji są podłączone. Rzeczywisty broker,
    przepływ Controller/SDK i nowy E2E przez ingress przeszły testy. Dowody:
-   [A5 w mapie pokrycia](../ci/acceptance-coverage.md#delayed-delivery-a5--2026-09-21).
+   [A5 w mapie pokrycia](../ci/acceptance-coverage.md).
 3. **Kolejny krok — OutputSelector i splitter.** Selector wybiera logiczny cel,
    splitter jawnie rozdziela pracę na zadeklarowane wyjścia, np. przepływ główny
    i CloseLook. Jeden właściciel reguł wspólny z wyborem Redis; bez drugiego SSOT,
@@ -125,8 +116,6 @@ przed implementacją, bez rozszerzania teraz refaktoru lifecycle.
 
 A5 realizuje termin natywnie w ArtemisWorkOutput. N4/usunięcie starego E2E,
 NW-4 na Swarm/NFS i wcześniej odłożone refaktory pozostają poza tym krokiem.
-
-## Kolejność wykonania
 
 ### A1 — moduł, kontrakt konfiguracji i granice
 
@@ -228,13 +217,6 @@ Bieżące bramki zastąpienia posiada [plan E2E](e2e-test-system.md).
 - Odbiór: brak przedwczesnego odbioru, odbiór po terminie i poprawne usuwanie kolejek
   z wiadomościami oczekującymi. Nie obiecywać dostarczenia dokładnie co do milisekundy.
 
-Odbiór A5: pełny reactor 1905 testów bez błędów/pominięć; po końcowych zmianach
-16 testów obszaru, wszystkie zielone. Nowy E2E `delayed-delivery` przeszedł na
-lokalnym stacku przebudowanym przez `build-hive.sh --quick`: delay 3000 ms, odczytane
-odstępy generator → processor 3054/3143/3004 ms, poprawne HTTP oraz CREATE/START/STOP/REMOVE.
-[Mapa pokrycia](../ci/acceptance-coverage.md#delayed-delivery-a5--2026-09-21)
-posiada identyfikator przebiegu i zakres dowodów. To nie jest odbiór obciążenia ani A6.
-
 ### A6 — odbiór całej ścieżki
 
 Aktualizacja kolejności 2026-09-15: użytkownik zdecydował o napisaniu
@@ -242,11 +224,6 @@ Aktualizacja kolejności 2026-09-15: użytkownik zdecydował o napisaniu
 kroków/helperów i bez zależności od starego zestawu. N1 odbiera pierwszy kompletny
 przebieg przez ingress na Rabbit i Artemis; N2 buduje pozostałe wymagane pokrycie.
 Stary zestaw pozostaje zamrożony do potwierdzenia zastąpienia N3, po czym N4 go usuwa.
-N1 wykonane: 38 testów frameworka oraz oba nowe testy ingress przeszły na Rabbit
-i Artemis (create/start/HTTP/stop/remove oraz cleanup po celowym błędzie). Pierwszy
-przypadek N2 — operacje w osiągniętym stanie — także przeszedł na obu adapterach.
-Lokalny stack po odbiorze Rabbit przywrócono do Artemis. Szczegóły i jawne luki
-zawiera mapa pokrycia nowego frameworka. To nie zamyka A6 ani zastąpienia starego zestawu.
 Masowe uruchamianie obecnego harnessu wymagającego Rabbit WORK nie odbiera Artemis.
 
 - Testy zachowania z A1–A5 powstają razem z implementacją. Review śledzi wywołania,
@@ -278,12 +255,6 @@ A1/A2: pierwszy samodzielny adapter zaimplementowany i sprawdzony komponentowo.
 Istnieją typowane ustawienia, nazwy/projekcje, zasoby i transport za istniejącymi portami.
 Klient nie wychodzi poza moduł; nie zmieniono kodu usług ani zachowania Rabbit.
 
-Weryfikacja 2026-09-15: 309 testów, 0 błędów i pominięć, w 10 modułach wybranego
-reactora. W tym 23 testy Artemis (7 z rzeczywistym brokerem in-process), 79 Rabbit
-i 69 control-plane-core obejmujących istniejący test importów. Polecenie:
-`./mvnw -B -ntp -pl common/artemis-adapter,common/control-plane-core -am test`.
-Log: `/tmp/artemis-final-slice-tests.log`.
-
 Sprawdzone efekty: spójny WorkItem wraz z observability, rozdzielenie zasobów swarmów,
 ochrona przed kolizją separatorów/wildcard, stop/start odbioru, konsumpcja błędnej
 wiadomości i błędu callbacku bez requeue, ACK bez oczekiwania na async executor,
@@ -309,16 +280,6 @@ Raport i dowody: review A1/A2 (history retained in Git).
 W zadaniu review nie poprawiano kodu produkcyjnego; przed odbiorem potrzebne są
 poprawki tych przypadków i osobny review. A3–A6 nadal pozostają do wykonania.
 
-### Poprawka AR-REV-2 — 2026-09-15
-
-Na polecenie użytkownika poprawiono wyłącznie AR-REV-2. Stan kanału pochodzi z
-rejestracji handlera i rzeczywistego stanu konsumenta Core; usunięto kopię RUNNING.
-Utrata brokera/zamknięcie adaptera daje STOPPED, a nieudany jawny start zgłasza błąd.
-Dwa testy odtwarzają błąd przed poprawką i przechodzą po niej. Finalny reactor:
-311 testów, 0 błędów/pominięć (25 Artemis). Poprawiono też asercję roundtrip JSON,
-która błędnie wymagała stałej kolejności pól obiektu. Kod codec/ACK bez zmian.
-AR-REV-1 pozostaje do omówienia; poprawka AR-REV-2 oczekuje osobnego review.
-
 ## Źródła mechaniki klienta
 
 - [Core API 2.40.0](https://artemis.apache.org/components/artemis/documentation/previous/2.40.0/core.html)
@@ -338,22 +299,10 @@ MessageWorkInput zamyka przyjmowanie przed stopem transportu. Adaptery tłumacz�
 wyłącznie WorkNotAcceptedException: Rabbit na requeue, Artemis na brak ACK do zamknięcia
 sesji. Błędy przyjętych zadań pozostają diagnostyczne, bez redelivery.
 
-Weryfikacja: 704 testy w 21 modułach reactora, bez błędów i pominięć.
-`./mvnw -B -ntp -pl common/worker-sdk,common/artemis-adapter -am test`
-(log `/tmp/work-admission-reactor-tests.log`). Po uzupełnieniu regresji pamięciowego
-adaptera wszystkie jego 6 testów również przeszło, bez błędów i pominięć
-(log `/tmp/work-admission-fixture-tests.log`).
-Testy komponentowe sprawdzają limity 1 i 2, ACK bez czekania na koniec pracy,
-stop przy zajętej pojemności i ponowne dostarczenie tylko nieprzyjętej wiadomości.
-Artemis: rzeczywisty broker osadzony. Rabbit: rzeczywisty listener Spring z mockiem
-klienta AMQP. Testy executora obejmują również zmianę limitu i zamknięcie bez
-przerywania przyjętych zadań. Stack/E2E nie były uruchamiane.
-
 AR-REV-1: usunięto blokowanie callbacku wykonywaniem workera i oczekiwaniem na
 pojemność podczas stopu w ścieżce SDK. To nie zmienia natywnego limitu zamykania
 Artemis dla dowolnego zewnętrznego callbacku ani gwarancji przy utracie połączenia.
 AR-REV-1/2 oczekują osobnego review; A3–A6 pozostają do wykonania.
-
 
 ## Review korekty przyjęcia Work — 2026-09-15
 
@@ -365,22 +314,12 @@ AR-REV-2 (martwa subskrypcja raportująca RUNNING) ponownie sprawdzony — popra
 potwierdzona. Review nie zmienia kodu produkcyjnego. A3–A6 nadal odłożone do
 zakończenia bieżącego etapu. Raport i dowody (history retained in Git).
 
-
 ### Poprawki WA-REV-1/2/3 — 2026-09-15
 
 Wszystkie trzy poprawki zaimplementowane: indywidualny ACK Artemis; pauzowanie
 przyjmowania bez czekania na monitor zajęty startem transportu; stałe wątki executora
 z rozmiarami wynikającymi z jednego limitu. Close jest końcowe. Adapter pamięciowy
 i procesor nie dostały dodatkowej polityki wykonania.
-
-Sześć nowych przypadków regresyjnych nie przechodziło przed poprawkami; przechodzi
-po nich. Finalnie 711 testów w 21 modułach reactora, 0 błędów i pominięć, wraz z
-rzeczywistą 61-sekundową przerwą sprawdzającą zasoby PER_THREAD. Reprodukcja SDK
-z późniejszym błędnym JSON-em pozostawia teraz nieprzyjętą wiadomość w kolejce.
-Log `/tmp/wa-rev-fixed-reactor.log`; szczegóły w powyższym raporcie review,
-w sekcji implementation follow-up. Poprawki oczekują osobnego review. A3–A6 bez zmian;
-stack/E2E nie były uruchamiane.
-
 
 ### Ponowny review WA-REV — 2026-09-15
 
@@ -395,7 +334,6 @@ równoległych wywołań lifecycle. Nie blokuje A3–A6 i nie wymaga teraz zmian
 Dowody i granice w sekcji korekty powyższego raportu. Bez ponownego uruchamiania
 testów, zmian implementacji ani rozszerzania zakresu A3–A6.
 
-
 ## Przekazanie implementacji A3 — 2026-09-15
 
 Zrealizowano jawny wybór jednego WorkPlane na uruchomienie, authoring/RESOLVED/ENV,
@@ -403,14 +341,6 @@ kompozycję Orchestratora/Controllera i transportów SDK oraz debug tap Artemis.
 Konfiguracja ma jednego właściciela w adapterze; Rabbit traffic jest odczytywany tylko
 przez wybraną kompozycję Rabbit. Scenario Manager pozostaje konsumentem neutralnego
 parsera. Rabbit CONTROL nie wymaga Artemis ani Rabbit WORK dla workerów bez Rabbit IO.
-
-Weryfikacja: łącznie **1391 testów zaliczonych, 0 błędów, 0 pominięć** w dotkniętym
-reactorze i końcowej powtórce całego Swarm Controllera. Przebieg
-`/tmp/artemis-a3-final-reactor.log` zaliczył 1173 testy poza Controllerem; w Controllerze
-ujawnił stary test zakładający wykonanie synchroniczne i pominął dwa testy wymagające
-lokalnego RabbitMQ. Po poprawieniu synchronizacji testu i uruchomieniu brokera cały
-zestaw Controllera zaliczył **218/218** (`/tmp/artemis-a3-controller-with-rabbit.log`).
-Nie zmieniono przy tym kodu wykonania/ACK. RepositoryImportBoundaryTest i Enforcer przeszły.
 
 ArtemisWorkPlaneFlowTest wykonuje Controller compose → bootstrap/ENV → Spring binding
 oraz rzeczywiste transporty SDK → DefaultWorkerRuntime → jeden poprawny wynik.
@@ -437,7 +367,6 @@ natywny divert/reguła adresu debug tap mogą pozostać w brokerze. Normalny clo
 usuwa i raportuje błędy. Odzyskiwanie po awarii oraz manifest/orphan cleanup pozostają
 osobnym refactorem, bez dodatkowego rejestru. Obaj adapterzy nie dostarczają obecnie
 wieku najstarszej wiadomości. A3 pozostaje bez commita, do review.
-
 
 ## Review A3 po ścieżkach kodu — 2026-09-15
 
@@ -495,16 +424,6 @@ z już przyjętego Spring Boot, broker testowy pozostaje test-only, Core wersjon
 przez istniejący BOM; czytelność — nagłówki i dokumenty określają właścicieli,
 znane ograniczenia nie są przedstawione jako zrealizowane funkcje.
 
-Niezależna weryfikacja review: **23 testy zaliczone, 0 pominięć**, w tym
-ArtemisConfigurationTest, ArtemisDebugTapTest, ArtemisWorkPlaneTest,
-ArtemisWorkAdmissionTest, ArtemisWorkPlaneFlowTest, RabbitPlaneOperationsTest,
-RabbitWorkTopologyTest i RepositoryImportBoundaryTest. Enforcer i diff-check przeszły.
-Artefakty lokalne: `/tmp/artemis-a3-review/focused-tests.log`, `debug-probe.log`,
-`A3DebugTapProbe.java`, `local-broker.xml`, `compose-dry-run.log` w tym samym katalogu.
-Dry-run nie zmienił działających usług (nadal tylko Artemis/Rabbit). Nie wykonano
-pełnego stacka/E2E ani napraw produkcyjnych. Nie zgłoszono ponownie WA-REV-4 ani
-odłożonych manifestów/orphan cleanupu.
-
 Mechanizmy potwierdzone także w dokumentacji dostawców:
 [Compose startup order](https://docs.docker.com/compose/how-tos/startup-order/),
 [Artemis message expiry](https://artemis.apache.org/components/artemis/documentation/latest/message-expiry.html),
@@ -527,14 +446,6 @@ To natywne zachowanie potwierdzone w kodzie biblioteki 2.40.0 i teście brokersk
 [opis dostawcy](https://artemis.apache.org/components/artemis/documentation/latest/message-expiry.html#_dropping_expired_messages).
 Fixture EmbeddedArtemis odtwarza teraz globalną ExpiryQueue obrazu, a skan expiry
 co 100 ms skraca czas testu. Nie zmieniono konfiguracji wdrożonego brokera.
-
-Regresja `ArtemisDebugTapTest.captureExpiryDiscardsCopiesAndPreservesSourceExpiryPolicy`
-przed poprawką: **1 błąd / 2 testy**, oczekiwane 0 kopii w ExpiryQueue, faktycznie 1.
-Po poprawce: **170 testów zaliczonych, 0 błędów/pominięć** w reactorze adaptera i jego
-zależności, w tym 32 testy samego adaptera. Test wykazuje usunięcie kopii, pozostawienie
-oryginału bez TTL oraz zachowanie routingu prawdziwego expiry WORK przy aktywnym tapie
-i brak dodatkowej kopii po jego close. Enforcer i diff-check przeszły.
-Logi: `/tmp/artemis-a3-fix2-before.log`, `/tmp/artemis-a3-fix2-after.log`.
 
 Wyszukanie `expiryDelay|expiryAddress|expiry-address|createDivert|setExpiryAddress` w
 całym drzewie Java/XML/YAML wskazało ArtemisWorkDebugTap jako jedynego właściciela tej
@@ -573,15 +484,6 @@ ArtemisWorkResources, sessions.open oraz inicjalizacji i konsumentów portów
 Orchestratora. Jedynym właścicielem fabryki nadal jest ArtemisSessions. Sesje zasobów,
 inputu, outputu i tapu pozostają oddzielnymi sesjami konkretnych operacji tego właściciela.
 
-Dowody: nowe 3 testy ArtemisDeferredConnectionTest przed poprawką kończyły się
-błędem konstruktora (Cannot open Artemis connection). Po poprawce **46 testów
-zaliczonych, 0 błędów/pominięć**: 35 adaptera, 2 admission SDK, 1 rzeczywistej kompozycji
-portów Orchestratora bez brokera, 7 postconditions usuwania oraz 1 przepływu
-Controller → konfiguracja/SDK → transport Artemis. Sprawdzono późny start brokera,
-jawne błędy ensure/observe/remove bez fałszywego sukcesu, późniejszą jawną próbę
-oraz terminalne close przed pierwszym użyciem. Enforcer i diff-check przeszły.
-Logi: `/tmp/artemis-a3-fix1-before.log`, `/tmp/artemis-a3-fix1-after.log`.
-
 A3-REV-1 jest rozwiązane zatwierdzoną zmianą aktywacji, a wcześniejsza propozycja
 oczekiwania w Compose pozostaje wyłącznie historycznym wynikiem review. Nie wykonano
 pełnego stacka/E2E ani ponownego self-review. A4–A6 pozostają otwarte.
@@ -613,38 +515,6 @@ stanu swarma; security — zakres adresów i jawne połączenia zachowane, bez n
 zmian autoryzacji; biblioteki — istniejący klient/broker 2.40.0, bez nowej zależności;
 czytelność — jawna inicjalizacja i terminalne close, udokumentowane granice odbioru.
 
-Niezależnie uruchomiono **54 testy, 0 błędów/pominięć**: cały adapter Artemis,
-SDK admission, start kompozycji Orchestratora bez brokera, postconditions usuwania,
-przepływ Controller/SDK/Artemis, RabbitPlaneOperationsTest, RabbitWorkTopologyTest
-oraz RepositoryImportBoundaryTest. Enforcer i diff-check przeszły.
-Log: `/tmp/artemis-a3-rereview-tests.log`. Nie zmieniano kodu produkcyjnego/testów.
-Nie uruchamiano pełnego stacka/E2E; A4–A6 i wcześniej odłożony orphan cleanup
-pozostają otwarte. Nie przywracano wycofanego ustalenia o hipotetycznym równoległym
-wywoływaniu komend CONTROL.
-
-## Lokalne przełączenie na Artemis — 2026-09-15
-
-Po zgłoszonym przez użytkownika zielonym normalnym E2E na Rabbit lokalny
-`docker-compose.yml` wybiera jawnie `POCKETHIVE_WORK_TYPE: ARTEMIS`. Odtworzono
-wyłącznie Orchestrator z już zbudowanego obrazu; kod Java nie zmienił się w tym kroku.
-Rabbit pozostaje CONTROL. Przed przełączeniem lista swarmów przez ingress była pusta.
-
-Potwierdzono w uruchomionym kontenerze selektor ARTEMIS, zdrowe kontenery obu brokerów
-i HTTP 200 / status UP z `http://localhost:8088/orchestrator/actuator/health`.
-Próba `create` swarma `artemis-switch-check-20260915` przez oficjalny ingress
-(`local-rest-defaults`, SUT `wiremock-local`, DIRECT) dała HTTP 500:
-`Unsupported resource in current public manifest: WORK_RESOURCE`. Log wskazuje
-`RuntimeOwnershipManifestFactory.resources:41` wywołane przez
-`ContainerLifecycleManager.startSwarm:141`, przed utworzeniem Controllera.
-Ponowny odczyt listy swarmów zwrócił pustą listę; przygotowanie plików runtime
-Scenario Managera nastąpiło przed błędem. Nie wykonywano osobnego cleanupu.
-
-To potwierdzenie znanej blokady A4, nie test transportu Artemis. Użyty szablon
-nadal deklaruje Rabbit input/output; selektor wdrożenia nie konwertuje scenariuszy.
-Kolejny krok: zamknąć zatwierdzone A4 i przygotować jawny scenariusz Artemis
-do pełnego create → traffic → remove. Nie uruchomiono pełnego E2E na Artemis.
-Walidacja Compose i `git diff --check` przeszły. Zmiana bez commita/pusha.
-
 ### A4 — zakres bieżącej poprawki
 
 Jedyny właściciel projekcji, RuntimeOwnershipManifestFactory, zachowuje w `rabbit`
@@ -665,34 +535,6 @@ Kontrakt JSON bez nowych pól; zakres istniejącego `rabbit` doprecyzowano w RES
 
 - Regresja przed poprawką: RuntimeOwnershipManifestFactoryTest odtwarza
   `Unsupported resource in current public manifest: WORK_RESOURCE`.
-- Po poprawce: 43/43 testy, zero błędów/pominięć: fabryka manifestu,
-  ContainerLifecycleManager, weryfikacja nieobecności, reconciliation i assessment.
-  `./mvnw -B -ntp -pl orchestrator-service -am clean test
-  -Dtest=RuntimeOwnershipManifestFactoryTest,ContainerLifecycleManagerTest,RuntimeRemovalPostconditionVerifierTest,RuntimeReconciliationServiceTest,RuntimeAssessmentServiceTest
-  -Dsurefire.failIfNoSpecifiedTests=false`; log `/tmp/artemis-a4-focused.log`.
-- Wdrożenie przez `./build-hive.sh --service orchestrator --quick`
-  (testy uruchomiono osobno); log `/tmp/artemis-a4-deploy.log`.
-- Scenario Manager po reload zaakceptował `artemis-rest` jako `defunct=false`.
-  Wszystkie WORK input/output zgłaszają ARTEMIS i adresy rozwiązanego właściciela.
-- Swarm `artemis-a4-smoke-20260915`, runId `f2ac9948-643d-4e42-ac95-e4cf38c86ab8`:
-  create `97561dbb-1cee-45a1-9fd6-b9f91b17708e` i start
-  `e40edc68-fc9a-47f1-876f-2490abece0c2` zakończyły się SUCCEEDED.
-  Przed startem READY/STOPPED/HEALTHY; po starcie RUNNING/HEALTHY.
-- Publiczny debug tap na wyjściu processora: 5 różnych messageId, HTTP 200,
-  `default generator response`, hopy generator/moderator/processor. Tap zamknięto.
-  Dowód: `/tmp/artemis-a4-capture.json`. Nie jest to pomiar dokładnego throughputu.
-- Zwykły remove z działającego swarma `5b8747f0-918b-4a28-b5e0-bf3be2ef4fa8`:
-  SUCCEEDED, 6 WORK_RESOURCE (3 kolejki i 3 adresy Artemis) potwierdzonych jako
-  nieobecne przez Orchestrator, 4 workery, Controller, 5 kolejek CONTROL, binding,
-  katalog runtime i wpis rejestru usunięte. remainingResources/errors puste; lista
-  swarmów pusta. Dowód: `/tmp/artemis-a4-remove-operation.json`.
-
-Wszystkie wywołania runtime przez `http://localhost:8088` (również auth). Nie
-uruchamiano całego normalnego E2E po A4; jest zestawem Rabbit, zielonym według
-użytkownika przed przełączeniem. Native orphan cleanup, kompletna diagnostyka
-i opóźnienie 3DS pozostają odłożone. Historyczna nieudana próba przełączenia
-pozostawiła pliki przygotowane przez Scenario Managera; nie uruchamiano jej cleanupu.
-
 Dowody granicy do osobnego review: repo-wide wyszukiwanie RuntimeOwnershipManifestFactory,
 new RuntimeRabbitManifest, Unsupported resource in current public manifest i workQueues;
 jedna fabryka produkcyjna. ContainerLifecycleManager konsumuje projekcję; lifecycle
@@ -700,8 +542,3 @@ remove idzie przez Controller → WorkPlaneResources i RuntimeRemovalPostconditi
 a RuntimeRabbitResourcePlanner/RuntimeAssessmentService konsumują wyłącznie zakres Rabbit.
 Bez zmiany parserów, nazw, ACK, wykonania workerów i bez dodatkowej biblioteki.
 Implementacja i dowody przekazane do osobnego review, bez pętli self-review.
-
-Końcowe kontrole granic: 3 testy RepositoryImportBoundaryTest oraz 1 istniejący
-ArchitectureTest Orchestratora przeszły, zero błędów/pominięć; razem 47 testów
-weryfikacji A4. Log `/tmp/artemis-a4-boundaries.log`. Maven Enforcer i
-`git diff --check` bez błędów. Zmiana bez commita/pusha.

@@ -1,37 +1,36 @@
 package io.pockethive.requestbuilder;
 
-import io.pockethive.worker.sdk.auth.MutableHttpRequest;
-
-import io.pockethive.work.api.HttpRequest;
-import io.pockethive.work.api.Iso8583Request;
-import io.pockethive.work.api.IsoSchemaRef;
-import io.pockethive.work.api.TcpRequest;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.requesttemplates.HttpTemplateDefinition;
+import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
+import io.pockethive.requesttemplates.RequestTemplateSources;
+import io.pockethive.requesttemplates.TcpTemplateDefinition;
+import io.pockethive.requesttemplates.TemplateDefinition;
+import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.work.api.HttpRequest;
 import io.pockethive.work.api.HttpRequestEnvelope;
+import io.pockethive.work.api.Iso8583Request;
 import io.pockethive.work.api.Iso8583RequestEnvelope;
+import io.pockethive.work.api.IsoSchemaRef;
+import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.TcpRequest;
 import io.pockethive.work.api.TcpRequestEnvelope;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkStep;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
 import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
+import io.pockethive.worker.sdk.auth.MutableHttpRequest;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.work.api.PocketHiveWorker;
-import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
 import io.pockethive.worker.sdk.templating.RenderedMessage;
-import io.pockethive.templating.api.TemplateRenderer;
-import io.pockethive.requesttemplates.HttpTemplateDefinition;
-import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
-import io.pockethive.requesttemplates.TcpTemplateDefinition;
-import io.pockethive.requesttemplates.TemplateDefinition;
-import io.pockethive.requesttemplates.files.TemplateLoader;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
@@ -41,7 +40,6 @@ import java.util.Objects;
 import java.util.concurrent.atomic.LongAdder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
 @Component("requestBuilderWorker")
 @PocketHiveWorker(
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
@@ -113,6 +111,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         return handleMissing(config, seed, context);
       }
 
+      var templateSources = RequestTemplateSources.from(definition);
       try (AuthRuntime authRuntime = AuthRuntime.forTemplates(
           config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
         Object envelope;
@@ -120,8 +119,8 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
           MessageTemplate template = MessageTemplate.builder()
               .bodyType(MessageBodyType.SIMPLE)
-              .bodyTemplate(tcpDef.bodyTemplate())
-              .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
+              .bodyTemplate(templateSources.bodyTemplate())
+              .headerTemplates(templateSources.headersTemplate() == null ? Map.of() : templateSources.headersTemplate())
               .build();
 
           RenderedMessage rendered =
@@ -152,10 +151,10 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
           MessageTemplate template = MessageTemplate.builder()
               .bodyType(MessageBodyType.HTTP)
-              .pathTemplate(httpDef.pathTemplate())
-              .methodTemplate(httpDef.method())
-              .bodyTemplate(httpDef.bodyTemplate())
-              .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
+              .pathTemplate(templateSources.pathTemplate())
+              .methodTemplate(templateSources.method())
+              .bodyTemplate(templateSources.bodyTemplate())
+              .headerTemplates(templateSources.headersTemplate() == null ? Map.of() : templateSources.headersTemplate())
               .build();
 
           RenderedMessage rendered =
@@ -318,10 +317,11 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                                                       String serviceId,
                                                       String callId,
                                                       AuthRuntime authRuntime) {
+    var templateSources = RequestTemplateSources.from(isoDef);
     MessageTemplate template = MessageTemplate.builder()
         .bodyType(MessageBodyType.SIMPLE)
-        .bodyTemplate(isoDef.bodyTemplate())
-        .headerTemplates(isoDef.headersTemplate() == null ? Map.of() : isoDef.headersTemplate())
+        .bodyTemplate(templateSources.bodyTemplate())
+        .headerTemplates(templateSources.headersTemplate() == null ? Map.of() : templateSources.headersTemplate())
         .build();
     RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 

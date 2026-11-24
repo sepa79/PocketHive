@@ -127,6 +127,20 @@ class PublicEndpointTest(unittest.TestCase):
                             self.assertEqual(mcp["environment"]["PH_MCP_UPLOAD_SPOOL_PATH"],
                                              "/tmp/pockethive-mcp-spool")
 
+    def test_tcp_mock_administration_uses_pockethive_for_both_work_planes(self):
+        for action in ("deploy", "update"):
+            for profile in ("swarm-reduced", "swarm-full"):
+                for work_type in ("RABBITMQ", "ARTEMIS"):
+                    with self.subTest(action=action, profile=profile, work_type=work_type):
+                        services = self.render(action, profile, "https://pockethive.example:8088",
+                                               "false", work_type)
+                        for name in ("tcp-mock-server", "tcp-mock-server-tls"):
+                            environment = services[name]["environment"]
+                            self.assertEqual(environment["TCP_MOCK_AUTH_PROVIDER"], "POCKETHIVE")
+                            self.assertEqual(environment["POCKETHIVE_AUTH_SERVICE_URL"],
+                                             "http://auth-service:8080")
+                            self.assertNotIn("POCKETHIVE_TCP_MOCK_DASHBOARD_PASSWORD", environment)
+
     def test_unknown_or_missing_work_plane_rejects_before_render(self):
         for action in ("deploy", "update"):
             for work_type in ("", "KAFKA"):

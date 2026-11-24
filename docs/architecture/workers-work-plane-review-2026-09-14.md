@@ -148,19 +148,6 @@ publikacji, stanu i parserów; całe repo dla alternatywnych implementacji most�
 WorkItemJsonCodec, RabbitResourceNames i Artemis/3DS. Wyniki odczytano w miejscach wywołań.
 Nie utworzono skanera architektury ani nowych testów tożsamości beanów.
 
-**113 istniejących testów przeszło:** SDK 96 (DefaultWorkerRuntimeTest, RabbitMessageWorkerAdapterTest,
-RabbitWorkItemConverterTest, RabbitWorkExecutionTest, RabbitWorkInputFactoryTest,
-WorkIOConfigBinderTest, RabbitWorkOutputTest), Rabbit 15 (SpringRabbitListenersTest,
-SpringRabbitTransportTest, RabbitConnectionConfigurationTest), RepositoryImportBoundaryTest 2.
-Maven: `./mvnw -pl common/worker-sdk -am -Dtest=<powyższe klasy> -Dsurefire.failIfNoSpecifiedTests=false test`.
-Pierwszą próbę zatrzymał self-attach Mockito w sandboxie. Te same testy poza sandboxem przeszły;
-`/tmp/workers-workplane-review-verified.log`.
-
-**5 dodatkowych prób sprawdziło konwersje przy bezpośrednim bindingu** — ominęły produkcyjne
-przygotowanie ENV i nie wykazały błędu tej ścieżki (wycofany W1).
-`/tmp/RabbitBindingReviewProbeTest.java`, `/tmp/workers-rabbit-binding-probes.log`.
-Tymczasowe źródło testu i jego skompilowaną klasę usunięto z modułu. Nie dodano poprawki produkcyjnej.
-
 Testy odbioru używają rzeczywistych kontenerów listenerów z atrapą klienta; nie wykonano live broker,
 pełnego E2E ani deploymentu. Nie sprawdzano klienta Artemis ani czasowego odbioru 3DS.
 Nie jest to rekomendacja merge całego brancha. Odbiór izolacji Rabbit wymaga zamknięcia W2/W3,

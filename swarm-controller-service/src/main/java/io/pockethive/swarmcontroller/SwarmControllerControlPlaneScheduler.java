@@ -3,7 +3,8 @@ package io.pockethive.swarmcontroller;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -11,11 +12,11 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Drive initial and periodic Swarm Controller control-plane publication and convergence checks.
  * Must not: Consume AMQP messages, execute commands, build status projections, or own convergence state.
- * Contract: Publish one initial full status and preserve the five-second periodic trigger order.
+ * Contract: RESP-CONTROLLER-CONTROL — publish the initial full status after CONTROL startup.
  */
 @Component
 @EnableScheduling
-final class SwarmControllerControlPlaneScheduler implements InitializingBean {
+final class SwarmControllerControlPlaneScheduler {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmControllerControlPlaneScheduler.class);
   private static final long STATUS_INTERVAL_MS = 5_000L;
@@ -33,8 +34,8 @@ final class SwarmControllerControlPlaneScheduler implements InitializingBean {
     this.lifecycleCommands = Objects.requireNonNull(lifecycleCommands, "lifecycleCommands");
   }
 
-  @Override
-  public void afterPropertiesSet() {
+  @EventListener(ApplicationReadyEvent.class)
+  void publishInitialStatus() {
     try {
       statusPublisher.publishFull();
     } catch (Exception failure) {

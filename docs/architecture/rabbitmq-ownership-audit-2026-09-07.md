@@ -15,8 +15,6 @@ SSOT for queue naming, advertised bindings, effective configuration or exchanges
 Severity below follows `AGENTS.md` and `docs/REVIEW_RULES.md`: competing active
 authorities are CRITICAL even when their default values currently agree.
 
-## Findings
-
 ### RAB-01 — CRITICAL: Controller independently resolves control queue names
 
 Canonical declaration paths:
@@ -288,8 +286,6 @@ Local artifacts:
 - `/tmp/rabbit-audit-production-writers.txt`: Java declaration/removal call sites.
 - `/tmp/rabbit-audit-declarations.txt`: additional cross-language declaration search.
 - `/tmp/RabbitOwnershipProbe.java`: executable offline probes.
-- `/tmp/rabbit-ownership-probe.log`: probe output.
-
 The probe compiled the affected current Java production sources with `javac
 -parameters` into `/tmp/rabbit-audit-classes`, using existing Maven dependency
 classpath entries. It compared the actual resolvers/catalogues and ran two Spring

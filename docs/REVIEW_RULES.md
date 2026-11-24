@@ -37,6 +37,8 @@ with evidence. A successful pass is not a waiver of another pass or an invariant
 4. **Security check:** Does the affected flow follow the project's security and
    authorization contracts? Check trust boundaries, least privilege, scope and
    tenant isolation, path/input handling, and secret exposure where applicable.
+   Apply the publication rule in `AGENTS.md` §1 to the PR and its artifacts. Block
+   any commit that includes test results, even a summary in documentation.
    Explain any relevant unverified boundary; do not infer approval from old memory.
 5. **Library check:** Can existing project or standard-library facilities solve
    this clearly without a new dependency? Justify additions by benefit, maintenance,

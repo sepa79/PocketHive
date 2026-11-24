@@ -111,15 +111,6 @@ Wyszukiwania `rg` objęły produkcję serwisu/manager-sdk dla raw Rabbit/Spring-
 repo dla implementacji WorkResourceNamesPort, RabbitResources, WorkInput/WorkOutput i Artemis,
 oraz konsumentów removal typu RABBIT_*. Odczytano wskazane wywołania i kompozycję, nie tylko importy.
 
-Przeszło **14 istniejących testów**: WorkTopologyConfigurationTest (2),
-WorkerWorkConfigurationAdapterTest (4), SwarmWorkBindingsProjectorTest (3),
-SwarmQueueStatsCollectorTest (1), WorkConnectionEnvironmentResolverTest (4).
-Pierwszą próbę zablokowało dołączanie agenta Mockito w sandboxie; ponowiono te same testy
-poza nim i zakończyły się sukcesem. `/tmp/swarm-controller-workplane-review-verified.log`.
-Maven: `-pl swarm-controller-service -am`, powyższe `-Dtest`, `-Dsurefire.failIfNoSpecifiedTests=false test`.
-Test topologii sprawdza zgodność zadeklarowanych zasobów z ENV i bootstrapem, także gdy routing key
-różni się od nazwy kolejki. Testy używają atrap API brokera, bez bezpośrednich portów usług.
-
 Nie wykonano nowych prób lifecycle, pełnego E2E, live Rabbit ani Artemis. Nie oceniano obecnego
 workera 3DS ani właściwości klienta Artemis. Zielone testy nie dowodzą gotowości Artemis.
 Nie zmieniano import rules ani zależności; nie dodawano testów certyfikujących wybór konkretnej klasy.

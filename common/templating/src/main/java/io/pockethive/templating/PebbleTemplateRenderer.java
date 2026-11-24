@@ -54,7 +54,7 @@ public final class PebbleTemplateRenderer implements TemplateRenderer, TemplateS
     }
 
     private PebbleTemplateRenderer(PebbleEngine engine, PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
-        this.engine = Objects.requireNonNull(engine, "engine");
+        this.engine = ReservedTemplateBindings.install(Objects.requireNonNull(engine, "engine"));
         this.seededSelector = Objects.requireNonNull(seededSelector, "seededSelector");
         this.validationEngine = validationEngine();
     }
@@ -79,6 +79,14 @@ public final class PebbleTemplateRenderer implements TemplateRenderer, TemplateS
     }
 
     public void validateSyntax(String templateSource) {
+        validateSyntax(validationEngine, templateSource);
+    }
+
+    static void inspectSyntax(String templateSource, io.pebbletemplates.pebble.extension.Extension observer) {
+        validateSyntax(validationEngine(observer), templateSource);
+    }
+
+    private static void validateSyntax(PebbleEngine validationEngine, String templateSource) {
         Objects.requireNonNull(templateSource, "templateSource");
         try {
             PebbleTemplate template = validationEngine.getLiteralTemplate(templateSource);
@@ -106,13 +114,14 @@ public final class PebbleTemplateRenderer implements TemplateRenderer, TemplateS
             .build();
     }
 
-    private static PebbleEngine validationEngine() {
-        return new PebbleEngine.Builder()
+    private static PebbleEngine validationEngine(io.pebbletemplates.pebble.extension.Extension... extensions) {
+        return ReservedTemplateBindings.install(new PebbleEngine.Builder()
             .extension(new PebbleDataExtension(java.util.Set.of(io.pockethive.requesttemplates.PortableCapability.values()), true))
             .extension(new PebbleEvalExtension(new SpelTemplateEvaluator(DisabledSequenceAccess.INSTANCE), true))
             .extension(new PebbleWeightedSelectionExtension(new PebbleWeightedSelectionExtension.SeededSelector()))
+            .extension(extensions)
             .autoEscaping(false)
             .cacheActive(true)
-            .build();
+            .build());
     }
 }
