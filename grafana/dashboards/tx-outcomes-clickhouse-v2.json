@@ -170,7 +170,7 @@
         "type": "grafana-clickhouse-datasource",
         "uid": "clickhouse"
       },
-      "description": "Shows the latest throughput in transactions per second for the most recent Grafana time bucket. It is calculated as count() divided by $__interval_s, so it reflects recent throughput rather than an average for the full selected range.",
+      "description": "Shows completed transactions per second in the last full, aligned 10-second bucket before the selected end time. The selected range must include that bucket.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -199,7 +199,7 @@
       "id": 12,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "horizontal",
         "percentChangeColorMode": "inverted",
@@ -210,7 +210,7 @@
           "fields": "",
           "values": false
         },
-        "showPercentChange": true,
+        "showPercentChange": false,
         "text": {
           "percentSize": 28,
           "titleSize": 16,
@@ -225,7 +225,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time, count() / $__interval_s AS txns FROM ph_tx_outcome_v2 WHERE $__timeFilter(eventTime) AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId)) AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey)) AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey))) GROUP BY time ORDER BY time",
+          "rawSql": "WITH toStartOfInterval($__toTime, INTERVAL 10 SECOND) AS bucket_end,\n     bucket_end - INTERVAL 10 SECOND AS bucket_start\nSELECT bucket_start AS time,\n       if(bucket_start >= $__fromTime_ms, count() / 10.0, NULL) AS txns\nFROM ph_tx_outcome_v2\nWHERE eventTime >= bucket_start\n  AND eventTime < bucket_end\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  AND ('${callId:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${callId:csv}'), callIdKey))\n  AND ('${businessCode:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${businessCode:csv}'), if(businessCodeKey = '', 'n/a', businessCodeKey)))",
           "refId": "A"
         }
       ],
