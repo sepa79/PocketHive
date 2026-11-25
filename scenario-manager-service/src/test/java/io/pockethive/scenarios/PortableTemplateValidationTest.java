@@ -142,6 +142,16 @@ class PortableTemplateValidationTest extends ScenarioComponentTestFixture {
     }
 
     @Test
+    void invalidSequenceTargetIsReportedWithoutAPortableTemplate() throws Exception {
+        Files.delete(createPortableBundle());
+        Path scenario = scenariosDir.resolve("portable/scenario.yaml");
+        Files.writeString(scenario, Files.readString(scenario)
+            .replace("- callId: create", "- callId: {invalid: create}"));
+
+        assertRejected("scenario.yaml:template.bees.http-sequence.config.steps[0]");
+    }
+
+    @Test
     void blankStepServiceKeepsTheExistingSequenceDefault() throws Exception {
         createPortableBundle();
         Path scenario = scenariosDir.resolve("portable/scenario.yaml");

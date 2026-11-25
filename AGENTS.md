@@ -10,6 +10,10 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Agents must not reinterpret, weaken, or silently bypass these rules.
   - Any exception requires explicit human approval for that specific task.
 
+- **No operational data on GitHub and no test results in the repository.** This rule has no exceptions, including for private repositories and test, QA, NFT or staging environments.
+  - Keep real environment and customer data out of commits, fixtures, screenshots, logs, packet captures, reports, PRs, issues, comments, releases and CI artifacts. This includes credentials and key material, transaction and issuer data, runtime identifiers, and names or topology disclosed through private engagements.
+  - Never commit results from test runs, including aggregate counts, pass/fail summaries, coverage or mutation scores, logs, screenshots and generated reports. Keep results in the system that runs or tracks the tests. Repository documentation may describe what to test and how to run it. Use synthetic fixtures and examples generated independently of real records.
+  - Check the full publication, including diffs, attachments and generated artifacts. Treat prohibited material as a merge blocker. If already published, stop sharing it and report it for removal without quoting it in GitHub.
 - **NFF (No Fraking Fallbacks).**
   - Do not add cascading defaults, heuristic fallback chains, or silent compatibility shims.
   - Every target must declare explicit adapter and explicit settings.

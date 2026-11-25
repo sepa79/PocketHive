@@ -73,6 +73,10 @@ final class SpelTemplateEvaluator {
   private static final Method ISO9797_MAC_M2_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(CryptoSpelFunctions.class, "iso9797Alg3MacM2", String.class, String.class),
     "ISO 9797 MAC method missing");
+  private static final Method PPS_CVC3_TRACK2_NO_PIN_METHOD = Objects.requireNonNull(
+    ReflectionUtils.findMethod(CryptoSpelFunctions.class, "ppsCvc3Track2NoPin",
+      String.class, String.class, String.class, String.class, String.class, String.class),
+    "PPS Track2 CVC3 method missing");
 
   private static final Method RAND_INT_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(SpelFunctions.class, "randInt", int.class, int.class),
@@ -160,6 +164,7 @@ final class SpelTemplateEvaluator {
     context.registerFunction(CryptoSpelFunctions.ICC_MK_A_NAME, EMV_ICC_MK_A_METHOD);
     context.registerFunction(CryptoSpelFunctions.COMMON_SK_NAME, EMV_COMMON_SK_METHOD);
     context.registerFunction(CryptoSpelFunctions.MAC_M2_NAME, ISO9797_MAC_M2_METHOD);
+    context.registerFunction(CryptoSpelFunctions.PPS_CVC3_TRACK2_NO_PIN_NAME, PPS_CVC3_TRACK2_NO_PIN_METHOD);
     context.registerFunction("regex_match", REGEX_MATCH_METHOD);
     context.registerFunction("regex_extract", REGEX_EXTRACT_METHOD);
     context.registerFunction("json_path", JSON_PATH_METHOD);

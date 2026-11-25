@@ -150,3 +150,43 @@ length or ATC/UN equality checks.
 - Each byte operation has its own known-answer tests. `CryptoSpelFunctionsTest`
   checks boundary failures; `EmvCryptoRenderingTest` and
   `EmvCryptoMessageTemplateTest` check real rendering and WorkItem JSON input.
+
+## PPS Track2 CVC3 without PIN
+
+`#pps_cvc3_track2_no_pin(cvkHex, pan, expiryYymm, serviceCode, atcHex, unDecimal)`
+is an explicit profile operation, separate from the generic EMV primitives above.
+It accepts six required strings: a clear double-length CVK (32 hex characters),
+16 ASCII PAN digits, four expiry digits with month 01–12, three service-code
+digits, four ATC hex characters and exactly two decimal UN digits (00–99).
+Hex accepts either case. It returns exactly three ASCII decimal digits including
+leading zeros. It preserves the PAN and does not perform Luhn or expiry-age checks.
+
+The supported PPS profile derives the card key using Option A with a fixed `00`
+suffix (not the ARQC PAN sequence number). It builds static Track2 as
+`PAN || D || YYMM || serviceCode`, right-pads with zeros to 37 nibbles, appends
+`F`, and applies the existing Algorithm 3 method-2 MAC. The last two MAC bytes
+form IVCVC3. The dynamic eight-byte block is `IVCVC3 || UN || ATC`: UN is
+left-zero-padded to eight decimal digits and packed as four BCD bytes; ATC is
+two binary bytes. TDES encryption under the derived card key produces a block
+whose last two bytes, interpreted unsigned big-endian modulo 1000, give CVC3.
+This operation never selects the PIN variant or treats the decimal UN as binary.
+
+```yaml
+bodyTemplate: |
+  {{ eval("#pps_cvc3_track2_no_pin(vars.cvkHex, #json_path(payload, '/pan'), #json_path(payload, '/expiryDate'), #json_path(payload, '/serviceCode'), #json_path(payload, '/atcHex'), #json_path(payload, '/track2Un'))") }}
+```
+
+The example binds a synthetic test CVK from the template variable context. The
+operator owns the isolation of the test environment and its inputs. The caller
+must supply the CVK in clear form. The function validates key length and
+hex encoding without checking key provenance or unwrapping keys. Invalid formats
+fail with value-free diagnostics. The helper has per-call state, no Thales dependency,
+no key file/HSM access and no counter/randomness side effects. It does not build
+outgoing Track2/ICC, enforce equality with other request fields, or manage cards.
+The dataflow supplies coherent fresh ATC/UN inputs. Existing ARQC helpers remain
+unchanged. This profile is not a general CVC/CVV, PIN CVC3 or EMV ARQC function.
+
+Verification uses synthetic Thales SDK reference cases and real Pebble rendering;
+private prepared NFT cases can be checked locally without storing keys in source.
+Reference agreement alone does not establish live issuer acceptance. Rebuild and
+deploy consumers of shared templating before using this function in a bundle.

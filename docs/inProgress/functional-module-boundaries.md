@@ -56,30 +56,10 @@ a quick START; the next tick uses current settings. Already popped items still d
 
 Legacy E2E deletion N4 is now authorized and implemented; see [E2E closeout](e2e-test-system.md).
 
-## Verification and limitations
+## Verification scope
 
-- Latest full local Rabbit run on the rebuilt current worktree: **65/65 PASS**,
-  zero failures/errors/skips across31 groups, including fresh deployment. Both CONTROL
-  and WORK use Rabbit; test swarms and the temporary fixture are removed. See
-  [current Rabbit evidence](../ci/evidence/2026-09-26-rabbit-transport-acceptance.md).
-  This closes the local Rabbit E2E delivery check, not browser, remote Swarm or load
-  qualification. Artemis-only delayed delivery is outside the Rabbit-supported suite.
-
-- Integrated Tim/SM verification: 2,269 Java tests passed on the recorded earlier tree;
-  see [implementation history](../archive/functional-module-boundaries-history-2026-09-26.md).
-- Latest consolidation reactor: 1,950 passed, 4 skipped, no failures/errors across
-  Orchestrator, Swarm Controller and dependencies. Log: `/tmp/ph-consolidation-tests.log`.
-- TCP acceptance auth correction: 26 focused framework tests passed. Rabbit TCP timeout
-  and WebAuth passed; delayed TCP passed on an unchanged rerun after a clock-corrupted
-  first measurement. Final registry empty. Both results are retained.
-- Full integrated local runs: [Artemis report](../ci/evidence/2026-09-26-f08-local-acceptance.md)
-  and [Rabbit report](../ci/evidence/2026-09-26-f08-rabbit-acceptance.md). Initial totals
-  are not rewritten as a green full rerun by subsequent targeted tests.
-- Earlier [large-Swarm evidence](artemis-swarm-full-acceptance.md) and
-  [coverage matrix](../ci/acceptance-coverage.md) retain their original revision/scope.
-
-N4 removal verification:543 tests passed without failures/errors/skips; import-boundary
-checks, runner syntax and current-plan links passed. See [N4 review](e2e-test-system.md).
+Use the [coverage matrix](../ci/acceptance-coverage.md) for lifecycle and
+transport requirements. Browser behavior and cross-node deployment need their own checks.
 
 ## Preserved boundaries
 
@@ -89,11 +69,7 @@ permission rules or state machines. Ports serve actual consumer boundaries, not 
 mandatory interface-per-class pattern. Preserve admission ACK: processing errors are
 reported, never silently redelivered. No implicit compatibility, fallback or migration.
 
-## Historical references
-
-The dated inventory and per-slice evidence are in the
-[archived implementation log](../archive/functional-module-boundaries-history-2026-09-26.md).
-They are historical evidence, not current instructions.
+## Implementation references
 
 ### F01 — Redis, one PR closing the shared technology responsibility
 
@@ -101,7 +77,7 @@ Completed; [Redis extraction evidence](redis-adapter-extraction.md).
 
 ### F03 — Docker/compute
 
-Completed; [historical F03 evidence](../archive/functional-module-boundaries-history-2026-09-26.md#f03--dockercompute).
+Completed; [compute boundary](../architecture/runtime-responsibilities.md).
 
 ### Processor transport lifecycle — approved fix, 2026-09-26
 
@@ -113,13 +89,6 @@ retains per-thread reuse. The old configure/currentConfig/acquire sequence is go
 HTTP tracks all eager/lazy clients, rolls back partial construction and defers
 shutdown cleanup until admitted executions finish. Worker destruction closes its
 TCP/ISO handlers; Spring owns HTTP client destruction. No broker ACK or retry changes.
-
-Verification: full `processor-service -am test` reactor, 1172 cases: **1168 passed,
-4 skipped**, zero failures/errors. The skips require separately configured Redis
-fixtures. All processor transport/lifecycle cases ran, including 11 TCP runtime and
-3 HTTP lifecycle cases. Log: `/tmp/ph-transport-reactor.log`; diff whitespace check passed.
-The subsequent rebuilt full local Rabbit run passed65/65; see the current Rabbit
-evidence above. No fresh Artemis or remote Swarm run covers these final transport changes.
 
 Review passes: approved scope/observable lifetime effects; responsibility headers
 and separate generation value owner; one acquire path replaces split state reads;

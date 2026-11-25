@@ -31,12 +31,20 @@ final class ScenarioRequestReferences {
         String path = ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role() + ".config";
         if (BeeRoles.HTTP_SEQUENCE.equals(workerRole.apply(consumer.image()))) {
             if (config.get("steps") instanceof List<?> values) {
-                for (int i = 0; i < values.size(); i++) if (values.get(i) instanceof Map<?, ?> step) {
-                    String call = steps.stepCallId(step);
-                    String service = steps.stepServiceId(step);
+                for (int i = 0; i < values.size(); i++) {
+                    if (!(values.get(i) instanceof Map<?, ?> step)) {
+                        continue;
+                    }
+                    String stepPath = RequestTemplateFindings.stepPath(path, i);
+                    var decoded = steps.stepTarget(step, stepPath, findings);
+                    if (decoded.isEmpty()) {
+                        continue;
+                    }
+                    var target = decoded.get();
+                    String call = target.callId();
+                    String service = target.serviceId();
                     String selectedService = service == null ? defaultServiceId : service;
                     if (call == null || selectedService == null) continue;
-                    String stepPath = path + ".steps[" + i + "]";
                     var variables = ScenarioConfigurationPreparation.variableNames(
                         Map.of("call", call, "service", selectedService));
                     if (variables.isEmpty()) references.add(new ScenarioTemplateReference(selectedService, call, stepPath));

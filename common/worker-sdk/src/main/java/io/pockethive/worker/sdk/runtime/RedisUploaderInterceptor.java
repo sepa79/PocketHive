@@ -2,9 +2,9 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.redis.config.RedisConfigurationParser;
 import io.pockethive.redis.config.RedisOutputTemplateSources;
+import io.pockethive.redis.config.RedisUploaderConfiguration;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderer;
-import io.pockethive.templating.sources.InvocationTemplateSources;
 import io.pockethive.work.api.WorkItem;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -76,20 +76,18 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
     }
 
     private ResolvedConfig resolveConfig(Map<String, Object> rawConfig) {
-        Map<?, ?> uploaderMap = InvocationTemplateSources.redisUploader(rawConfig);
-        if (uploaderMap.isEmpty()) return null;
-
-        boolean enabled = InvocationTemplateSources.uploaderEnabled(uploaderMap);
-        if (!enabled) {
+        Map<?, ?> uploaderMap = RedisUploaderConfiguration.block(rawConfig);
+        if (!RedisUploaderConfiguration.enabled(uploaderMap)) {
             return null;
         }
 
-        var connection = CONFIGURATION.parseRedisConnection(uploaderMap, "interceptors.redisUploader");
+        String path = RedisUploaderConfiguration.PATH;
+        var connection = CONFIGURATION.parseRedisConnection(uploaderMap, path);
         Phase phase = requireEnum(uploaderMap, FIELD_PHASE, Phase.class);
         var settings = CONFIGURATION.parseRedisWriteSettings(uploaderMap.get(FIELD_SOURCE_STEP),
-            uploaderMap.get(FIELD_PUSH_DIRECTION), uploaderMap.get(FIELD_MAX_LEN), "interceptors.redisUploader");
+            uploaderMap.get(FIELD_PUSH_DIRECTION), uploaderMap.get(FIELD_MAX_LEN), path);
         var targets = CONFIGURATION.parseRedisOutputTargets(uploaderMap.get(FIELD_ROUTES),
-            uploaderMap.get(FIELD_DEFAULT_LIST), RedisOutputTemplateSources.value(uploaderMap), "interceptors.redisUploader");
+            uploaderMap.get(FIELD_DEFAULT_LIST), RedisOutputTemplateSources.value(uploaderMap), path);
 
         io.pockethive.worker.sdk.runtime.RedisPushRequest request = new io.pockethive.worker.sdk.runtime.RedisPushRequest(
             connection,

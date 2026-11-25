@@ -1377,7 +1377,7 @@ public final class ScenarioBundleValidator {
                 if (BeeRoles.HTTP_SEQUENCE.equals(workerRole(consumer.bee().image()))) {
                     requestTemplateFindings.validatePortableSteps(portable, consumer.effectiveConfig(),
                         ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees." + consumer.role() + ".config",
-                        findings);
+                        references, findings);
                 } else if (references.stream().anyMatch(reference -> reference.key()
                     .equals(templateKey(portable.serviceId(), portable.callId())))) {
                     findings.add(ValidationIssue.TEMPLATE_INVALID.finding(ValidationSeverity.ERROR,

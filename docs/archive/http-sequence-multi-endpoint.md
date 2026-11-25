@@ -314,17 +314,6 @@ rule from becoming a fallback chain.
 Initial delivery checks ran in this workspace on 2026-08-13. The
 path-containment hardening checks ran on 2026-08-14.
 
-| Gate | Result |
-| --- | --- |
-| HTTP Sequence full reactor tests | PASS — 60 tests, 0 failures/errors |
-| Scenario Manager full tests | PASS — 166 tests, 0 failures/errors; supplied `-Dpockethive.release.version=0.15.35` required by the test context |
-| Capability catalogue contract | PASS — capability `1.2` and additive step description asserted |
-| Integration acceptance | PASS — real Apache client called three ephemeral HTTP servers on distinct ports/base paths; an encoded traversal attempt made zero receiver requests |
-| Mutation testing | PASS — 84 mutations, 84 killed (100%); 95% line coverage, 100% test strength, and 0 uncovered mutants for target resolution/config boundaries |
-| Bundle validation | PASS — public Scenario Manager ingress, protocol `2.0.0`, 0 errors/warnings |
-| Live acceptance | PASS — public Orchestrator ingress created and started the mixed-target swarm; official debug tap observed three HTTP `200` results with `WORKER_BASE_URL`, `SUT_ENDPOINT` (`auth`), and `STEP_BASE_URL` |
-| HiveMap review | PASS — the RST follow-up finding for multi-encoded traversal was fixed and resolved with unit, acceptance, and mutation evidence; the three earlier documentation findings remain resolved |
-
 Mutation commands:
 
 ```bash

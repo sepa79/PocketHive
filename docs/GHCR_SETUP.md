@@ -141,7 +141,7 @@ to an explicit registry using the repo tooling:
 
 ```bash
 tools/docker/remote-images.sh \
-  --registry 192.168.88.54:5000 \
+  --registry registry.example.test:5000 \
   --namespace pockethive \
   --tag dev-YYYYMMDD-HHMM-g<sha> \
   --push
@@ -153,7 +153,7 @@ image source of truth and rejects `--tag latest`.
 For a HiveForge test deploy, pass the resulting registry and tag explicitly:
 
 ```text
-imageRepository.project=192.168.88.54:5000/pockethive
+imageRepository.project=registry.example.test:5000/pockethive
 release.imageTag=dev-YYYYMMDD-HHMM-g<sha>
 ```
 

@@ -60,21 +60,10 @@ public ingress; the matching-target `lifecycle` group verifies the normal path.
 - **Orphan compute removal success / invalid HTTP timeouts.** The path review and F03 identified
   behavior changes needed here; keep their contract decisions separate from moving implementations.
 
-## Handoff
+## Verification scope
 
-O1/O2 verification: 74 tests passed (26 new regression cases and 48 existing checks), including
-RepositoryImportBoundaryTest. `ControllerObservationHandlerTest` covers rejected full/delta,
-unchanged snapshot/metadata, missing-baseline requests and valid CREATE completion.
-`ExecutorResultIngressTest` covers every operation identity field on immediate/observation paths,
-protection of valid pending evidence and duplicate handling; optional runtime diagnostics remain accepted.
-The old incomplete `recordResult` signature and nested value-contract names were removed with all callers
-updated. Codecs and listener ingress are real in the new integration cases; no direct service ports.
-Log: `/tmp/orchestrator-identity-fixes-regression.log`. `git diff --check` passed. No deployment or full E2E
-was performed for that historical slice. O3 catalogue discovery was implemented subsequently.
-
-O3 and catalogue-only removal received their focused reviews and corrections.
-Do not expand this into general recovery.
-Current decisions are recorded in this plan and the global HiveMind project memory.
+`ControllerObservationHandlerTest` exercises admission of Controller observations.
+`ExecutorResultIngressTest` exercises operation identity and pending evidence.
 
 ## Review correction: unavailable workload intent (approved API addition)
 
@@ -108,34 +97,3 @@ catalogue entry. Reuse canonical authorization, inventory, catalogue and journal
 owners. Preserve normal REMOVE. Files, queues and network bindings stay untouched;
 associated cleanup remains deferred rather than partially reported as success.
 The user explicitly approved this endpoint and catalogue-only scope on 2026-09-26.
-
-### Catalogue-only implementation verification
-
-2026-09-26: full Orchestrator reactor passed **1242 tests, zero failures/errors/skips**
-(`AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl ./mvnw -B -ntp -pl orchestrator-service -am test`).
-Log: `/tmp/ph-catalogue-complete-reactor.log`. The 11 new cases cover the public HTTP
-route, canonical manage authorization, compute presence (including stopped workers
-from another run), unavailable inventory, replacement during inventory, command
-admission during blocked inventory, rejection after forgetting and captured-run audit.
-`git diff --check` passed. No deployment or UI action was added.
-
-Six review passes: plan matches approved catalogue-only scope; separate HTTP and
-application owners comply with implementation boundaries; no new resource-cleanup
-framework or duplicate policies; authorization delegates to SwarmAccessService;
-existing inventory/store/coordinator/journal APIs suffice without dependencies;
-short documented locking scope contains no infrastructure IO. Repository search
-found one production operation reservation caller (OperationDispatchService), one
-new catalogue-only workflow and the existing distinct full REMOVE convergence path.
-
-An earlier full run failed CREATE when the local clock stepped backwards
-(`completedAt must not precede createdAt`). The focused retry and final full reactor
-both passed without changing product timing semantics.
-
-## Current delivery verification — 2026-09-26
-
-The rebuilt current worktree passed the complete supported local Rabbit suite:
-**65/65 PASS**, zero failures/errors/skips, including lifecycle and fresh deployment.
-See [the run report](../ci/evidence/2026-09-26-rabbit-transport-acceptance.md).
-This is regression evidence; it does not replace the focused catalogue concurrency
-and identity tests above or imply a dedicated deployed catalogue-only removal test.
-No new UI action, general orphan cleanup or restart-operation recovery was added.

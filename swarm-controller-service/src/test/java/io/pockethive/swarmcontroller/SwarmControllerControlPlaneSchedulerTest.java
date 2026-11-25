@@ -4,10 +4,15 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class SwarmControllerControlPlaneSchedulerTest {
 
@@ -22,10 +27,18 @@ class SwarmControllerControlPlaneSchedulerTest {
           statusPublisher, statusFullCoordinator, lifecycleCommands);
 
   @Test
-  void publishesOneInitialFullStatus() {
-    scheduler.afterPropertiesSet();
+  void publishesInitialFullStatusOnlyWhenApplicationIsReady() {
+    new ApplicationContextRunner()
+        .withBean(SwarmControllerControlPlaneScheduler.class, () -> scheduler)
+        .run(context -> {
+          verify(statusPublisher, never()).publishFull();
 
-    verify(statusPublisher).publishFull();
+          context.publishEvent(new ApplicationReadyEvent(
+              new SpringApplication(Application.class), new String[0],
+              context.getSourceApplicationContext(), Duration.ZERO));
+
+          verify(statusPublisher).publishFull();
+        });
   }
 
   @Test
@@ -33,7 +46,7 @@ class SwarmControllerControlPlaneSchedulerTest {
     doThrow(new IllegalStateException("broker unavailable"))
         .when(statusPublisher).publishFull();
 
-    assertThatCode(scheduler::afterPropertiesSet).doesNotThrowAnyException();
+    assertThatCode(scheduler::publishInitialStatus).doesNotThrowAnyException();
   }
 
   @Test

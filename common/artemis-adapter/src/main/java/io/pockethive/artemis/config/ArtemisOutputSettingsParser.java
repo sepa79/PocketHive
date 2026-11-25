@@ -42,6 +42,7 @@ public final class ArtemisOutputSettingsParser implements WorkOutputSettingsPars
     }
     @Override
     public java.util.List<WorkConfigurationTemplate> templateSources(java.util.Map<?, ?> settings, String path) {
+        // Artemis output settings have no per-message templates.
         return java.util.List.of();
     }
 }

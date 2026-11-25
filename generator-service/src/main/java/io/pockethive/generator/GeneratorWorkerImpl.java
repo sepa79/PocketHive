@@ -1,7 +1,6 @@
 package io.pockethive.generator;
 
 import io.pockethive.templating.api.TemplateRenderer;
-import io.pockethive.templating.sources.GeneratorTemplateSources;
 import io.pockethive.work.api.HttpRequest;
 import io.pockethive.work.api.HttpRequestEnvelope;
 import io.pockethive.work.api.PocketHiveWorker;
@@ -132,9 +131,8 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
       effectiveSeed = effectiveSeed.toBuilder().header("vars", config.vars()).build();
     }
     GeneratorWorkerConfig.Message message = config.message();
-    var sources = new GeneratorTemplateSources(
-        message.path(), message.method(), message.body(), message.headers());
-    MessageTemplate template = new MessageTemplate(message.bodyType(), sources.path(), sources.method(), sources.body(), sources.headers());
+    MessageTemplate template = new MessageTemplate(
+        message.bodyType(), message.path(), message.method(), message.body(), message.headers());
     RenderedMessage rendered = messageTemplateRenderer.render(template, effectiveSeed);
 
     Map<String, Object> baseHeaders = new HashMap<>(effectiveSeed.headers());

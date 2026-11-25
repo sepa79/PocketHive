@@ -28,6 +28,17 @@ public final class WorkConfigurationParser {
         return validate(configuration, mode, source -> {});
     }
 
+    /**
+     * Validates Work IO and reports the selected output adapter's per-message
+     * template sources to an observer for inspection during the same pass.
+     * Sources are reported before adapter settings validation and may accompany
+     * validation findings.
+     *
+     * @param configuration decoded worker configuration
+     * @param mode the configuration validation phase
+     * @param sources observer of template text and its field path
+     * @return the Work IO validation result
+     */
     public WorkConfigurationValidation validate(Map<String, Object> configuration, WorkConfigurationMode mode,
                                                 java.util.function.Consumer<WorkConfigurationTemplate> sources) {
         Objects.requireNonNull(sources, "sources");

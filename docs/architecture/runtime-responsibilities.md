@@ -350,7 +350,7 @@ Portable grammar and bounds are defined in the
 Native engine entrypoints and their existing context interfaces remain distinct;
 they are not implicitly restricted to, or treated as, portable-v1.
 
-SpelTemplateEvaluator registers the three new crypto functions through
+SpelTemplateEvaluator registers the native crypto functions through
 CryptoSpelFunctions; their boundaries and byte operations are owned below.
 
 SDK and service consumers supply templates/context. Sequence calls use the injected SequenceAccess. SpelFunctions includes clock/random helpers; it is not mathematically pure.
@@ -421,11 +421,12 @@ unsupported capabilities fail preflight, without executing requests.
 
 **Module/owner:** `common/templating`, CryptoSpelFunctions.
 
-Owns the three string-based SpEL boundaries, argument validation, hex decoding
+Owns the string-based crypto SpEL boundaries, argument validation, hex decoding
 and uppercase encoding under the [crypto function contract](../contracts/template-capabilities.md#composable-emv-and-mac-functions).
-SpelTemplateEvaluator registers these functions. Each delegates to its byte operation.
+SpelTemplateEvaluator registers these functions. Each delegates to its crypto operation,
+including the explicitly named PPS no-PIN Track2 CVC3 profile.
 
-**Forbidden:** implement derivation/MAC algorithms, interpret transaction fields,
+**Forbidden:** implement derivation/MAC algorithms, assemble transaction fields,
 select profiles, log arguments or read keys from infrastructure.
 
 **Required effect:** invalid input fails explicitly; valid input delegates once and
@@ -471,6 +472,20 @@ using Bouncy Castle. Consumers: CryptoSpelFunctions.
 **Forbidden:** derive keys, decode hex, impose EMV data layout or retain MAC state between calls.
 **Required effect/verification:** eight-byte output matches Iso9797Algorithm3MacTest,
 including empty data and full-block padding.
+
+## RESP-PPS-TRACK2-CVC3
+
+**Module/owner:** `common/templating`, PpsTrack2Cvc3.
+
+Owns the explicit PPS Track2 no-PIN CVC3 calculation on validated inputs. Composes
+EmvIccMasterKeyDerivation (fixed `00` diversification suffix),
+Iso9797Algorithm3Mac (method-2 static Track2 MAC) and Bouncy Castle TDES for the
+dynamic block. Consumers: CryptoSpelFunctions.
+**Forbidden:** select another profile/PIN variant, unwrap keys, read configuration,
+generate randomness, allocate counters, assemble outgoing Track2/ICC or send requests.
+**Required effect/verification:** deterministic three-digit CVC3 matching synthetic
+SDK reference vectors and renderer tests. Private offline comparison may verify
+prepared NFT cases without publishing keys; it does not prove issuer approval.
 
 ## RESP-TEMPLATE-SEQUENCE
 
@@ -1330,13 +1345,18 @@ TemplatingInterceptorTest and RedisPushSupportTest use actual authored templates
 
 ## RESP-WORK-MESSAGE-TEMPLATE
 
-**Shared modules:** `common/templating`, `common/templating-api`; message invocation remains in `common/worker-sdk`.
+**Shared modules:** `common/templating`, `common/templating-api`, `common/work-config`,
+and `common/redis-config`. Message invocation remains in `common/worker-sdk`.
 
-Generator and clearing template-mode consumers use explicit read-only shared templating source
-projections (`GeneratorTemplateSources`, `ClearingTemplateSources`). Invocation
-interceptor block selection is owned by `InvocationTemplateSources`; runtime and
-authoring use it directly. These projections supply source text only. Existing typed
-worker configuration remains the owner of defaults, normalization and acceptance.
+Authoring inspection uses read-only source projections for generator messages and
+clearing templates. At runtime, Generator and Clearing Export render directly
+from their typed configuration or structured schema.
+`InvocationInterceptorConfiguration` owns selection of named blocks from the
+interceptor configuration envelope. `RedisUploaderConfiguration` owns the
+uploader block name, diagnostic path and concrete enablement. Both runtime and
+authoring use that configuration owner. `InvocationTemplateSources` selects
+template text and can inspect uploader sources behind a deferred enablement
+expression.
 
 WorkerTemplateContext supplies named SDK projections (RESP-WORK-TEMPLATE-CONTEXT).
 RenderedMessage and TemplateConfigResolver are separate types. The renderer and
@@ -2509,6 +2529,9 @@ If applying a verified plan fails, it records failure through the lifecycle owne
 and retains `initialized=false`, allowing status and explicit REMOVE while readiness
 gates reject workload commands. It must not retry preparation, change adapters,
 delete resources automatically or suppress artifact-verification failures.
+SwarmControllerControlPlaneScheduler publishes the initial full status after
+application startup completes and the CONTROL listener is available. A failed
+CREATE can then be followed immediately by a workload command or explicit REMOVE.
 SwarmOperationObservationHandler (RESP-ORCHESTRATOR-INGRESS) completes CREATE as
 failed on an accepted failed Controller observation with the matching launch digest;
 the existing removal handshake and verified postconditions remain authoritative.
@@ -2646,7 +2669,9 @@ retain the native syntax validator; portable documents are never compiled throug
 that engine. Selected HTTP Sequence steps also delegate adapter admission to
 HttpSequencePortablePolicy. HttpSequenceStep and its retry/extract/set models live in
 request-templates and supply the same Jackson binding to authoring and execution;
-numeric call IDs therefore do not bypass selected portable-step admission. Bundle admission also rejects portable calls referenced by
+authoring decodes each step's target once, reports invalid targets at the step path
+and uses the selected references for portable policy. Numeric call IDs therefore
+do not bypass selected portable-step admission. Bundle admission also rejects portable calls referenced by
 Request Builder, whose native protocol renderer does not implement that profile;
 unreferenced portable files may share its template root.
 Profile existence and bundle visibility stay here. The offline diagnostic delegates file loading to

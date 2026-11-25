@@ -3,7 +3,6 @@ package io.pockethive.clearingexport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.JournalEvent;
 import io.pockethive.templating.api.TemplateRenderer;
-import io.pockethive.templating.sources.ClearingTemplateSources;
 import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.work.api.PocketHiveWorkerFunction;
 import io.pockethive.work.api.StatusPublisher;
@@ -146,8 +145,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
         StructuredProjectedRecord projected = structuredRecordProjector.project(schema, renderContext);
         batchWriter.appendStructured(projected, config, schema);
       } else {
-        String renderedLine = templateRenderer.render(new ClearingTemplateSources(
-        config.fileNameTemplate(), config.headerTemplate(), config.recordTemplate(), config.footerTemplate()).recordTemplate(), renderContext);
+        String renderedLine = templateRenderer.render(config.recordTemplate(), renderContext);
         batchWriter.append(renderedLine, config);
       }
     } catch (Exception ex) {

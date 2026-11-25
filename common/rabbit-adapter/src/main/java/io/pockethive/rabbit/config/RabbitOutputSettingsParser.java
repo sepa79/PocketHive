@@ -122,6 +122,7 @@ public final class RabbitOutputSettingsParser implements WorkOutputSettingsParse
     }
     @Override
     public java.util.List<WorkConfigurationTemplate> templateSources(java.util.Map<?, ?> settings, String path) {
+        // RabbitMQ output settings have no per-message templates.
         return java.util.List.of();
     }
 }

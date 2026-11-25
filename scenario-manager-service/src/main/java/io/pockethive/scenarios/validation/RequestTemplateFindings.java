@@ -17,6 +17,9 @@ import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Responsibility: project canonical request-template and selected portable-step admission into bundle findings.
@@ -49,32 +52,20 @@ final class RequestTemplateFindings {
     }
 
     void validatePortableSteps(PortableHttpCall call, Map<String, Object> config, String path,
-                               List<ValidationFinding> findings) {
+                               Set<ScenarioTemplateReference> references, List<ValidationFinding> findings) {
         if (!(config.get("steps") instanceof List<?> steps)) {
             return;
         }
+        String key = RequestTemplateParser.key(call.serviceId(), call.callId());
+        Set<String> selectedPaths = references.stream()
+            .filter(reference -> key.equals(reference.key()))
+            .map(ScenarioTemplateReference::sourcePath)
+            .collect(Collectors.toSet());
         for (int index = 0; index < steps.size(); index++) {
-            if (!(steps.get(index) instanceof Map<?, ?> step)) {
+            String stepPath = stepPath(path, index);
+            if (!selectedPaths.contains(stepPath) || !(steps.get(index) instanceof Map<?, ?> step)) {
                 continue;
             }
-            HttpSequenceStep target;
-            try { target = stepTarget(step); }
-            catch (IllegalArgumentException failure) {
-                findings.add(invalid(path + ".steps[" + index + "]", failure.getMessage()));
-                continue;
-            }
-            String callId = target.callId();
-            if (callId == null) continue;
-            Object serviceId = target.serviceId();
-            if (serviceId == null || serviceId instanceof String text && text.isBlank()) {
-                serviceId = config.get("serviceId");
-            }
-            if (!(serviceId instanceof String service)
-                || !RequestTemplateParser.key(call.serviceId(), call.callId())
-                    .equals(RequestTemplateParser.key(service, callId))) {
-                continue;
-            }
-            String stepPath = path + ".steps[" + index + "]";
             Object retry = step.get("retry");
             if (retry != null && !(retry instanceof Map<?, ?>)) {
                 findings.add(invalid(stepPath + ".retry", "Sequence retry settings must be an object."));
@@ -103,19 +94,20 @@ final class RequestTemplateFindings {
         catch (IllegalArgumentException failure) { findings.add(invalid(path, failure.getMessage())); return null; }
     }
 
-    String stepCallId(Map<?, ?> step) {
-        try { return stepTarget(step).callId(); } catch (IllegalArgumentException failure) { return null; }
+    static String stepPath(String path, int index) {
+        return path + ".steps[" + index + "]";
     }
 
-    String stepServiceId(Map<?, ?> step) {
-        try { return stepTarget(step).serviceId(); } catch (IllegalArgumentException failure) { return null; }
-    }
-
-    private HttpSequenceStep stepTarget(Map<?, ?> step) {
+    Optional<HttpSequenceStep> stepTarget(Map<?, ?> step, String path, List<ValidationFinding> findings) {
         Map<String, Object> targetFields = new java.util.LinkedHashMap<>();
         targetFields.put("callId", step.get("callId"));
         targetFields.put("serviceId", step.get("serviceId"));
-        return mapper.convertValue(targetFields, HttpSequenceStep.class);
+        try {
+            return Optional.of(mapper.convertValue(targetFields, HttpSequenceStep.class));
+        } catch (IllegalArgumentException failure) {
+            findings.add(invalid(path, failure.getMessage()));
+            return Optional.empty();
+        }
     }
 
     Map<String, String> sources(TemplateDefinition definition) {

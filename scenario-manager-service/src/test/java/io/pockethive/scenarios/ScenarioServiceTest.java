@@ -480,10 +480,10 @@ class ScenarioServiceTest {
                 id: experimental
                 name: Experimental Scenario
                 template:
-                  image: 192.168.88.54:5000/pockethive/ctrl-image:experimental
+                  image: registry.example.test:5000/pockethive/ctrl-image:experimental
                   bees:
                     - role: worker
-                      image: 192.168.88.54:5000/pockethive/worker-image:experimental
+                      image: registry.example.test:5000/pockethive/worker-image:experimental
                       config:
                         inputs: {type: RABBITMQ}
                         outputs: {type: RABBITMQ}
@@ -498,10 +498,10 @@ class ScenarioServiceTest {
 
         assertThat(service.findAvailable("experimental")).isPresent();
         Scenario scenario = service.findAvailable("experimental").orElseThrow();
-        assertThat(scenario.getTemplate().image()).isEqualTo("192.168.88.54:5000/pockethive/ctrl-image:experimental");
+        assertThat(scenario.getTemplate().image()).isEqualTo("registry.example.test:5000/pockethive/ctrl-image:experimental");
         assertThat(scenario.getTemplate().bees())
                 .extracting(Bee::image)
-                .containsExactly("192.168.88.54:5000/pockethive/worker-image:experimental");
+                .containsExactly("registry.example.test:5000/pockethive/worker-image:experimental");
     }
 
 
