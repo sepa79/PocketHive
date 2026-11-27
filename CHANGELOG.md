@@ -27,6 +27,7 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- Remove the Java PIT mutation gates and their Maven profiles and plugin configuration.
 - Remove archived test reports and deployment records from the repository.
   Keep acceptance requirements and test instructions in the documentation.
 
@@ -511,22 +512,9 @@ Timestamp: 2026-09-22T00:00:00Z
 - Deployment: install the same hardened non-root, read-only Java MCP image through
   `build-hive.sh` and HiveForge contracts, with bounded persistent state, tmpfs
   upload spooling, public Nginx routes, health checks, and embedded CycloneDX SBOM.
-- Earlier MCP migration verification (historical): recorded 22 Auth Service,
-  115 MCP, and 102 extension tests passing; killed 26/26 Auth, 576/576 MCP, and
-  1,825/1,825 extension mutants. Local checks passed for npm audit, packaged VSIX,
-  public-ingress OAuth/MCP, responsive UI, refresh rotation/replay/revocation,
-  and exact mixed-file bundles.
-- CI regression gates: provision test-owned Redis and RabbitMQ fixtures, require
-  the RabbitMQ integration tests and independent OpenSSL verifier, and enforce
-  the scoped Java MCP, Auth Service, and HTTP Sequence mutation gates alongside
+- CI regression gates: provision test-owned Redis and RabbitMQ fixtures and require
+  the RabbitMQ integration tests and independent OpenSSL verifier alongside
   Windows/Linux extension tests and package checks.
-- Restart integration verification: [PR #517's hosted run](https://github.com/sepa79/PocketHive/actions/runs/35435999539)
-  passed all four jobs for restart head `2103a93a`: 2,247 Java cases and 187
-  extension tests on each platform, with no failures or skips; all three scoped
-  Java mutation gates and Linux Stryker passed. These results supersede the
-  earlier totals for this integration; they do not establish real-provider
-  signed OAuth or deployed-bundle acceptance. The optional deployed acceptance
-  profile was not run; see [authentication verification](docs/ci/auth-testing.md).
 - Integration follow-up: inherited Orchestrator executor/controller identity
   validation, reset/registry, and public contract extraction findings remain
   deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).

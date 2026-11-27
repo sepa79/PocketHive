@@ -308,32 +308,3 @@ That is a deliberate compatibility rule at one boundary, not a recovery
 fallback. It keeps current scenarios clean and makes only exceptional routing
 verbose. Strict mutual exclusion and fail-closed override handling prevent the
 rule from becoming a fallback chain.
-
-## Verification evidence
-
-Initial delivery checks ran in this workspace on 2026-08-13. The
-path-containment hardening checks ran on 2026-08-14.
-
-Mutation commands:
-
-```bash
-./mvnw -pl http-sequence-service -am -DskipTests install
-./mvnw -f http-sequence-service/pom.xml -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
-```
-
-### Rapid Software Testing evaluation
-
-| Charter | Evidence | Result |
-| --- | --- | --- |
-| Compatibility | Deserialize old JSON and use the old seven-argument `Step` constructor | PASS |
-| Target routing | Worker, named SUT, and literal targets across hosts, ports, base paths, and query paths | PASS |
-| Ambiguity / NFF | Both fields, blanks, missing SUT context, unknown endpoint, non-HTTP kind, and scheme mismatch fail explicitly | PASS |
-| URI abuse | Reject absolute/scheme-relative paths, user-info, fragments, base queries, literal, encoded, nested-encoded or encoded-separator traversal, templated literals, invalid schemes, hosts, and ports; preserve safe encoded content | PASS |
-| Timing | Resolve once before retry; every attempt receives the identical URI | PASS |
-| No side effects on invalid config | Invalid later override prevents earlier steps from sending traffic | PASS |
-| Observability | Result metadata exposes controlled source/endpoint id, not full target URLs | PASS |
-| Contract ownership | Scenario protocol remains `2.0.0`; HTTP Sequence capability is `1.2`; nested semantics stay at the typed worker boundary | PASS |
-
-The initial local stack bootstrap also exposed a host port collision on
-WireMock (`8080`). The acceptance fixture was decoupled from WireMock and uses
-three PocketHive service endpoints instead; no product fallback was added.

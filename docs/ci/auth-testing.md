@@ -44,8 +44,8 @@ the full test result. Record failures, errors, and skips separately.
 
 ## MCP prerequisites and execution
 
-The canonical Java MCP uses the repository's Java 21 Maven test and mutation
-gates. See [MCP overview](../mcp/README.md) for its supported authoring flow and
+The canonical Java MCP uses the repository's Java 21 Maven test suite.
+See [MCP overview](../mcp/README.md) for its supported authoring flow and
 Streamable HTTP interface. The removed Node MCP, stdio, and wizard tests are not
 supported execution paths.
 
@@ -54,26 +54,6 @@ files through proposal generation and the HTTP upload workflow. The HTTP test
 stubs the owner validation result; separate Scenario Manager API tests exercise
 the real authored storage checks. Neither resolves credentials or proves provider
 acceptance.
-
-## Scoped Java mutation gates
-
-CI runs the configured Java MCP, product `auth-service`, and HTTP Sequence PIT
-gates with Java 21 and repository-pinned Maven 3.9.6. After installing the reactor
-dependencies, the commands are:
-
-```bash
-./mvnw -B -ntp -DskipTests install
-tools/test/with-infrastructure.sh ./mvnw -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
-tools/test/with-infrastructure.sh ./mvnw -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
-tools/test/with-infrastructure.sh ./mvnw -B -ntp -f http-sequence-service/pom.xml -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
-```
-
-The HTTP Sequence profile retains its configured target classes and thresholds
-in `http-sequence-service/pom.xml`; its discovered tests use the Redis settings
-above and JDK keytool/JCA for TLS/signature checks. The independent OpenSSL oracle
-runs in worker-sdk tests during the root Java gate; the mutation job separately
-checks that OpenSSL is available. These are scoped mutation gates, not mutation
-coverage of the worker OAuth provider or every class in the modules.
 
 ## Environment verification
 

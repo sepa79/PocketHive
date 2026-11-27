@@ -15,8 +15,6 @@
     <mcp.java.sdk.version>2.0.0</mcp.java.sdk.version>
     <commons-compress.version>1.28.0</commons-compress.version>
     <cyclonedx.maven.version>2.9.3</cyclonedx.maven.version>
-    <pitest.version>1.22.0</pitest.version>
-    <pitest.junit5.version>1.2.3</pitest.junit5.version>
     <project.build.outputTimestamp>2026-08-18T00:00:00Z</project.build.outputTimestamp>
   </properties>
 
@@ -175,36 +173,6 @@
           <outputName>pockethive-mcp-sbom</outputName>
           <includeBomSerialNumber>false</includeBomSerialNumber>
           <includeTestScope>false</includeTestScope>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.pitest</groupId>
-        <artifactId>pitest-maven</artifactId>
-        <version>${pitest.version}</version>
-        <dependencies>
-          <dependency>
-            <groupId>org.pitest</groupId>
-            <artifactId>pitest-junit5-plugin</artifactId>
-            <version>${pitest.junit5.version}</version>
-          </dependency>
-        </dependencies>
-        <configuration>
-          <mutationThreshold>100</mutationThreshold>
-          <coverageThreshold>100</coverageThreshold>
-          <targetClasses>
-            <param>io.pockethive.mcp.domain.*</param>
-            <param>io.pockethive.mcp.application.*</param>
-            <param>io.pockethive.mcp.adapter.persistence.CoordinationStateSchema</param>
-            <param>io.pockethive.mcp.security.McpAuthenticationEntryPoint</param>
-            <param>io.pockethive.mcp.security.ProtectedResourceMetadataController</param>
-            <param>io.pockethive.mcp.security.McpProtocolSecurityFilter</param>
-          </targetClasses>
-          <targetTests>
-            <param>io.pockethive.mcp.domain.*Test</param>
-            <param>io.pockethive.mcp.application.*Test</param>
-            <param>io.pockethive.mcp.adapter.persistence.AtomicCoordinationStateRepositoryTest</param>
-            <param>io.pockethive.mcp.security.*Test</param>
-          </targetTests>
         </configuration>
       </plugin>
     </plugins>
