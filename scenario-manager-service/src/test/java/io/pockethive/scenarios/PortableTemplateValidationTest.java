@@ -82,8 +82,32 @@ class PortableTemplateValidationTest extends ScenarioComponentTestFixture {
         createPortableBundle();
         Path scenario = scenariosDir.resolve("portable/scenario.yaml");
         Files.writeString(scenario, Files.readString(scenario).replace("- callId: create",
-            "- callId: create\n            retry: {maxAttempts: \"{{ eval('1') }}\"}\n            continueOnNon2xx: true"));
+            "- callId: create\n            retry: {maxAttempts: \"{{ vars.retry }}\"}\n            continueOnNon2xx: true"));
         assertRejected("scenario.yaml:template.bees.http-sequence.config.steps[0]");
+    }
+
+    @Test
+    void rejectsRetryExpressionThatBootstrapCannotResolve() throws Exception {
+        createPortableBundle();
+        Path scenario = scenariosDir.resolve("portable/scenario.yaml");
+        Files.writeString(scenario, Files.readString(scenario).replace("- callId: create",
+            "- callId: create\n            retry: {maxAttempts: \"{{ eval('1') }}\"}"));
+        assertRejected("scenario.yaml:template.bees.http-sequence.config.steps[0].retry.maxAttempts");
+    }
+
+    @Test
+    void reportsMalformedBootstrapReferenceAtItsField() throws Exception {
+        createPortableBundle();
+        Path scenario = scenariosDir.resolve("portable/scenario.yaml");
+        Files.writeString(scenario, Files.readString(scenario).replace("- callId: create",
+            "- callId: create\n            retry: {maxAttempts: \"{{ vars.. }}\"}"));
+        scenarios.reload();
+        var result = bundleService().validateExisting("portable");
+        assertThat(result.ok()).isFalse();
+        assertThat(result.findings()).anySatisfy(finding -> {
+            assertThat(finding.code()).isEqualTo("SCENARIO_DESCRIPTOR_INVALID");
+            assertThat(finding.path()).isEqualTo("scenario.yaml:template.bees[0].config.steps[0].retry.maxAttempts");
+        });
     }
 
     @Test

@@ -200,14 +200,10 @@ final class SpelTemplateEvaluator {
         varsIndex = 1;
       }
       if (varsIndex >= 0 && node.getChildCount() > varsIndex + 1
-          && node.getChild(varsIndex) instanceof PropertyOrFieldReference root
-          && "vars".equals(root.getName())) {
-        var next = node.getChild(varsIndex + 1);
-        if (next instanceof PropertyOrFieldReference name) {
-          names.add(name.getName());
-        } else if (next instanceof Indexer && next.getChildCount() == 1
-            && next.getChild(0) instanceof StringLiteral literal) {
-          names.add((String) literal.getLiteralValue().getValue());
+          && "vars".equals(literalKey(node.getChild(varsIndex)))) {
+        String name = literalKey(node.getChild(varsIndex + 1));
+        if (name != null) {
+          names.add(name);
         }
       }
     }
@@ -217,6 +213,17 @@ final class SpelTemplateEvaluator {
     for (int index = 0; index < node.getChildCount(); index++) {
       collectVariableNames(node.getChild(index), names, childRootContext);
     }
+  }
+
+  private static String literalKey(SpelNode node) {
+    if (node instanceof PropertyOrFieldReference property) {
+      return property.getName();
+    }
+    if (node instanceof Indexer && node.getChildCount() == 1
+        && node.getChild(0) instanceof StringLiteral literal) {
+      return (String) literal.getLiteralValue().getValue();
+    }
+    return null;
   }
 
   void validate(String expression) {

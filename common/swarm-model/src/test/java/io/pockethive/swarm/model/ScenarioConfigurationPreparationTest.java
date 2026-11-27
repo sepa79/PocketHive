@@ -47,4 +47,24 @@ class ScenarioConfigurationPreparationTest {
             "message", "value-{{ vars.customer.name }}", "literal", "vars.literal",
             "vars", Map.of("business", "{{ vars.opaque }}"))));
     }
+
+    @Test void malformedVariablePathsReportTheirFieldAndAreRejectedDuringResolution() {
+        var config = Map.<String, Object>of("steps", List.of(Map.of("value", "{{ vars.. }}")));
+        var fields = new java.util.ArrayList<String>();
+        assertTrue(ScenarioConfigurationPreparation.variableNames(config, "config",
+            (field, message) -> fields.add(field)).isEmpty());
+        assertEquals(List.of("config.steps[0].value"), fields);
+        for (String invalid : List.of("{{ vars.. }}", "{{ vars.foo. }}", "{{ vars.foo..bar }}")) {
+            assertThrows(IllegalArgumentException.class, () -> ScenarioConfigurationPreparation
+                .applyVariables(Map.of("value", invalid), Map.of("foo", 1)));
+        }
+    }
+
+    @Test void typedDeferralUsesOnlyBootstrapSubstitution() {
+        assertTrue(ScenarioConfigurationPreparation.canResolveTypedValue("{{ vars.retry }}", true));
+        assertTrue(ScenarioConfigurationPreparation.canResolveTypedValue("0{{ vars.retry }}", false));
+        assertFalse(ScenarioConfigurationPreparation.canResolveTypedValue("0{{ vars.retry }}", true));
+        assertFalse(ScenarioConfigurationPreparation.canResolveTypedValue("{{ eval('1') }}", false));
+        assertFalse(ScenarioConfigurationPreparation.canResolveTypedValue("{{ vars.retry }}{{ eval('1') }}", false));
+    }
 }

@@ -19,7 +19,9 @@ import java.util.Map;
 final class ScenarioConfigurationTemplateSources {
     void collect(String workerRole, Map<String, Object> config, String path, ScenarioTemplateAnalysis analysis,
                  List<ValidationFinding> findings) {
-        analysis.variableNames(path, ScenarioConfigurationPreparation.variableNames(config));
+        analysis.variableNames(path, ScenarioConfigurationPreparation.variableNames(config, path,
+            (field, message) -> findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR, field, message))));
         try {
             analysis.addAll(InvocationTemplateSources.sources(config, path));
             if (BeeRoles.GENERATOR.equals(workerRole) && config.get("message") instanceof Map<?, ?> message) {

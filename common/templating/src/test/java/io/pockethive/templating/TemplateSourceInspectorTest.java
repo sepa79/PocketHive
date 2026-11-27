@@ -30,7 +30,8 @@ class TemplateSourceInspectorTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {
         "vars.foo", "#root.vars.foo", "#this.vars.foo",
-        "vars['foo']", "#root.vars['foo']", "#this.vars['foo']"
+        "vars['foo']", "#root.vars['foo']", "#this.vars['foo']",
+        "['vars']['foo']", "#root['vars']['foo']", "#this['vars'].foo"
     })
     void staticSpelRootReadsMatchTheRenderer(String expression) {
         String source = "{{ eval(\"" + expression + "\") }}";

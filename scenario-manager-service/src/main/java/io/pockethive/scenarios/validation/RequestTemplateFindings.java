@@ -10,10 +10,9 @@ import io.pockethive.requesttemplates.RequestTemplateProblem;
 import io.pockethive.requesttemplates.RequestTemplateProblemKind;
 import io.pockethive.requesttemplates.RequestTemplateSources;
 import io.pockethive.requesttemplates.TemplateDefinition;
+import io.pockethive.swarm.model.ScenarioConfigurationPreparation;
 import io.pockethive.templatedata.TemplateDataException;
 import io.pockethive.templating.PortableHttpRenderer;
-import io.pockethive.work.config.WorkConfigurationExpressions;
-import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import java.util.List;
 import java.util.Map;
@@ -83,15 +82,17 @@ final class RequestTemplateFindings {
     }
 
     private <T> T concrete(Object value, Class<T> type, String path, List<ValidationFinding> findings) {
-        var deferred = new java.util.ArrayList<String>();
-        if (WorkConfigurationExpressions.symbolic(value, path,
-            WorkConfigurationMode.AUTHORING, new java.util.ArrayList<>(), deferred)) {
-            findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(ValidationSeverity.WARNING, path,
-                "Portable option validation is deferred until the expression is rendered."));
+        try {
+            if (value instanceof String text && ScenarioConfigurationPreparation.canResolveTypedValue(text, type == List.class)) {
+                findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(ValidationSeverity.WARNING, path,
+                    "Portable option validation is deferred until bootstrap resolves its variables."));
+                return null;
+            }
+            return mapper.convertValue(value, type);
+        } catch (IllegalArgumentException failure) {
+            findings.add(invalid(path, failure.getMessage()));
             return null;
         }
-        try { return mapper.convertValue(value, type); }
-        catch (IllegalArgumentException failure) { findings.add(invalid(path, failure.getMessage())); return null; }
     }
 
     static String stepPath(String path, int index) {

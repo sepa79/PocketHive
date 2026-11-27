@@ -1,11 +1,12 @@
 package io.pockethive.swarm.model;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.LinkedHashSet;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -18,7 +19,7 @@ public final class ScenarioConfigurationPreparation {
     private static final Pattern BASE_URL_TEMPLATE =
         Pattern.compile("\\{\\{\\s*sut\\.endpoints\\['([^']+)'\\]\\.baseUrl\\s*}}(.*)");
     private static final Pattern VARS_TEMPLATE =
-        Pattern.compile("\\{\\{\\s*vars\\.([A-Za-z0-9_.-]+)\\s*}}");
+        Pattern.compile("\\{\\{\\s*vars\\.([A-Za-z0-9_.-]*)\\s*}}");
 
     private ScenarioConfigurationPreparation() { }
 
@@ -29,21 +30,53 @@ public final class ScenarioConfigurationPreparation {
 
     /** Bootstrap references use exactly the substitution matcher, not the Pebble grammar. */
     public static Set<String> variableNames(Map<String, Object> config) {
+        return variableNames(config, "", (field, message) -> { throw new IllegalArgumentException(message); });
+    }
+
+    public static Set<String> variableNames(Map<String, Object> config, String path,
+                                            BiConsumer<String, String> invalid) {
         Set<String> names = new LinkedHashSet<>();
         if (config != null) config.forEach((key, value) -> {
-            if (!"vars".equals(key)) collectVariableNames(value, names);
+            if (!"vars".equals(key)) collectVariableNames(value, fieldPath(path, key), names, invalid);
         });
         return java.util.Collections.unmodifiableSet(names);
     }
 
-    private static void collectVariableNames(Object value, Set<String> names) {
+    public static boolean canResolveTypedValue(String source, boolean requireWholeValue) {
+        Matcher matcher = VARS_TEMPLATE.matcher(source.trim());
+        if (matcher.matches()) {
+            variablePath(matcher.group(1));
+            return true;
+        }
+        if (requireWholeValue || !matcher.find()) return false;
+        do {
+            variablePath(matcher.group(1));
+        } while (matcher.find());
+        String literal = matcher.replaceAll("");
+        return !literal.contains("{{") && !literal.contains("{%");
+    }
+
+    private static String fieldPath(String path, String key) {
+        return path.isEmpty() ? key : path + "." + key;
+    }
+
+    private static void collectVariableNames(Object value, String field, Set<String> names,
+                                             BiConsumer<String, String> invalid) {
         if (value instanceof String source) {
             Matcher matcher = VARS_TEMPLATE.matcher(source);
-            while (matcher.find()) names.add(matcher.group(1).split("\\.")[0]);
+            while (matcher.find()) {
+                try {
+                    names.add(variablePath(matcher.group(1))[0]);
+                } catch (IllegalArgumentException failure) {
+                    invalid.accept(field, failure.getMessage());
+                }
+            }
         } else if (value instanceof Map<?, ?> map) {
-            map.values().forEach(child -> collectVariableNames(child, names));
+            map.forEach((key, child) -> collectVariableNames(child, fieldPath(field, String.valueOf(key)), names, invalid));
         } else if (value instanceof List<?> list) {
-            list.forEach(child -> collectVariableNames(child, names));
+            for (int index = 0; index < list.size(); index++) {
+                collectVariableNames(list.get(index), field + "[" + index + "]", names, invalid);
+            }
         }
     }
 
@@ -120,7 +153,7 @@ public final class ScenarioConfigurationPreparation {
     @SuppressWarnings("unchecked")
     private static Object resolveScenarioVar(Map<String, Object> vars, String path) {
         Object current = vars;
-        for (String part : path.split("\\.")) {
+        for (String part : variablePath(path)) {
             if (!(current instanceof Map<?, ?> rawMap) || !rawMap.containsKey(part)) {
                 throw new IllegalStateException("Unknown scenario variable '%s'".formatted(path));
             }
@@ -130,6 +163,16 @@ public final class ScenarioConfigurationPreparation {
             throw new IllegalStateException("Scenario variable '%s' is null".formatted(path));
         }
         return current;
+    }
+
+    private static String[] variablePath(String path) {
+        String[] parts = path.split("\\.", -1);
+        for (String part : parts) {
+            if (part.isEmpty()) {
+                throw new IllegalArgumentException("Scenario variable path contains an empty segment.");
+            }
+        }
+        return parts;
     }
 
     public static Map<String, Object> applySut(Map<String, Object> config, SutEnvironment sutEnvironment) {

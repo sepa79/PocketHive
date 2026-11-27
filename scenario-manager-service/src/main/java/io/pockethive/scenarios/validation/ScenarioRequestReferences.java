@@ -45,11 +45,15 @@ final class ScenarioRequestReferences {
                     String service = target.serviceId();
                     String selectedService = service == null ? defaultServiceId : service;
                     if (call == null || selectedService == null) continue;
-                    var variables = ScenarioConfigurationPreparation.variableNames(
-                        Map.of("call", call, "service", selectedService));
-                    if (variables.isEmpty()) references.add(new ScenarioTemplateReference(selectedService, call, stepPath));
-                    else findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(ValidationSeverity.WARNING,
-                        stepPath, "Request target validation is deferred until configuration variables are resolved."));
+                    try {
+                        var variables = ScenarioConfigurationPreparation.variableNames(
+                            Map.of("call", call, "service", selectedService));
+                        if (variables.isEmpty()) references.add(new ScenarioTemplateReference(selectedService, call, stepPath));
+                        else findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(ValidationSeverity.WARNING,
+                            stepPath, "Request target validation is deferred until configuration variables are resolved."));
+                    } catch (IllegalArgumentException ignored) {
+                        // Configuration source discovery reports the invalid variable path at its field.
+                    }
                 }
             }
             return references;

@@ -26,3 +26,16 @@ uncaught page errors and axe violations produce a nonzero exit. The axe scan cov
 the stable light-theme mappings page, not every hidden screen or state. Screenshots
 wait for transient notifications to disappear and disable animation during capture.
 No session tokens, browser storage, HAR or traces are saved.
+
+To check TLS administration, use a local stack with the DEV sign-in provider
+and its `local-admin` fixture. Seed a mapping only on the TLS instance, then
+use the PocketHive ingress and the test-only mapping ID:
+
+```sh
+PH_UI_TEST_URL=http://localhost:18089 \
+PH_TLS_TEST_MAPPING_ID=tls-browser-fixture \
+node tcp-mock-server/tests/browser/tls-signin.mjs
+```
+
+The check signs in through the PocketHive UI and reads the protected mapping
+endpoint on the TLS instance.

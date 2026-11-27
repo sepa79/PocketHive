@@ -17,9 +17,15 @@ final class ScenarioBundleResourcePaths {
     private ScenarioBundleResourcePaths() {}
 
     static Optional<String> relativeRoot(String location, String path, List<ValidationFinding> findings) {
-        if (location != null && !ScenarioConfigurationPreparation.variableNames(Map.of("root", location)).isEmpty()) {
-            findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(ValidationSeverity.WARNING, path,
-                "Resource source validation is deferred until configuration variables in the root are resolved."));
+        try {
+            if (location != null && !ScenarioConfigurationPreparation.variableNames(Map.of("root", location)).isEmpty()) {
+                findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(ValidationSeverity.WARNING, path,
+                    "Resource source validation is deferred until configuration variables in the root are resolved."));
+                return Optional.empty();
+            }
+        } catch (IllegalArgumentException failure) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR, path, failure.getMessage()));
             return Optional.empty();
         }
         String root = normalizeContainerPath(location);
