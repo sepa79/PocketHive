@@ -43,6 +43,15 @@ class ClearingStructuredSchemaRegistryTest {
         .hasMessageContaining(schemaPath.toString());
   }
 
+  @Test
+  void missingSchemaKeepsTheExistingExplicitFailure(@TempDir Path tempDir) {
+    var registry = new ClearingStructuredSchemaRegistry();
+    assertThatThrownBy(() -> registry.resolve(structuredConfig(tempDir)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageStartingWith("Schema not found for " + TEST_SCHEMA_ID + ":" + TEST_SCHEMA_VERSION)
+        .hasNoCause();
+  }
+
   private static ClearingExportWorkerConfig structuredConfig(Path schemaRegistryRoot) {
     return new ClearingExportWorkerConfig(
         "structured",

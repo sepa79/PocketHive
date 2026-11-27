@@ -120,14 +120,16 @@ Rabbit WORK settings separately from CONTROL. Selecting the deployment
 WorkPlane does not silently rewrite existing scenarios' input/output adapters.
 See the [Work Plane boundaries](architecture/work-plane-boundaries.md).
 
+Both TCP Mock variants use PocketHive authentication through Auth Service.
+Their administration requests use the PocketHive session or a Bearer token.
+
 For public origin `https://pockethive.example:8443`, Auth Service's issuer is
 `https://pockethive.example:8443/auth-service` and PocketHive's MCP resource is
 `https://pockethive.example:8443/mcp`. The browser, companion and agent must use
 that public identity and trust the selected TLS certificate. For the shipped
 Dev fixture, explicitly trust its certificate; do not disable TLS verification.
-That fixture covers the development Swarm IPs `192.168.88.50`–`192.168.88.53`,
-not the illustrative `pockethive.example` domain. Use the installation's verified
-address/certificate pairing; the example domain is not a supplied TLS identity.
+Use an installation address listed in the certificate subject alternative names.
+The illustrative domain requires a matching certificate.
 The transport effects are owned by the
 [public endpoint transport policy](architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy).
 

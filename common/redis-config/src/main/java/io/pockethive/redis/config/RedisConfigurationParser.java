@@ -68,7 +68,7 @@ public final class RedisConfigurationParser {
         var write = validateRedisWriteSettings(fields.get("sourceStep"), fields.get("pushDirection"),
             fields.get("maxLen"), path, mode);
         var targets = validateRedisOutputTargets(fields.get("routes"), fields.get("defaultList"),
-            fields.get("targetListTemplate"), path, mode);
+            RedisOutputTemplateSources.value(fields), path, mode);
         problems.addAll(connection.problems());
         problems.addAll(write.problems());
         problems.addAll(targets.problems());

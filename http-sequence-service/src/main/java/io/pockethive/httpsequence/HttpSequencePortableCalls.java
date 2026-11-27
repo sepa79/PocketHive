@@ -1,6 +1,7 @@
 package io.pockethive.httpsequence;
 
 import io.pockethive.requesttemplates.HttpSequencePortablePolicy;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.PortableHttpCall;
 import io.pockethive.requesttemplates.PortableResponseExtractor;
 import io.pockethive.templating.PortableHttpBinding;
@@ -8,7 +9,6 @@ import io.pockethive.templating.PortableHttpRenderer;
 import io.pockethive.templating.PortableHttpRequest;
 import java.net.URI;
 import java.util.Map;
-
 /**
  * Responsibility: admit and adapt portable HTTP calls to the existing sequence runtime.
  * Must not: own document parsing, rendering semantics, transport, retries or journey-state writes.
@@ -18,7 +18,7 @@ final class HttpSequencePortableCalls {
     private final PortableHttpRenderer renderer = new PortableHttpRenderer();
     private final PortableResponseExtractor responses = new PortableResponseExtractor();
 
-    void validate(HttpSequenceWorkerConfig.Step step, PortableHttpCall call) {
+    void validate(HttpSequenceStep step, PortableHttpCall call) {
         HttpSequencePortablePolicy.validate(step.retry().maxAttempts(), step.continueOnNon2xx(), step.extracts());
         renderer.validate(call);
     }

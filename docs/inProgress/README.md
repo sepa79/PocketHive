@@ -22,9 +22,6 @@
   and [runtime responsibilities](../architecture/runtime-responsibilities.md).
 - [Acceptance framework](e2e-test-system.md): replacement implemented and legacy
   framework removed. Use [the coverage matrix](../ci/acceptance-coverage.md) for scope.
-- [Swarm deployment](artemis-swarm-dev-deploy.md) and
-  [full Swarm acceptance](artemis-swarm-full-acceptance.md) are dated environment
-  evidence, not proof of the current tree or current deployment state.
 - Current MCP/IDE references: [MCP](../mcp/README.md) and
   [VS Code companion](../../vscode-pockethive/README.md).
 

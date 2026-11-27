@@ -25,8 +25,8 @@ class CapabilityCatalogueServiceTest {
 
         assertThat(catalogue.findByImageName("processor")).isPresent();
         assertThat(catalogue.findByImageName("pockethive/processor:0.15")).isPresent();
-        assertThat(catalogue.findByImageName("192.168.88.54:5000/pockethive/processor:0.15")).isPresent();
-        assertThat(catalogue.findByImageName("192.168.88.54:5000/pockethive/processor@sha256:abc")).isPresent();
+        assertThat(catalogue.findByImageName("registry.example.test:5000/pockethive/processor:0.15")).isPresent();
+        assertThat(catalogue.findByImageName("registry.example.test:5000/pockethive/processor@sha256:abc")).isPresent();
     }
 
     @Test

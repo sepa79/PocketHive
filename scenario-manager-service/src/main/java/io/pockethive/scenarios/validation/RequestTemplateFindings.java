@@ -2,17 +2,23 @@ package io.pockethive.scenarios.validation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.requesttemplates.HttpSequencePortablePolicy;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.PortableHttpCall;
 import io.pockethive.requesttemplates.RequestTemplateException;
 import io.pockethive.requesttemplates.RequestTemplateParser;
 import io.pockethive.requesttemplates.RequestTemplateProblem;
 import io.pockethive.requesttemplates.RequestTemplateProblemKind;
+import io.pockethive.requesttemplates.RequestTemplateSources;
 import io.pockethive.requesttemplates.TemplateDefinition;
-import io.pockethive.worker.sdk.auth.AuthRef;
+import io.pockethive.swarm.model.ScenarioConfigurationPreparation;
 import io.pockethive.templatedata.TemplateDataException;
 import io.pockethive.templating.PortableHttpRenderer;
+import io.pockethive.worker.sdk.auth.AuthRef;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Responsibility: project canonical request-template and selected portable-step admission into bundle findings.
@@ -45,36 +51,68 @@ final class RequestTemplateFindings {
     }
 
     void validatePortableSteps(PortableHttpCall call, Map<String, Object> config, String path,
-                               List<ValidationFinding> findings) {
+                               Set<ScenarioTemplateReference> references, List<ValidationFinding> findings) {
         if (!(config.get("steps") instanceof List<?> steps)) {
             return;
         }
+        String key = RequestTemplateParser.key(call.serviceId(), call.callId());
+        Set<String> selectedPaths = references.stream()
+            .filter(reference -> key.equals(reference.key()))
+            .map(ScenarioTemplateReference::sourcePath)
+            .collect(Collectors.toSet());
         for (int index = 0; index < steps.size(); index++) {
-            if (!(steps.get(index) instanceof Map<?, ?> step) || !(step.get("callId") instanceof String callId)) {
+            String stepPath = stepPath(path, index);
+            if (!selectedPaths.contains(stepPath) || !(steps.get(index) instanceof Map<?, ?> step)) {
                 continue;
             }
-            Object serviceId = step.get("serviceId");
-            if (serviceId == null || serviceId instanceof String text && text.isBlank()) {
-                serviceId = config.get("serviceId");
+            Object retry = step.get("retry");
+            if (retry != null && !(retry instanceof Map<?, ?>)) {
+                findings.add(invalid(stepPath + ".retry", "Sequence retry settings must be an object."));
             }
-            if (!(serviceId instanceof String service)
-                || !RequestTemplateParser.key(call.serviceId(), call.callId())
-                    .equals(RequestTemplateParser.key(service, callId))) {
-                continue;
-            }
+            Object attempts = retry instanceof Map<?, ?> settings ? settings.get("maxAttempts") : null;
+            Integer count = concrete(attempts, Integer.class, stepPath + ".retry.maxAttempts", findings);
+            Boolean continueOnNon2xx = concrete(step.get("continueOnNon2xx"), Boolean.class, stepPath + ".continueOnNon2xx", findings);
+            List<?> extracts = concrete(step.get("extracts"), List.class, stepPath + ".extracts", findings);
             try {
-                Object retry = step.get("retry");
-                if (retry != null && !(retry instanceof Map<?, ?>)) {
-                    throw new IllegalArgumentException("Sequence retry settings must be an object.");
-                }
-                Object attempts = retry instanceof Map<?, ?> settings ? settings.get("maxAttempts") : null;
-                HttpSequencePortablePolicy.validate(mapper.convertValue(attempts, Integer.class),
-                    mapper.convertValue(step.get("continueOnNon2xx"), Boolean.class),
-                    mapper.convertValue(step.get("extracts"), List.class));
+                HttpSequencePortablePolicy.validate(count, continueOnNon2xx, extracts);
             } catch (IllegalArgumentException failure) {
-                findings.add(invalid(path + ".steps[" + index + "]", failure.getMessage()));
+                findings.add(invalid(stepPath, failure.getMessage()));
             }
         }
+    }
+
+    private <T> T concrete(Object value, Class<T> type, String path, List<ValidationFinding> findings) {
+        try {
+            if (value instanceof String text && ScenarioConfigurationPreparation.canResolveTypedValue(text, type == List.class)) {
+                findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(ValidationSeverity.WARNING, path,
+                    "Portable option validation is deferred until bootstrap resolves its variables."));
+                return null;
+            }
+            return mapper.convertValue(value, type);
+        } catch (IllegalArgumentException failure) {
+            findings.add(invalid(path, failure.getMessage()));
+            return null;
+        }
+    }
+
+    static String stepPath(String path, int index) {
+        return path + ".steps[" + index + "]";
+    }
+
+    Optional<HttpSequenceStep> stepTarget(Map<?, ?> step, String path, List<ValidationFinding> findings) {
+        Map<String, Object> targetFields = new java.util.LinkedHashMap<>();
+        targetFields.put("callId", step.get("callId"));
+        targetFields.put("serviceId", step.get("serviceId"));
+        try {
+            return Optional.of(mapper.convertValue(targetFields, HttpSequenceStep.class));
+        } catch (IllegalArgumentException failure) {
+            findings.add(invalid(path, failure.getMessage()));
+            return Optional.empty();
+        }
+    }
+
+    Map<String, String> sources(TemplateDefinition definition) {
+        return RequestTemplateSources.from(definition).namedSources();
     }
 
     private ValidationFinding invalid(String path, String message) {

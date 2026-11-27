@@ -11,7 +11,6 @@ import io.pockethive.work.api.WorkerContext;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,25 +97,15 @@ final class AuthProfileLoader {
   }
 
   static Path forTemplates(String templateRoot) {
-    List<Path> candidates = new ArrayList<>();
-    if (templateRoot != null && !templateRoot.isBlank()) {
-      Path cursor = Path.of(templateRoot).toAbsolutePath().normalize();
-      while (cursor != null) {
-        candidates.add(ScenarioBundleLayout.authProfilesFile(cursor));
-        cursor = cursor.getParent();
-      }
-    }
-    candidates.add(ScenarioBundleLayout.authProfilesFile(Path.of(ScenarioBundleLayout.CONTAINER_ROOT)));
-    for (Path candidate : candidates) {
-      if (Files.isRegularFile(candidate)) {
-        return candidate;
-      }
-    }
-    throw AuthFailureException.configuration(
-        "missing-auth-profiles",
-        "Templates declare authRef but authProfiles.yaml was not found for templateRoot="
-            + templateRoot,
-        null);
+    return TemplateAuthProfileLocation.forTemplates(
+            templateRoot,
+            ScenarioBundleLayout.authProfilesFile(Path.of(ScenarioBundleLayout.CONTAINER_ROOT)),
+            Files::isRegularFile)
+        .orElseThrow(() -> AuthFailureException.configuration(
+            "missing-auth-profiles",
+            "Templates declare authRef but authProfiles.yaml was not found for templateRoot="
+                + templateRoot,
+            null));
   }
 
   private static Path scenarioRoot() {

@@ -1,5 +1,7 @@
 package io.pockethive.work.api;
 
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -8,14 +10,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/** Sole JSON Schema, serialization and deserialization boundary for WorkItem envelopes. * <p>
- * Responsibility: encode and decode the canonical Work envelope.
- * Must not: configure transport clients or own adapter lifecycle.
+/**
+ * Responsibility: encode and decode one unambiguous canonical Work envelope.
+ * Must not: interpret step payload strings, configure transport clients or own adapter lifecycle.
  * Contract: RESP-WORK-WIRE — docs/architecture/runtime-responsibilities.md#resp-work-wire.
  */
 public final class WorkItemJsonCodec {
     private static final JsonMapper MAPPER = JsonMapper.builder()
         .findAndAddModules()
+        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+        .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         .build();
     private static final String VERSION = "1";

@@ -52,10 +52,12 @@ application configuration. TcpMockStoragePaths resolves both catalogue paths onc
 Changing it selects a different explicit data directory; it does not migrate files.
 
 Browser requests resolve through HttpClient.endpoint relative to the served page
-directory. This preserves `/tcp-mock/` under the supported ingress and `/` for the
-standalone UI. Authentication checks and catalogue requests use that same resolver.
-Ingress canonicalizes `/tcp-mock` to `/tcp-mock/` with a relative redirect so the
-browser retains its public host and port, including alternate local test ports.
+directory. The supported ingress sends `/tcp-mock/` to the plain TCP mock and
+`/tcp-mock-tls/` to the TLS TCP mock. Both dashboards use the PocketHive origin
+for the shared sign-in module and their instance-specific API paths. A standalone
+deployment serves its dashboard at `/`. Authentication checks and catalogue
+requests use the same resolver. The TLS ingress redirects to its trailing-slash form while preserving the
+browser's public host and port.
 
 ## Authentication provider and ownership
 

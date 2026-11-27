@@ -1,5 +1,6 @@
 package io.pockethive.httpsequence;
 
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -9,10 +10,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 class DefaultHttpSequenceTargetResolverTest {
 
   private final DefaultHttpSequenceTargetResolver resolver = new DefaultHttpSequenceTargetResolver();
@@ -201,15 +200,15 @@ class DefaultHttpSequenceTargetResolverTest {
   }
 
   private static HttpSequenceWorkerConfig config(
-      List<HttpSequenceWorkerConfig.Step> steps,
+      List<HttpSequenceStep> steps,
       Map<String, Object> privateConfig) {
     return new HttpSequenceWorkerConfig(
         "http://worker:8080/root", "/templates", "customers", 1, steps,
         HttpSequenceWorkerConfig.DebugCapture.defaults(), Map.of(), privateConfig);
   }
 
-  private static HttpSequenceWorkerConfig.Step step(String sutEndpointId, String baseUrl) {
-    return new HttpSequenceWorkerConfig.Step(
+  private static HttpSequenceStep step(String sutEndpointId, String baseUrl) {
+    return new HttpSequenceStep(
         "one", "call", null, false, null, List.of(), List.of(), sutEndpointId, baseUrl);
   }
 

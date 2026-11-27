@@ -4,12 +4,60 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Add native PPS Track2 CVC3 template support for the explicit no-PIN profile.
+
 ### Fixed
 
-- Restore the Auth mutation gate's full coverage with regressions for exact
+- Run disposable RabbitMQ fixture diagnostics as the broker user to avoid
+  creating a root-owned Erlang cookie during startup.
+- Configure both TCP Mock services in the Swarm stack to use PocketHive
+  authentication through Auth Service.
+- Publish the initial full Swarm Controller status after application startup.
+  After a failed preparation, the Controller can reject a subsequent START
+  and still handle explicit removal.
+
+### Changed
+
+- Keep template source projections in authoring. Generator and Clearing Export
+  render directly from typed settings, Redis uploader block selection and
+  enablement share one configuration owner, and authoring validation decodes each
+  HTTP Sequence target once and reports invalid targets at their source.
+
+### Removed
+
+- Remove the Java PIT mutation gates and their Maven profiles and plugin configuration.
+- Remove archived test reports and deployment records from the repository.
+  Keep acceptance requirements and test instructions in the documentation.
+
+## [0.15.39] - 2026-11-09
+
+### Fixed
+
+- Validate parsed scenario sections and actual template sources through the same
+  configuration, request-template and auth-profile owners used at runtime. Preserve
+  Scenario Protocol 2, existing YAML interpolation and optional-variable behavior;
+  ignore comments and ordinary data when discovering template dependencies. (#533)
+- Reject trailing JSON tokens in request templates and validate numeric portable
+  `callId` values consistently with string values. (#533)
+- Reject duplicate properties at every WorkItem envelope nesting level and
+  trailing JSON documents or text. Keep payload strings opaque and accept trailing
+  whitespace. (#529)
+- Correct auth URL examples to use the selected SUT endpoint context and explain
+  explicit SUT selection and the global-variable alternative. (#493)
+- Remove an unused HTTP Sequence helper after extracting shared step models and
+  add regression tests for missing required configuration fields.
+- Add Auth regressions for exact
   first-party browser redirects and public-client revocation versus refresh.
   Exercise canonical Pocket browser/device registrations without lowering the
   mutation or coverage thresholds or changing runtime authorization behavior.
+
+### Changed
+
+- Reserve `vars` for the template variable context. Local declarations with that
+  name now fail compilation; rename them before upgrading. Existing `vars.name`
+  and `vars['name']` reads remain supported. See [upgrade guidance](docs/UPGRADING.md#01539-from-01538).
 
 ## [0.15.38] - 2026-10-21
 
@@ -464,22 +512,9 @@ Timestamp: 2026-09-22T00:00:00Z
 - Deployment: install the same hardened non-root, read-only Java MCP image through
   `build-hive.sh` and HiveForge contracts, with bounded persistent state, tmpfs
   upload spooling, public Nginx routes, health checks, and embedded CycloneDX SBOM.
-- Earlier MCP migration verification (historical): recorded 22 Auth Service,
-  115 MCP, and 102 extension tests passing; killed 26/26 Auth, 576/576 MCP, and
-  1,825/1,825 extension mutants. Local checks passed for npm audit, packaged VSIX,
-  public-ingress OAuth/MCP, responsive UI, refresh rotation/replay/revocation,
-  and exact mixed-file bundles.
-- CI regression gates: provision test-owned Redis and RabbitMQ fixtures, require
-  the RabbitMQ integration tests and independent OpenSSL verifier, and enforce
-  the scoped Java MCP, Auth Service, and HTTP Sequence mutation gates alongside
+- CI regression gates: provision test-owned Redis and RabbitMQ fixtures and require
+  the RabbitMQ integration tests and independent OpenSSL verifier alongside
   Windows/Linux extension tests and package checks.
-- Restart integration verification: [PR #517's hosted run](https://github.com/sepa79/PocketHive/actions/runs/35435999539)
-  passed all four jobs for restart head `2103a93a`: 2,247 Java cases and 187
-  extension tests on each platform, with no failures or skips; all three scoped
-  Java mutation gates and Linux Stryker passed. These results supersede the
-  earlier totals for this integration; they do not establish real-provider
-  signed OAuth or deployed-bundle acceptance. The optional deployed acceptance
-  profile was not run; see [authentication verification](docs/ci/auth-testing.md).
 - Integration follow-up: inherited Orchestrator executor/controller identity
   validation, reset/registry, and public contract extraction findings remain
   deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).
@@ -631,27 +666,9 @@ Timestamp: 2026-09-22T00:00:00Z
   and `metric`), and fail the unfiltered E2E pack when any family is absent.
   Filtered E2E runs remain targeted audits and do not require families their
   selected scenarios intentionally do not emit.
-- Verification: the saved `large-swarm` target completed the full E2E pack on
-  2026-08-04 at 13:41 BST with **39 scenarios and 463 steps passed** in
-  19m13.169s. Surefire recorded **67 tests with zero failures, errors, or
-  skips** (Cucumber: 39/39); this includes the three former `@wip` release
-  scenarios. Its mandatory full audit captured 3,889 control-plane messages
-  and required `signal`, `result`, `outcome`, `journal`, `alert`, and `metric`
-  families. The official ingress returned an empty swarm registry after the
-  run. Targeted E2E also verifies that capture initialisation and schema/routing
-  checks remain active for filtered runs.
-- HAProxy NFS acceptance: on the large swarm, with Network Proxy Manager and
-  HAProxy on distinct nodes sharing the deployed runtime mount, a dedicated
-  ingress E2E proved desired/applied acknowledgement for a valid binding,
-  explicit ~10-second timeout for an invalid HAProxy candidate, retention of
-  the prior binding, and final removal. The test now clears only its own stale
-  bindings and selects a free acceptance port, preventing retry debris.
-- Release traceability: [the lifecycle control-plane verification matrix](docs/RELEASE_VERIFICATION_MATRIX.md)
-  records each workstream's commits, automated proof, large-swarm evidence, and
-  remaining release gate. It now records the HiveForge deployment receipt,
-  immutable Compose digest, and live application image digests for the
-  large-swarm E2E environment; the last two branch commits and current
-  acceptance additions are E2E-only and require no runtime-image redeploy.
+- HAProxy NFS acceptance exercises applied acknowledgement, timeout for an
+  invalid candidate, retention of the prior binding and final removal.
+  The test clears only its own stale bindings and selects a free port.
 - Release gates: the final post-REMOVE canonical PocketHive MCP snapshot found
   no swarm registry entry, workers, managers, exact RabbitMQ queues/exchanges,
   or cleanup candidates. HiveMap's full code-quality comparison and the

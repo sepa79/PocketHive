@@ -2,6 +2,7 @@ package io.pockethive.scenarios.validation;
 
 import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.WorkConfigurationTemplate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,8 +19,10 @@ final class WorkConfigurationFindings {
         this.parser = Objects.requireNonNull(parser, "parser");
     }
 
-    void validate(Map<String, Object> config, String path, List<ValidationFinding> findings) {
-        var result = parser.validate(config, WorkConfigurationMode.AUTHORING);
+    void validate(Map<String, Object> config, String path, List<ValidationFinding> findings,
+                  java.util.function.Consumer<WorkConfigurationTemplate> sources) {
+        var result = parser.validate(config, WorkConfigurationMode.AUTHORING, source ->
+            sources.accept(new WorkConfigurationTemplate(path + "." + source.path(), source.source())));
         result.problems().forEach(problem -> findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
             ValidationSeverity.ERROR, path + "." + problem.path(), problem.message())));
         result.deferredPaths().forEach(deferred -> findings.add(ValidationIssue.WORK_CONFIGURATION_DEFERRED.finding(

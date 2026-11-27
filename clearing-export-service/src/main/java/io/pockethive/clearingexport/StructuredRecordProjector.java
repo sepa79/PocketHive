@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
-
 @Component
 /**
  * Responsibility: map and validate configured fields for one structured clearing record.

@@ -16,7 +16,7 @@ services:
       - "127.0.0.1::5672"
       - "127.0.0.1::15672"
     healthcheck:
-      test: [CMD, rabbitmq-diagnostics, -q, check_running]
+      test: [CMD, su-exec, rabbitmq, rabbitmq-diagnostics, -q, check_running]
       interval: 2s
       timeout: 5s
       retries: 60

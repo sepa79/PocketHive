@@ -1,19 +1,18 @@
 package io.pockethive.httpsequence;
 
-import io.pockethive.worker.sdk.auth.MutableHttpRequest;
-
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
+import io.pockethive.requesttemplates.RequestTemplateSources;
 import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
+import io.pockethive.worker.sdk.auth.MutableHttpRequest;
 import io.pockethive.worker.sdk.templating.TemplatingRenderException;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-
 /**
  * Responsibility: render one HTTP step request and delegate its credential application to the supplied runtime.
  * Must not: discover profiles, own auth resources, parse templates, execute HTTP or decide retries.
@@ -39,12 +38,13 @@ final class HttpSequenceRequestRenderer {
         }
         variables.put("workItem", workItem);
 
-        String path = render("pathTemplate", definition.pathTemplate(), variables);
-        String method = render("method", definition.method(), variables);
-        String body = render("bodyTemplate", definition.bodyTemplate(), variables);
+        var templateSources = RequestTemplateSources.from(definition);
+        String path = render("pathTemplate", templateSources.pathTemplate(), variables);
+        String method = render("method", templateSources.method(), variables);
+        String body = render("bodyTemplate", templateSources.bodyTemplate(), variables);
         Map<String, String> headers = new LinkedHashMap<>();
-        if (definition.headersTemplate() != null) {
-            definition.headersTemplate().forEach((name, value) ->
+        if (templateSources.headersTemplate() != null) {
+            templateSources.headersTemplate().forEach((name, value) ->
                 headers.put(name, render("header:" + name, value, variables)));
         }
         if (definition.authRef() != null) {

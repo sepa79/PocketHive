@@ -3,6 +3,7 @@ package io.pockethive.dbquery;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.templating.sources.DbParameterSource;
 import io.pockethive.work.api.WorkItem;
 import java.math.BigDecimal;
 import java.sql.Date;
@@ -12,7 +13,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
-
 /**
  * Responsibility: resolve DB parameter values from payload/headers/vars paths and convert declared types.
  * Must not: implement a second JDBC executor or declare Work/CP topology.
@@ -52,16 +52,13 @@ class DbValueResolver {
   }
 
   private Object resolveSource(String source) {
-    int dot = source.indexOf('.');
-    if (dot <= 0 || dot == source.length() - 1) {
-      throw new IllegalArgumentException("Unsupported DB query param source: " + source);
-    }
-    String root = source.substring(0, dot);
-    String path = source.substring(dot + 1);
+    var reference = DbParameterSource.parse(source);
+    String root = reference.root();
+    String path = reference.path();
     return switch (root) {
-      case DbQueryConstants.SOURCE_PAYLOAD -> resolveJsonPath(payload, path);
-      case DbQueryConstants.SOURCE_HEADERS -> resolveMapPath(headers, path);
-      case DbQueryConstants.SOURCE_VARS -> resolveMapPath(vars, path);
+      case DbParameterSource.PAYLOAD -> resolveJsonPath(payload, path);
+      case DbParameterSource.HEADERS -> resolveMapPath(headers, path);
+      case DbParameterSource.VARS -> resolveMapPath(vars, path);
       default -> throw new IllegalArgumentException("Unsupported DB query param source root: " + root);
     };
   }

@@ -1,13 +1,11 @@
 package io.pockethive.dbquery;
 
+import io.pockethive.templating.sources.DbParameterSource;
 final class DbQueryConstants {
 
-  static final String ROLE = "db-query";
+  static final String ROLE = DbParameterSource.WORKER_IMAGE;
   static final String WORKER_BEAN = "dbQueryWorker";
 
-  static final String SOURCE_PAYLOAD = "payload";
-  static final String SOURCE_HEADERS = "headers";
-  static final String SOURCE_VARS = "vars";
 
   static final String RETRY_EXCEPTION = "EXCEPTION";
   static final String RETRY_SQLSTATE_CLASS_PREFIX = "SQLSTATE_CLASS_";

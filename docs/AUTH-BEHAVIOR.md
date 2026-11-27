@@ -15,6 +15,11 @@ PocketHive auth is explicit, worker-scoped, and activated only by templates that
 
 `authProfiles.yaml` belongs at the scenario root or an ancestor of the template root:
 
+The example below uses endpoint `default` from the SUT selected by `sutId`
+when creating the swarm. For the available template context and a complete
+token URL supplied through `vars.authTokenUrl`, see the
+[Auth User Guide](AUTH-USER-GUIDE.md#profile-file).
+
 ```yaml
 profiles:
   "payments:oauth":
@@ -22,7 +27,7 @@ profiles:
     storage:
       mode: REDIS
       tokenKey: payments-api
-    tokenUrl: "{{ sut.auth.tokenUrl }}"
+    tokenUrl: "{{ sut.endpoints['default'].baseUrl }}/oauth/token"
     clientId: "{{ vars.clientId }}"
     clientSecret:
       env: PAYMENTS_CLIENT_SECRET

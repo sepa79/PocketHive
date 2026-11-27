@@ -1,10 +1,5 @@
 package io.pockethive.httpsequence;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
 import ch.qos.logback.classic.Level;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -14,6 +9,7 @@ import com.sun.net.httpserver.HttpsServer;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
@@ -59,7 +55,10 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.LoggerFactory;
-
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 /** Functional compatibility only: real YAML/JDK token HTTPS/Redis/Apache resource transport for all OAuth modes.
  * Reuses the prior audit's test-owned TLS and independent JCA verification approach. Existing audit regressions
  * remain untouched; this class intentionally makes no resource-lifecycle or debug-redaction acceptance claim.
@@ -240,7 +239,7 @@ class HttpSequenceOAuthCompatibilityTest {
           (template, ignored) -> template == null ? "" : template, new TemplateLoader(),
           new ApacheHttpCallExecutor(transport, transport), new DefaultHttpSequenceTargetResolver(), redis);
       config = new HttpSequenceWorkerConfig("http://127.0.0.1:" + resource.getAddress().getPort(), templates.toString(), "default", 1,
-          List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
+          List.of(new HttpSequenceStep("s1", "A", null, false, null, List.of(), List.of())),
           new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1), Map.of());
     }
 

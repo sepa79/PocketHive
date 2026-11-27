@@ -1,5 +1,6 @@
 package io.pockethive.httpsequence;
 
+import io.pockethive.requesttemplates.HttpSequenceStep;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +10,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 final class DefaultHttpSequenceTargetResolver implements HttpSequenceTargetResolver {
 
   private static final Set<String> HTTP_SCHEMES = Set.of("http", "https");
@@ -27,7 +27,7 @@ final class DefaultHttpSequenceTargetResolver implements HttpSequenceTargetResol
     List<BaseTarget> targets = new ArrayList<>(config.steps().size());
 
     for (int index = 0; index < config.steps().size(); index++) {
-      HttpSequenceWorkerConfig.Step step = config.steps().get(index);
+      HttpSequenceStep step = config.steps().get(index);
       if (step.baseUrl() != null) {
         targets.add(new BaseTarget(
             parseBaseUri(step.baseUrl(), "steps[" + index + "].baseUrl"),

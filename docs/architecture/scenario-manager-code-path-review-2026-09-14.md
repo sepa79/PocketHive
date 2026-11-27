@@ -25,8 +25,6 @@ w prześledzonej ścieżce. Ten raport nie rozszerza planu Rabbit.
 Naprawa błędnej odpowiedzi S5 i wydzielenie właściciela jej metadanych są osobnymi krokami.
 Zapisanie tego podziału nie oznacza rozpoczęcia implementacji ani zamknięcia ustaleń.
 
-## Ustalenia
-
 ### S1 — P1, poprawność: CREATE może usunąć inny istniejący bundle
 
 `POST /scenarios/bundles` → `ScenarioBundlePublicationService.create:41–54` →
@@ -236,8 +234,6 @@ ponownie HTTP do auth-service. Brak testowania przez bezpośrednie porty serwis�
 Polecenia: Maven `-pl scenario-manager-service -am test`, z powyższymi listami `-Dtest` oraz
 `-Dsurefire.failIfNoSpecifiedTests=false`. Artefakty lokalne:
 
-- `/tmp/scenario-manager-review-probes.log`,
-- `/tmp/scenario-manager-review-validation.log`,
 - `/tmp/scenario-manager-review/ScenarioManagerReviewProbeTest.java`.
 
 Pierwszy przebieg prób ujawnił dwa błędy samej próby (zła trasa tworzenia pliku i nazwa pola odpowiedzi);

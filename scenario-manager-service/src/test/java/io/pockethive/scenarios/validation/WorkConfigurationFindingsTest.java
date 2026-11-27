@@ -14,7 +14,7 @@ class WorkConfigurationFindingsTest {
     void retainsTheRouteErrorPathAndMessageInScenarioDiagnostics() {
         var findings = new ArrayList<ValidationFinding>();
         projection.validate(config(List.of(Map.of("header", "key", "list", "out"))),
-            "scenario.yaml:template.bees[0].config", findings);
+            "scenario.yaml:template.bees[0].config", findings, source -> {});
 
         assertThat(findings).singleElement().satisfies(finding -> {
             assertThat(finding.code()).isEqualTo(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.code());
@@ -27,7 +27,7 @@ class WorkConfigurationFindingsTest {
     @Test
     void exposesDeferredValidationAsAnAuthoringWarning() {
         var findings = new ArrayList<ValidationFinding>();
-        projection.validate(config("{{ vars.routes }}"), "config", findings);
+        projection.validate(config("{{ vars.routes }}"), "config", findings, source -> {});
         assertThat(findings)
             .singleElement().satisfies(finding -> {
                 assertThat(finding.code()).isEqualTo(ValidationIssue.WORK_CONFIGURATION_DEFERRED.code());
@@ -40,7 +40,7 @@ class WorkConfigurationFindingsTest {
     void rabbitAuthoringUsesTuningWithoutDeferredTopology() {
         var findings = new ArrayList<ValidationFinding>();
         projection.validate(Map.of("inputs", Map.of("type", "RABBITMQ"),
-            "outputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("persistent", false))), "config", findings);
+            "outputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("persistent", false))), "config", findings, source -> {});
         assertThat(findings).isEmpty();
     }
 
@@ -48,7 +48,7 @@ class WorkConfigurationFindingsTest {
     void rabbitPhysicalAddressIsRejectedWithCanonicalScenarioPath() {
         var findings = new ArrayList<ValidationFinding>();
         projection.validate(Map.of("inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("queue", "{{ address }}")),
-            "outputs", Map.of("type", "NONE")), "scenario.yaml:template.bees[0].config", findings);
+            "outputs", Map.of("type", "NONE")), "scenario.yaml:template.bees[0].config", findings, source -> {});
         assertThat(findings).singleElement().satisfies(finding -> {
             assertThat(finding.severity()).isEqualTo(ValidationSeverity.ERROR);
             assertThat(finding.path()).isEqualTo("scenario.yaml:template.bees[0].config.inputs.rabbit.queue");
